@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GT-SIRM — GnuTux Short Islamic Reels Maker</title>
+<meta name="description" content="GT-SIRM — صانع ريلز إسلاميّة بجودة احترافيّة: قرآن، حديث، أذكار، أدعية، أسماء الله الحسنى، حِكَم. نسختان: سطح المكتب (Linux) + الويب (PWA).">
+<meta name="theme-color" content="#0a5c36">
+
+<meta property="og:title" content="GT-SIRM — صانع ريلز إسلاميّة">
+<meta property="og:description" content="ابتغاء وجه الله — صانع ريلز إسلاميّ شامل بنسختين سطح مكتب وويب">
+<meta property="og:type" content="website">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Cairo:wght@300;400;600;700;900&family=Aref+Ruqaa&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --p: #0a5c36;
+    --pl: #1a8a52;
+    --pd: #063d24;
+    --a: #c9a227;
+    --al: #f0c842;
+    --ad: #8c6e16;
+    --bg0: #020b05;
+    --bg1: #050f07;
+    --bg2: #091408;
+    --bg3: #0f1d12;
+    --b1: #1a2e1e;
+    --t1: #e8f2ea;
+    --t2: #7daa8a;
+    --t3: #3d6e4e;
+    --r: 7px;
+    --rl: 13px;
+    --fu: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+    --fq: 'Amiri Quran', 'Aref Ruqaa', serif;
+    --sh: 0 6px 32px rgba(0,0,0,.55);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: linear-gradient(180deg, var(--bg0), var(--bg1));
+    color: var(--t1);
+    font-family: var(--fu);
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+  a { color: var(--al); text-decoration: none; }
+  a:hover { color: var(--a); }
+  code { background: var(--bg0); padding: 2px 8px; border-radius: 4px; font-size: 13px; color: var(--al); }
+
+  /* الهيدر */
+  header {
+    background: linear-gradient(135deg, var(--bg2), var(--bg1));
+    border-bottom: 2px solid var(--p);
+    padding: 60px 24px 80px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(10,92,54,.18), transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(201,162,39,.14), transparent 40%);
+    pointer-events: none;
+  }
+  .brand {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .brand h1 {
+    font-size: clamp(36px, 6vw, 64px);
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--al), var(--pl));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 2px;
+  }
+  .brand-sub {
+    font-size: clamp(14px, 2vw, 18px);
+    color: var(--t2);
+    letter-spacing: 1px;
+  }
+  .brand-tagline {
+    font-size: clamp(18px, 2.5vw, 24px);
+    color: var(--t1);
+    margin-top: 12px;
+    max-width: 720px;
+  }
+  .badge-pre {
+    display: inline-block;
+    padding: 6px 16px;
+    background: var(--bg3);
+    border: 1px solid var(--a);
+    border-radius: 20px;
+    color: var(--al);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 18px;
+  }
+
+  /* قسم التبرّؤ */
+  .disclaimer {
+    max-width: 860px;
+    margin: 50px auto;
+    padding: 32px;
+    background: var(--bg2);
+    border: 1px solid var(--p);
+    border-right: 4px solid var(--a);
+    border-radius: var(--rl);
+    box-shadow: var(--sh);
+  }
+  .disclaimer h2 {
+    color: var(--al);
+    font-size: 22px;
+    margin-bottom: 18px;
+    font-family: var(--fq);
+  }
+  .disclaimer p {
+    color: var(--t1);
+    font-size: 16px;
+    margin-bottom: 14px;
+    font-family: var(--fq);
+    line-height: 2;
+  }
+  .disclaimer p strong { color: var(--al); }
+
+  /* القسم الرئيسيّ */
+  main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+
+  .section { margin: 60px 0; }
+  .section-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--a);
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--b1);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title .icon { font-size: 30px; }
+
+  /* الأزرار الرئيسيّة العريضة */
+  .hero-cta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 22px;
+    max-width: 880px;
+    margin: 50px auto 0;
+  }
+  .hero-btn {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 22px 30px;
+    border-radius: var(--rl);
+    transition: all .25s cubic-bezier(.4, 0, .2, 1);
+    box-shadow: var(--sh);
+    border: 2px solid transparent;
+    text-align: right;
+  }
+  .hero-btn:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 36px rgba(0,0,0,.5);
+  }
+  .hero-btn-icon { font-size: 44px; flex-shrink: 0; }
+  .hero-btn-text { display: flex; flex-direction: column; gap: 4px; }
+  .hero-btn-text strong { font-size: 19px; font-weight: 800; letter-spacing: .5px; }
+  .hero-btn-text small { font-size: 13px; opacity: .85; font-weight: 500; }
+
+  .hero-btn-web {
+    background: linear-gradient(135deg, var(--pd), var(--p), var(--pl));
+    color: #fff;
+    border-color: var(--pl);
+  }
+  .hero-btn-web:hover { border-color: var(--al); }
+  .hero-btn-desktop {
+    background: linear-gradient(135deg, var(--ad), var(--a), var(--al));
+    color: #1a1a1a;
+    border-color: var(--al);
+  }
+  .hero-btn-desktop:hover { border-color: var(--pl); }
+
+  /* بطاقات الميزات */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 22px;
+  }
+  .feature {
+    background: var(--bg3);
+    border: 1px solid var(--b1);
+    border-radius: var(--rl);
+    padding: 24px;
+    transition: all .25s ease;
+  }
+  .feature:hover {
+    border-color: var(--pl);
+    transform: translateY(-3px);
+    box-shadow: var(--sh);
+  }
+  .feature-icon { font-size: 36px; margin-bottom: 12px; }
+  .feature-title { color: var(--al); font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+  .feature-desc { color: var(--t2); font-size: 14px; }
+
+  /* بطاقات الوحدات */
+  .modules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .module-card {
+    background: var(--bg2);
+    border: 1px solid var(--b1);
+    border-radius: var(--r);
+    padding: 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .module-card-icon { font-size: 32px; }
+  .module-card h4 { color: var(--al); font-size: 16px; margin-bottom: 4px; }
+  .module-card p { color: var(--t3); font-size: 12px; }
+
+  /* قسم الحالة */
+  .status-bar {
+    background: var(--bg2);
+    border: 1px solid var(--b1);
+    border-right: 4px solid var(--a);
+    border-radius: var(--rl);
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .status-bar .pulse {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--al);
+    box-shadow: 0 0 0 0 rgba(240,200,66,.7);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(240,200,66,.7); }
+    70% { box-shadow: 0 0 0 12px rgba(240,200,66,0); }
+    100% { box-shadow: 0 0 0 0 rgba(240,200,66,0); }
+  }
+
+  /* التذييل */
+  footer {
+    background: var(--bg2);
+    border-top: 1px solid var(--b1);
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--t3);
+    margin-top: 80px;
+  }
+  footer a { color: var(--t2); margin: 0 12px; }
+  footer .copyright { margin-top: 18px; font-size: 13px; }
+
+  @media (max-width: 700px) {
+    header { padding: 40px 20px 60px; }
+    .disclaimer { padding: 22px; margin: 30px auto; }
+    .hero-btn { padding: 18px 22px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="badge-pre">🌱 Pre-alpha · v0.1.0</span>
+    <h1>GT-SIRM</h1>
+    <div class="brand-sub">GnuTux Short Islamic Reels Maker</div>
+    <p class="brand-tagline">صانع ريلز إسلاميّة بجودة احترافيّة — لخدمة الإسلام والمسلمين</p>
+  </div>
+</header>
+
+<main>
+  <!-- التبرّؤ -->
+  <div class="disclaimer">
+    <h2>🌙 إعلان النيّة والتبرّؤ</h2>
+    <p>بُنِيَ هذا البرنامجُ ابتغاءَ وجهِ الله الكريم، خِدمةً لكتابه العزيز وسُنّة نبيِّه الأمين ﷺ، ونشرَ الخيرِ بين عباده.</p>
+    <p>ونُعلِنُ تبرُّؤَنا أمام الله تعالى من كلِّ من اتّخذه ذريعةً إلى ما يُسخِط الله سبحانه، أو سبيلاً إلى ترويج باطلٍ أو نشرِ معصيةٍ أو تشويهٍ لدين الله. ومَن فَعَلَ ذلك فنحن خصومُه بين يَدَيِ الله يومَ يقومُ الناسُ لربِّ العالمين.</p>
+    <p><strong>اللهمّ إنّا قد بلّغنا، اللهمّ فاشهد.</strong></p>
+  </div>
+
+  <!-- الأزرار الرئيسيّة -->
+  <div class="section">
+    <h2 class="section-title"><span class="icon">⬇️</span>ابدأ الآن</h2>
+    <div class="hero-cta">
+      <a href="./GT-SIRM-WEB/" class="hero-btn hero-btn-web">
+        <span class="hero-btn-icon">🌐</span>
+        <span class="hero-btn-text">
+          <strong>تشغيل نسخة الويب</strong>
+          <small>مباشرة في المتصفّح — بدون تثبيت · PWA · يعمل دون اتصال</small>
+        </span>
+      </a>
+      <a href="https://github.com/SalehGNUTUX/GT-SIRM/releases/latest" class="hero-btn hero-btn-desktop">
+        <span class="hero-btn-icon">🐧</span>
+        <span class="hero-btn-text">
+          <strong>تنزيل نسخة سطح المكتب</strong>
+          <small>GNU/Linux — AppImage · DEB · RPM</small>
+        </span>
+      </a>
+    </div>
+  </div>
+
+  <!-- شريط الحالة -->
+  <div class="section">
+    <div class="status-bar">
+      <div class="pulse"></div>
+      <strong style="color: var(--al);">حالة المشروع:</strong>
+      <span style="color: var(--t2);">المرحلة v0.2.0 ✅ — Fork من GT-SQRM v3.0 مكتمل · الإضافات الإسلاميّة (وحدات + Chromakey + النصّ الحرّ) قيد العمل.</span>
+      <a href="./ROADMAP.md" style="margin-right: auto;">📋 خارطة الطريق →</a>
+    </div>
+  </div>
+
+  <!-- الوحدات -->
+  <div class="section">
+    <h2 class="section-title"><span class="icon">📦</span>وحدات المحتوى الإسلاميّ</h2>
+    <p style="color: var(--t2); margin-bottom: 22px;">كلّ وحدة قابلة للتفعيل/الإلغاء حسب احتياج المستخدم — لا فرض، لا حشو.</p>
+    <div class="modules-grid">
+      <div class="module-card">
+        <span class="module-card-icon">📖</span>
+        <div><h4>القرآن الكريم</h4><p>سور · قرّاء · ترجمات · بحث مطبَّع</p></div>
+      </div>
+      <div class="module-card">
+        <span class="module-card-icon">📜</span>
+        <div><h4>الحديث الشريف</h4><p>الكتب الستة · شارة التصحيح</p></div>
+      </div>
+      <div class="module-card">
+        <span class="module-card-icon">🕊️</span>
+        <div><h4>الأذكار اليوميّة</h4><p>صباح · مساء · نوم · استيقاظ</p></div>
+      </div>
+      <div class="module-card">
+        <span class="module-card-icon">✨</span>
+        <div><h4>أسماء الله الحسنى</h4><p>99 اسماً مع المعاني</p></div>
+      </div>
+      <div class="module-card">
+        <span class="module-card-icon">🤲</span>
+        <div><h4>الأدعية المأثورة</h4><p>مصنّفة بالموضوع</p></div>
+      </div>
+      <div class="module-card">
+        <span class="module-card-icon">🌟</span>
+        <div><h4>الحِكَم والمواعظ</h4><p>أقوال السلف والأئمة</p></div>
+      </div>
+      <div class="module-card">
+        <span class="module-card-icon">✍️</span>
+        <div><h4>النصّ الحرّ</h4><p>محرّر متعدد الأسطر — دائماً متاح</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- الميزات التقنيّة -->
+  <div class="section">
+    <h2 class="section-title"><span class="icon">⚡</span>المزايا التقنيّة المخطَّطة</h2>
+    <div class="features-grid">
+      <div class="feature">
+        <div class="feature-icon">🎬</div>
+        <div class="feature-title">محرّك تصدير حتميّ</div>
+        <div class="feature-desc">ffmpeg لسطح المكتب · WebCodecs للويب — إطار بإطار بدون تقطّع. مُورَث من GT-SQRM v3.0.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🎨</div>
+        <div class="feature-title">Chromakey</div>
+        <div class="feature-desc">إزالة الخلفيّات الخضراء/السوداء بـ WebGL shader في المعاينة و ffmpeg في التصدير.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">✍️</div>
+        <div class="feature-title">محرّر النصّ الحرّ</div>
+        <div class="feature-desc">إدخال متعدّد الأسطر · توقيت لكلّ شريحة · 10 أنماط ظهور · 9 أنماط ألوان.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🎤</div>
+        <div class="feature-title">3 مصادر صوت</div>
+        <div class="feature-desc">تسجيل ميكروفون · TTS عربيّ · صامت مع أصوات خلفيّة.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📥</div>
+        <div class="feature-title">مرونة الاستيراد</div>
+        <div class="feature-desc">drag-drop شامل · فصل صوت الفيديو · ألوان وتدرّجات للخلفيّة.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔤</div>
+        <div class="feature-title">16 خطّاً قرآنيّاً</div>
+        <div class="feature-desc">Amiri Quran · Scheherazade New · Lateef · Harmattan · Reem Kufi · Aref Ruqaa + رفع مخصّص.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📚</div>
+        <div class="feature-title">يعمل دون اتصال</div>
+        <div class="feature-desc">كلّ المحتوى محفوظ محلياً — قرآن · حديث · أذكار · أدعية. PWA + Service Worker.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📱</div>
+        <div class="feature-title">يدعم الهاتف</div>
+        <div class="feature-desc">واجهة محمولة بـ Bottom Sheet · 3 أوضاع عرض · يمكن تثبيت PWA كتطبيق.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- المستودع -->
+  <div class="section">
+    <h2 class="section-title"><span class="icon">🔗</span>المستودع والمصادر</h2>
+    <div class="features-grid">
+      <div class="feature">
+        <div class="feature-icon">📁</div>
+        <div class="feature-title">المستودع الرئيسيّ</div>
+        <div class="feature-desc">
+          <a href="https://github.com/SalehGNUTUX/GT-SIRM">github.com/SalehGNUTUX/GT-SIRM</a><br>
+          مستودع موحَّد يجمع نسختَي سطح المكتب والويب.
+        </div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🌳</div>
+        <div class="feature-title">المشروع الأمّ</div>
+        <div class="feature-desc">
+          GT-SIRM يَرِث ميزات <a href="https://github.com/SalehGNUTUX/GT-SQRM">GT-SQRM v3.0</a> (صانع الريلز القرآنيّة) ويُوسّعها للمحتوى الإسلاميّ الأشمل.
+        </div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📋</div>
+        <div class="feature-title">خارطة الطريق</div>
+        <div class="feature-desc">
+          راجع <a href="./ROADMAP.md">ROADMAP.md</a> للمراحل من v0.2 إلى v1.0.
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div>
+    <a href="https://github.com/SalehGNUTUX/GT-SIRM">GitHub</a> ·
+    <a href="./README.md">README</a> ·
+    <a href="./ROADMAP.md">خارطة الطريق</a> ·
+    <a href="./CHANGELOG.md">سجل التغييرات</a> ·
+    <a href="./LICENSE">الرخصة</a>
+  </div>
+  <div class="copyright">
+    © 2026 SalehGNUTUX — GT-SIRM — GNU General Public License v3.0<br>
+    بُنِيَ بـ ❤️ لخدمة الإسلام والمسلمين
+  </div>
+</footer>
+
+</body>
+</html>

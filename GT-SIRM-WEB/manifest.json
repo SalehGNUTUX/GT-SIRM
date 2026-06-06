@@ -1,0 +1,51 @@
+{
+  "name": "GT-SIRM — صانع ريلز إسلاميّة",
+  "short_name": "GT-SIRM",
+  "version": "0.2.0",
+  "description": "GT-SIRM v0.2 — صانع ريلز إسلاميّة بجودة احترافيّة: قرآن، حديث، أذكار، أدعية، أسماء الله الحسنى، حِكَم — fork من GT-SQR v3.0",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#020b05",
+  "theme_color": "#040c08",
+  "orientation": "any",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "GT-SIRM-icons/icon-16.png",
+      "sizes": "16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "GT-SIRM-icons/icon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "GT-SIRM-icons/icon-48.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    },
+    {
+      "src": "GT-SIRM-icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "GT-SIRM-icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity"],
+  "shortcuts": [
+    {
+      "name": "مشروع جديد",
+      "url": "./index.html",
+      "description": "بدء مشروع ريل إسلاميّ جديد"
+    }
+  ]
+}

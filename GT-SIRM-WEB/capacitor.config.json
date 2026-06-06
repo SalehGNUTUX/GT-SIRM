@@ -1,0 +1,24 @@
+{
+  "appId": "org.gnutux.gtsirm",
+  "appName": "GT-SIRM",
+  "webDir": ".",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "buildOptions": {
+      "keystorePath": "keystore/gt-sirm.keystore",
+      "keystoreAlias": "gtsirm"
+    }
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#020b05",
+      "showSpinner": false
+    }
+  }
+}

@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+build/
+out/
+release/
+*.AppImage
+*.deb
+*.rpm
+
+# Downloaded binaries (re-downloaded on build)
+GT-SIRM-DESKTOP/resources/bin/ffmpeg
+GT-SIRM-DESKTOP/resources/bin/yt-dlp
+GT-SIRM-DESKTOP/resources/bin/*.tar.xz
+
+# Electron-builder caches
+.electron-cache/
+.cache/
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp / Local
+tmp/
+.tmp/
+*.local

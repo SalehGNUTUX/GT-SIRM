@@ -1,0 +1,23 @@
+{
+  "name": "gt-sirm-web",
+  "version": "0.2.0",
+  "description": "GT-SIRM Web (PWA) — GnuTux Short Islamic Reels Maker — قابل للتحزيم إلى APK عبر Capacitor",
+  "author": "SalehGNUTUX <https://github.com/SalehGNUTUX>",
+  "license": "GPL-3.0",
+  "homepage": "https://github.com/SalehGNUTUX/GT-SIRM",
+  "scripts": {
+    "serve": "python3 -m http.server 8080",
+    "cap:init": "cap init GT-SIRM org.gnutux.gtsirm --web-dir=.",
+    "cap:add:android": "cap add android",
+    "cap:sync": "cap sync android",
+    "cap:open:android": "cap open android",
+    "build:apk:debug": "cap sync android && cd android && ./gradlew assembleDebug",
+    "build:apk:release": "cap sync android && cd android && ./gradlew assembleRelease",
+    "build:bundle": "cap sync android && cd android && ./gradlew bundleRelease"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.0",
+    "@capacitor/core": "^6.1.0",
+    "@capacitor/android": "^6.1.0"
+  }
+}
