@@ -9,7 +9,7 @@
 // ── وضع التشغيل ────────────────────────────────────────
 const IS_DESKTOP = !!(window.SIRM && window.SIRM.isDesktop);
 if (IS_DESKTOP) document.body.classList.add("desktop");
-console.log("[SQRM] Mode:", IS_DESKTOP ? "Desktop (Electron)" : "Browser/Mobile");
+console.log("[SIRM] Mode:", IS_DESKTOP ? "Desktop (Electron)" : "Browser/Mobile");
 
 // ── RECITERS REGISTRY ──────────────────────────────────
 const RECITERS_LIST = [
@@ -132,6 +132,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   initMobileLayout();
   initPwaInstall();
   initEventListeners();
+  initModuleManager();   // v0.3.0 — يجب أن يأتي قبل restoreAllSettings
+  initFreeTextEditor();  // v0.4.0 — محرّر النصّ الحرّ
 
   // ⚠️ الترتيب مهم: نستعيد الإعدادات بعد تسجيل المستمعين فقط
   //   حتى تصل أحداث change/input إلى onBgTypeChange/onFmtChange/إلخ
@@ -149,6 +151,636 @@ document.addEventListener("DOMContentLoaded", async () => {
     initDesktopFeatures();
   }
 });
+
+// ══════════════════════════════════════════════════════
+//  MODULE MANAGER (v0.3.0)
+//  يدير تفعيل/إلغاء وحدات المحتوى الإسلاميّ:
+//  quran · hadith · azkar · asma · duas · hikam
+//  النصّ الحرّ (free) متاح دائماً ولا توگل له.
+// ══════════════════════════════════════════════════════
+const MODULES = {
+  quran:  { default: true,  label: "القرآن الكريم",        impl: true  },
+  hadith: { default: true,  label: "الحديث الشريف",         impl: false },
+  azkar:  { default: true,  label: "الأذكار",               impl: false },
+  asma:   { default: true,  label: "أسماء الله الحسنى",     impl: false },
+  duas:   { default: true,  label: "الأدعية المأثورة",      impl: false },
+  hikam:  { default: true,  label: "الحِكَم والمواعظ",       impl: false },
+  free:   { default: true,  label: "النصّ الحرّ",            impl: true,  alwaysOn: true },
+};
+const MODULES_KEY = "gt_sirm_modules_v1";
+const FREE_TPL_KEY = "gt_sirm_free_templates_v1";
+
+function loadModuleStates() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(MODULES_KEY) || "{}");
+    const state = {};
+    for (const key of Object.keys(MODULES)) {
+      state[key] = (key in stored) ? !!stored[key] : MODULES[key].default;
+      // الوحدات alwaysOn (مثل النصّ الحرّ) تُجبَر على true دائماً
+      if (MODULES[key].alwaysOn) state[key] = true;
+    }
+    return state;
+  } catch (_) {
+    const state = {};
+    for (const key of Object.keys(MODULES)) state[key] = MODULES[key].default;
+    return state;
+  }
+}
+
+function persistModuleStates(state) {
+  try { localStorage.setItem(MODULES_KEY, JSON.stringify(state)); } catch (_) {}
+}
+
+function applyModuleVisibility(state) {
+  // كل عنصر يحمل data-module يُعرض فقط إن كانت وحدته مُفعَّلة
+  document.querySelectorAll("[data-module]").forEach(el => {
+    const mod = el.dataset.module;
+    const active = !!state[mod];
+    el.classList.toggle("module-active", active);
+  });
+
+  // عند إلغاء وحدة القرآن: تنظيف كامل ومنع جلب صوت/نصّ من المصدر
+  if (!state.quran) {
+    // ١) انتقل بعيداً عن تبويب التلاوة إن كان نشطاً
+    const recBtn = document.querySelector('.tab-btn[data-tab="rec"]');
+    if (recBtn && recBtn.classList.contains("on")) {
+      const sceneBtn = document.querySelector('.tab-btn[data-tab="scene"]');
+      if (sceneBtn) sceneBtn.click();
+    }
+
+    // ٢) أوقف صوت القارئ وأيّ جلب جارٍ (عبر زيادة الجيل _recGen)
+    if (typeof stopRecitationAudio === "function") {
+      try { stopRecitationAudio(); } catch (_) {}
+    }
+    // زيادة _recGen تُلغي أيّ fetch صوت/AudioBuffer لم ينتهِ بعد
+    if (typeof _recGen !== "undefined") { try { _recGen++; } catch (_) {} }
+
+    // ٣) إن كانت الآيات من القرآن (ليست نصّاً حرّاً) → فرّغها
+    const hasQuranVerses = S.verses?.some(v => !v.free);
+    if (hasQuranVerses) {
+      if (S.playing) { try { togglePlay(); } catch (_) {} }
+      S.verses = [];
+      S.translations = [];
+      S.currentAya = 0;
+      S.elapsed = 0;
+      S.ayaDurations = [];
+      const ayaInfo = document.getElementById("aya-info");
+      if (ayaInfo) ayaInfo.textContent = "⏸️ وحدة القرآن مُلغاة — لا توجد آيات محمّلة";
+      if (typeof updateAyaUI === "function") updateAyaUI();
+    }
+  }
+}
+
+// حارس عام: هل وحدة معيّنة مُفعَّلة؟
+function isModuleActive(key) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(MODULES_KEY) || "{}");
+    if (key in stored) return !!stored[key];
+    return !!MODULES[key]?.default;
+  } catch (_) { return !!MODULES[key]?.default; }
+}
+
+function initModuleManager() {
+  // أوّلاً: اضبط .module-active على كل العناصر المعلَّمة وفق الحالة المحفوظة
+  const state = loadModuleStates();
+  applyModuleVisibility(state);
+
+  // اربط toggles في تبويب الإعدادات
+  for (const key of Object.keys(MODULES)) {
+    const cb = document.getElementById(`mod-${key}`);
+    if (!cb) continue;
+    cb.checked = state[key];
+    // وحدات غير مُنفَّذة بعد: مُعطَّلة (disabled) — لكن الحالة محفوظة للمستقبل
+    if (!MODULES[key].impl) {
+      cb.disabled = true;
+      cb.checked = state[key]; // اعرض الحالة كما هي
+    }
+    cb.addEventListener("change", () => {
+      state[key] = cb.checked;
+      persistModuleStates(state);
+      applyModuleVisibility(state);
+      if (typeof toast === "function") {
+        const verb = cb.checked ? "تفعيل" : "إلغاء";
+        toast(`${verb} وحدة ${MODULES[key].label}`, "info", 1800);
+      }
+    });
+  }
+  console.log("[SIRM] Module Manager initialized:", state);
+}
+
+// ══════════════════════════════════════════════════════
+//  FREE TEXT EDITOR (v0.4.0)
+//  محرّر نصّ حرّ متعدّد الأسطر — يقسّم النصّ إلى شرائح
+//  حيث كلّ سطر فارغ يبدأ شريحة جديدة.
+//  يملأ S.verses ببنية مكافئة للآيات: {text, audio:null, surahName, ayahNum, manualDuration}
+// ══════════════════════════════════════════════════════
+function parseFreeText(raw) {
+  if (!raw || !raw.trim()) return [];
+  // تقسيم على سطر فارغ واحد أو أكثر
+  const slices = raw.split(/\n\s*\n+/).map(s => s.trim()).filter(Boolean);
+  return slices;
+}
+
+function updateFreeTextStats() {
+  const ta = document.getElementById("free-text-area");
+  const stats = document.getElementById("free-text-stats");
+  if (!ta || !stats) return;
+  const slices = parseFreeText(ta.value);
+  const dur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  const total = slices.length * dur;
+  stats.textContent = `${slices.length} شريحة · ${total.toFixed(1)} ثانية تقريباً`;
+}
+
+// حساب مدة الشريحة الفعلية: تأخذ في الحسبان trim للصوت المستورد
+function calcEffectiveSliceDuration(numSlices, baseDur) {
+  if (!S.freeAudioTrim || numSlices <= 0) return baseDur;
+  const trimDur = Math.max(0, S.freeAudioTrim.end - S.freeAudioTrim.start);
+  const required = trimDur / numSlices;
+  return Math.max(baseDur, required);
+}
+
+function applyFreeText() {
+  const ta = document.getElementById("free-text-area");
+  if (!ta) return;
+  const slices = parseFreeText(ta.value);
+  if (!slices.length) {
+    toast?.("⚠️ لا يوجد نصّ لتطبيقه", "warn", 2000);
+    return;
+  }
+  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  const source = document.getElementById("free-source")?.value?.trim() || "";
+  const dur = calcEffectiveSliceDuration(slices.length, baseDur);
+  const adjusted = dur > baseDur;
+
+  // النصّ الحرّ يحلّ محلّ آيات القرآن دائماً عند الضغط على "تطبيق"
+  S.verses = slices.map((text, i) => ({
+    text,
+    numberInSurah: i + 1,
+    number: i + 1,
+    audio: null,
+    audioSecondary: [],
+    manualDuration: dur,
+    free: true,
+    source,
+  }));
+  S.currentAya = 0;
+  S.elapsed = 0;
+  S.useFreeAsSource = true;
+
+  // ✨ تنظيف بقايا حالة جلسة سابقة (تمنع ظهور الترجمة القديمة كنصّ "مكرَّر")
+  S.translations = [];
+  S.ayaDurations = [];
+
+  // أوقف صوت القارئ
+  if (S.recAudioEl) { try { S.recAudioEl.pause(); S.recAudioEl.src = ""; } catch (_) {} }
+  if (S.recAudioSource) {
+    try { S.recAudioSource.onended = null; S.recAudioSource.stop(); } catch (_) {}
+    S.recAudioSource = null;
+  }
+
+  // أعد الصوت إلى بداية trim (أو 0)
+  if (S.bgAudioEl) {
+    try {
+      S.bgAudioEl.pause();
+      S.bgAudioEl.currentTime = S.freeAudioTrim?.start || 0;
+    } catch (_) {}
+  }
+
+  // افرض المدّة اليدويّة
+  const autoDurCb = document.getElementById("auto-dur");
+  const ayaDurEl = document.getElementById("aya-dur");
+  if (autoDurCb && autoDurCb.checked) {
+    autoDurCb.checked = false;
+    autoDurCb.dispatchEvent(new Event("change"));
+  }
+  if (ayaDurEl) {
+    ayaDurEl.value = dur;
+    ayaDurEl.dispatchEvent(new Event("input"));
+  }
+
+  if (S.playing) { try { togglePlay(); } catch (_) {} }
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+
+  const totalSec = (slices.length * dur).toFixed(1);
+  const msg = adjusted
+    ? `🔗 تطبيق ${slices.length} شريحة · ${dur.toFixed(1)}s/شريحة (مُمدَّدة لتغطية الصوت) · إجمالي ${totalSec}s`
+    : `🔗 تطبيق ${slices.length} شريحة كمصدر التلاوة (${totalSec}s)`;
+  toast?.(msg, "success", 2500);
+}
+
+// إعادة تشغيل النصّ الحرّ من الشريحة الأولى + إعادة الصوت إلى 0
+function restartFreeText() {
+  if (!S.verses || !S.verses.length) {
+    toast?.("⚠️ لا يوجد نصّ حرّ مطبَّق", "warn", 1500);
+    return;
+  }
+  const wasPlaying = !!S.playing;
+  // أوقف التشغيل أوّلاً
+  if (S.playing) { try { togglePlay(); } catch (_) {} }
+
+  // ارجع إلى الشريحة الأولى
+  S.currentAya = 0;
+  S.elapsed = 0;
+
+  // أعد المصادر الصوتيّة (الصوت المخصّص يحترم trim.start)
+  if (S.bgAudioEl) {
+    try {
+      S.bgAudioEl.pause();
+      S.bgAudioEl.currentTime = S.freeAudioTrim?.start || 0;
+    } catch (_) {}
+  }
+  if (S.recAudioEl) {
+    try { S.recAudioEl.pause(); S.recAudioEl.currentTime = 0; } catch (_) {}
+  }
+  if (S.bgVid) {
+    try { S.bgVid.pause(); S.bgVid.currentTime = 0; } catch (_) {}
+  }
+
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+
+  toast?.("↺ إعادة من البداية", "info", 1500);
+
+  // استأنف التشغيل إن كان يعمل
+  if (wasPlaying) {
+    setTimeout(() => { try { togglePlay(); } catch (_) {} }, 50);
+  }
+}
+
+// إلغاء وضع "النصّ الحرّ كمصدر" والعودة لتيلاوة القرآن
+function disableFreeAsSource() {
+  S.useFreeAsSource = false;
+  // فرغ verses (سيُعيد المستخدم تحميل الآيات بزرّ "تحميل الآيات" أو يحدث تلقائياً عند تغيير السورة)
+  S.verses = [];
+  S.currentAya = 0;
+  S.elapsed = 0;
+  if (S.playing) { try { togglePlay(); } catch (_) {} }
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  // محاولة إعادة تحميل آيات القرآن إن كانت محمّلة
+  if (typeof loadVerses === "function") {
+    try { loadVerses(); } catch (_) {}
+  }
+}
+
+// التعامل مع اختيار ملفّ صوت خارجيّ
+function handleFreeAudioFile(file) {
+  if (!file) return;
+  const info = document.getElementById("free-audio-info");
+
+  // أظهر اسم الملف فوراً (قبل قراءة metadata)
+  if (info) info.textContent = `📁 ${file.name} · ${(file.size / 1e6).toFixed(1)}MB · جاري القراءة...`;
+
+  // نظّف URL القديم
+  if (S.freeAudioUrl) {
+    try { URL.revokeObjectURL(S.freeAudioUrl); } catch (_) {}
+  }
+  const url = URL.createObjectURL(file);
+  S.freeAudioFile = file;
+  S.freeAudioUrl = url;
+
+  // اقرأ المدّة + حدّث المعلومات
+  const probe = new Audio();
+  probe.addEventListener("loadedmetadata", () => {
+    if (!isFinite(probe.duration)) return;
+    const min = Math.floor(probe.duration / 60);
+    const sec = Math.round(probe.duration % 60);
+    if (info) info.textContent = `📁 ${file.name} · ${min}:${String(sec).padStart(2, "0")} · ${(file.size / 1e6).toFixed(1)}MB`;
+    // إذا قيمة trim-end لم تُعدَّل بعد (افتراضيّة)، اضبطها على المدّة الكاملة
+    const endInp = document.getElementById("free-audio-trim-end");
+    if (endInp) {
+      const cur = parseFloat(endInp.value);
+      if (cur === 30 || cur === 0 || !isFinite(cur)) {
+        endInp.value = probe.duration.toFixed(1);
+      }
+    }
+  }, { once: true });
+  probe.addEventListener("error", () => {
+    if (info) info.textContent = `📁 ${file.name} · ${(file.size / 1e6).toFixed(1)}MB`;
+  }, { once: true });
+  probe.src = url;
+
+  // اربطه عبر onBgAudio الموجود (يتولّى التشغيل + Audio Graph + التصدير)
+  if (typeof onBgAudio === "function") {
+    try { onBgAudio({ files: [file] }); } catch (e) { console.warn("[SIRM] onBgAudio failed:", e); }
+  }
+
+  // أظهر زرَّي الإعادة والإزالة
+  const removeBtn = document.getElementById("free-audio-remove-btn");
+  if (removeBtn) removeBtn.style.display = "inline-block";
+  const restartBtn = document.getElementById("free-audio-restart-btn");
+  if (restartBtn) restartBtn.style.display = "inline-block";
+
+  // إن كان trim مُفعَّلاً أصلاً، أعد ربطه على bgAudioEl الجديد
+  // (نؤجّل قليلاً لأنّ onBgAudio قد لا يكون أنهى تجهيز bgAudioEl لحظياً)
+  setTimeout(() => {
+    if (ge("free-audio-trim-on")) applyFreeAudioTrim();
+  }, 120);
+
+  toast?.(`🎵 تمّ تحميل: ${file.name}`, "success", 1800);
+}
+
+// ↺ إعادة الصوت المخصّص إلى نقطة البداية (start في حال trim، أو 0)
+function restartFreeAudio() {
+  if (!S.bgAudioEl) {
+    toast?.("⚠️ لا يوجد صوت مخصّص محمَّل", "warn", 1500);
+    return;
+  }
+  const start = S.freeAudioTrim?.start || 0;
+  const wasPlaying = !S.bgAudioEl.paused;
+  try {
+    S.bgAudioEl.pause();
+    S.bgAudioEl.currentTime = start;
+    if (wasPlaying) S.bgAudioEl.play().catch(() => {});
+  } catch (_) {}
+  toast?.(`↺ إعادة الصوت إلى ${start.toFixed(1)}s`, "info", 1500);
+}
+
+// إزالة الصوت الخارجيّ
+function removeFreeAudio() {
+  if (S.freeAudioUrl) {
+    try { URL.revokeObjectURL(S.freeAudioUrl); } catch (_) {}
+  }
+  S.freeAudioFile = null;
+  S.freeAudioUrl = null;
+
+  // أوقف bgAudio المرتبط
+  if (S.bgAudioEl) {
+    try { S.bgAudioEl.pause(); S.bgAudioEl.src = ""; } catch (_) {}
+    S.bgAudioEl = null;
+  }
+  if (S.bgAudioSource) {
+    try { S.bgAudioSource.disconnect(); } catch (_) {}
+    S.bgAudioSource = null;
+  }
+
+  // امسح حقل الملف + المعلومات
+  const input = document.getElementById("free-audio-file");
+  if (input) input.value = "";
+  const info = document.getElementById("free-audio-info");
+  if (info) info.textContent = "";
+  const bgInfo = document.getElementById("bg-audio-info");
+  if (bgInfo) bgInfo.textContent = "";
+
+  const removeBtn = document.getElementById("free-audio-remove-btn");
+  if (removeBtn) removeBtn.style.display = "none";
+  const restartBtn = document.getElementById("free-audio-restart-btn");
+  if (restartBtn) restartBtn.style.display = "none";
+
+  // امسح trim
+  clearFreeAudioTrim();
+  const trimCb = document.getElementById("free-audio-trim-on");
+  if (trimCb && trimCb.checked) {
+    trimCb.checked = false;
+    const trimCtrl = document.getElementById("free-audio-trim-ctrl");
+    if (trimCtrl) trimCtrl.style.display = "none";
+  }
+
+  toast?.("🗑️ أُزيل ملفّ الصوت", "info", 1500);
+}
+
+// ── Toggle A: محرّر النصّ الحرّ (إظهار/إخفاء المحرّر فقط) ──────
+function toggleFreeTextVisibility() {
+  const cb = document.getElementById("free-text-on");
+  const ctrl = document.getElementById("free-text-ctrl");
+  if (!cb || !ctrl) return;
+  ctrl.style.display = cb.checked ? "block" : "none";
+
+  // عند الإلغاء بعد تطبيق نصّ حرّ: عُد للقرآن
+  if (!cb.checked && S.useFreeAsSource && !ge("quran-text-only")) {
+    disableFreeAsSource();
+    toast?.("⤴️ عودة لمصدر التلاوة الافتراضيّ (القرآن)", "info", 1800);
+  }
+  try { localStorage.setItem("gt_sirm_free_text_on", cb.checked ? "1" : "0"); } catch (_) {}
+}
+
+// ── Toggle B: استخدام صوت تلاوة مخصّص ─────────────────────────
+function toggleFreeAudioVisibility() {
+  const cb = document.getElementById("free-audio-on");
+  const ctrl = document.getElementById("free-audio-ctrl");
+  if (!cb || !ctrl) return;
+  ctrl.style.display = cb.checked ? "block" : "none";
+
+  // عند الإلغاء بعد تحميل صوت: أزله
+  if (!cb.checked && S.freeAudioFile) {
+    removeFreeAudio();
+  }
+  try { localStorage.setItem("gt_sirm_free_audio_on", cb.checked ? "1" : "0"); } catch (_) {}
+}
+
+// ── تقطيع زمني للصوت المخصّص ─────────────────────────────────
+function toggleFreeAudioTrim() {
+  const cb = document.getElementById("free-audio-trim-on");
+  const ctrl = document.getElementById("free-audio-trim-ctrl");
+  if (!cb || !ctrl) return;
+  ctrl.style.display = cb.checked ? "block" : "none";
+  if (cb.checked) {
+    applyFreeAudioTrim();
+  } else {
+    clearFreeAudioTrim();
+  }
+}
+
+function applyFreeAudioTrim() {
+  const startInp = document.getElementById("free-audio-trim-start");
+  const endInp = document.getElementById("free-audio-trim-end");
+  const info = document.getElementById("free-audio-trim-info");
+  if (!startInp || !endInp) return;
+  let start = Math.max(0, parseFloat(startInp.value) || 0);
+  let end = Math.max(start + 0.1, parseFloat(endInp.value) || start + 1);
+  // اضبط ضمن مدة الصوت المعروفة
+  if (S.bgAudioEl && isFinite(S.bgAudioEl.duration) && S.bgAudioEl.duration > 0) {
+    if (end > S.bgAudioEl.duration) {
+      end = S.bgAudioEl.duration;
+      endInp.value = end.toFixed(1);
+    }
+    if (start >= end) {
+      start = Math.max(0, end - 0.1);
+      startInp.value = start.toFixed(1);
+    }
+  }
+  S.freeAudioTrim = { start, end };
+  const trimDur = end - start;
+  if (info) info.textContent = `📐 المدّة المختارة: ${trimDur.toFixed(1)}s`;
+
+  // اضبط currentTime
+  if (S.bgAudioEl) {
+    try { S.bgAudioEl.currentTime = start; } catch (_) {}
+    // أضف معالج لتكرار/إيقاف عند النهاية
+    if (!S.bgAudioEl._freeTrimHandler) {
+      S.bgAudioEl._freeTrimHandler = () => {
+        if (!S.freeAudioTrim) return;
+        if (S.bgAudioEl.currentTime >= S.freeAudioTrim.end - 0.05) {
+          // كرّر من البداية إن كان النصّ ما زال يعمل
+          S.bgAudioEl.currentTime = S.freeAudioTrim.start;
+        }
+      };
+      S.bgAudioEl.addEventListener("timeupdate", S.bgAudioEl._freeTrimHandler);
+    }
+  }
+}
+
+function clearFreeAudioTrim() {
+  S.freeAudioTrim = null;
+  const info = document.getElementById("free-audio-trim-info");
+  if (info) info.textContent = "";
+  if (S.bgAudioEl && S.bgAudioEl._freeTrimHandler) {
+    try { S.bgAudioEl.removeEventListener("timeupdate", S.bgAudioEl._freeTrimHandler); } catch (_) {}
+    S.bgAudioEl._freeTrimHandler = null;
+  }
+}
+
+function clearFreeText() {
+  const ta = document.getElementById("free-text-area");
+  if (ta) ta.value = "";
+  updateFreeTextStats();
+}
+
+function loadFreeTemplates() {
+  try { return JSON.parse(localStorage.getItem(FREE_TPL_KEY) || "[]"); }
+  catch (_) { return []; }
+}
+
+function persistFreeTemplates(arr) {
+  try { localStorage.setItem(FREE_TPL_KEY, JSON.stringify(arr)); } catch (_) {}
+}
+
+function renderFreeTemplates() {
+  const list = document.getElementById("free-tpl-list");
+  if (!list) return;
+  const tpls = loadFreeTemplates();
+  if (!tpls.length) {
+    list.innerHTML = `<div style="color:var(--t3);font-size:11px;padding:6px">لا توجد قوالب محفوظة بعد</div>`;
+    return;
+  }
+  list.innerHTML = tpls.map((t, i) => `
+    <div style="display:flex;gap:4px;align-items:center;background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:5px 8px">
+      <span style="flex:1;font-size:11px;color:var(--t1)">${escapeHtml(t.name || "بدون اسم")}</span>
+      <span style="font-size:9px;color:var(--t3)">${(t.slices || 0)} شريحة</span>
+      <button class="btn btn-g bsm" data-tpl-load="${i}" style="padding:2px 8px">↩</button>
+      <button class="btn btn-g bsm" data-tpl-del="${i}" style="padding:2px 8px;color:var(--danger)">✕</button>
+    </div>
+  `).join("");
+  // ربط الأزرار
+  list.querySelectorAll("[data-tpl-load]").forEach(b => {
+    b.addEventListener("click", () => {
+      const idx = parseInt(b.dataset.tplLoad, 10);
+      const tpl = loadFreeTemplates()[idx];
+      if (tpl && tpl.text != null) {
+        document.getElementById("free-text-area").value = tpl.text;
+        if (tpl.source != null) document.getElementById("free-source").value = tpl.source;
+        if (tpl.dur != null) {
+          const s = document.getElementById("free-slice-dur");
+          if (s) { s.value = tpl.dur; s.dispatchEvent(new Event("input")); }
+        }
+        updateFreeTextStats();
+        if (typeof toast === "function") toast(`📂 تمّ تحميل القالب: ${tpl.name}`, "info", 1500);
+      }
+    });
+  });
+  list.querySelectorAll("[data-tpl-del]").forEach(b => {
+    b.addEventListener("click", () => {
+      const idx = parseInt(b.dataset.tplDel, 10);
+      const arr = loadFreeTemplates();
+      arr.splice(idx, 1);
+      persistFreeTemplates(arr);
+      renderFreeTemplates();
+      if (typeof toast === "function") toast("🗑️ حُذف القالب", "info", 1200);
+    });
+  });
+}
+
+function saveFreeTemplate() {
+  const name = (document.getElementById("free-tpl-name")?.value || "").trim();
+  const text = (document.getElementById("free-text-area")?.value || "").trim();
+  const source = (document.getElementById("free-source")?.value || "").trim();
+  const dur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  if (!name) { toast?.("⚠️ أدخل اسم القالب", "warn", 1800); return; }
+  if (!text) { toast?.("⚠️ لا يوجد نصّ لحفظه", "warn", 1800); return; }
+  const slices = parseFreeText(text).length;
+  const arr = loadFreeTemplates();
+  arr.push({ name, text, source, dur, slices, savedAt: Date.now() });
+  persistFreeTemplates(arr);
+  document.getElementById("free-tpl-name").value = "";
+  renderFreeTemplates();
+  toast?.(`💾 حُفظ القالب: ${name}`, "success", 1500);
+}
+
+function initFreeTextEditor() {
+  const ta = document.getElementById("free-text-area");
+  if (!ta) return;
+  ta.addEventListener("input", updateFreeTextStats);
+  const slider = document.getElementById("free-slice-dur");
+  if (slider) slider.addEventListener("input", updateFreeTextStats);
+  document.getElementById("free-apply-btn")?.addEventListener("click", applyFreeText);
+  document.getElementById("free-restart-btn")?.addEventListener("click", restartFreeText);
+  document.getElementById("free-clear-btn")?.addEventListener("click", clearFreeText);
+  document.getElementById("free-tpl-save-btn")?.addEventListener("click", saveFreeTemplate);
+
+  // ── Toggle A: تفعيل محرّر النصّ ──
+  const textCb = document.getElementById("free-text-on");
+  if (textCb) {
+    try { textCb.checked = localStorage.getItem("gt_sirm_free_text_on") === "1"; } catch (_) {}
+    textCb.addEventListener("change", toggleFreeTextVisibility);
+    toggleFreeTextVisibility();
+  }
+
+  // ── Toggle B: استخدام صوت تلاوة مخصّص ──
+  const audioCb = document.getElementById("free-audio-on");
+  if (audioCb) {
+    try { audioCb.checked = localStorage.getItem("gt_sirm_free_audio_on") === "1"; } catch (_) {}
+    audioCb.addEventListener("change", toggleFreeAudioVisibility);
+    toggleFreeAudioVisibility();
+  }
+
+  // مستورد الصوت + زرّ الإزالة
+  const audioInput = document.getElementById("free-audio-file");
+  if (audioInput) {
+    audioInput.addEventListener("change", (e) => {
+      const f = e.target.files?.[0];
+      if (f) handleFreeAudioFile(f);
+    });
+  }
+  document.getElementById("free-audio-remove-btn")?.addEventListener("click", removeFreeAudio);
+  document.getElementById("free-audio-restart-btn")?.addEventListener("click", restartFreeAudio);
+
+  // ── تقطيع زمني للصوت ──
+  const trimCb = document.getElementById("free-audio-trim-on");
+  if (trimCb) {
+    trimCb.addEventListener("change", toggleFreeAudioTrim);
+  }
+  ["free-audio-trim-start", "free-audio-trim-end"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", () => {
+      if (ge("free-audio-trim-on")) applyFreeAudioTrim();
+    });
+  });
+  // drag-drop على منطقة الصوت
+  const dropZone = document.getElementById("free-audio-drop");
+  if (dropZone) {
+    ["dragover", "dragenter"].forEach(ev => dropZone.addEventListener(ev, e => {
+      e.preventDefault(); dropZone.style.borderColor = "var(--al)";
+    }));
+    ["dragleave", "drop"].forEach(ev => dropZone.addEventListener(ev, e => {
+      dropZone.style.borderColor = "";
+    }));
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      const f = e.dataTransfer?.files?.[0];
+      if (f) handleFreeAudioFile(f);
+    });
+  }
+
+  renderFreeTemplates();
+  updateFreeTextStats();
+  console.log("[SIRM] Free Text Editor initialized");
+}
+
+// helper إن لم يكن موجوداً في الموروث
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[c]);
+}
 
 // ══════════════════════════════════════════════════════
 //  EVENT LISTENERS INITIALIZATION
@@ -175,6 +807,17 @@ function initEventListeners() {
   // Buttons
   const loadVersesBtn = $("load-verses-btn");
   if (loadVersesBtn) loadVersesBtn.addEventListener("click", loadVerses);
+  // v0.4.3 — استعد + احفظ توگل "نصّ فقط"
+  const textOnlyCb = $("quran-text-only");
+  if (textOnlyCb) {
+    try { textOnlyCb.checked = localStorage.getItem("gt_sirm_quran_text_only") === "1"; } catch (_) {}
+    textOnlyCb.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_quran_text_only", textOnlyCb.checked ? "1" : "0"); } catch (_) {}
+      toast?.(textOnlyCb.checked
+        ? "🔇 وضع النصّ فقط مُفعَّل — اضغط 'تحميل الآيات' لتطبيقه"
+        : "🔊 وضع النصّ فقط مُلغى — التحميل التالي يشمل صوت القارئ", "info", 2200);
+    });
+  }
 
   const toggleAddReciterBtn = $("toggle-add-reciter-btn");
   if (toggleAddReciterBtn) toggleAddReciterBtn.addEventListener("click", toggleAddReciter);
@@ -2058,8 +2701,18 @@ async function playRecitationAudio() {
   if (S.exporting) return;
   stopRecitationAudio();
   if (!S.verses.length || !S.playing) return;
+  // v0.4.1 — في وضع النصّ الحرّ كمصدر: لا نشغّل أيّ صوت قارئ من القرآن
+  if (S.useFreeAsSource) {
+    $("audio-status").textContent = "✍️ نصّ حرّ — التوقيت اليدويّ";
+    return;
+  }
   const aya = S.verses[S.currentAya];
   if (!aya) return;
+  // إذا كانت الآية تحمل علامة free أو audio:null صراحةً، نتخطّى تحميل الصوت
+  if (aya.free || aya.audio === null) {
+    $("audio-status").textContent = "✍️ شريحة نصّ حرّ";
+    return;
+  }
 
   const myGen = ++_recGen;
   const surahNum = parseInt($("surah-sel").value) || 1;
@@ -3378,6 +4031,11 @@ function clearVerseSearch() {
 
 function onSurahChange() { loadVerses(); }
 async function loadVerses() {
+  // حارس: لا تجلب أيّ شيء إن كانت وحدة القرآن مُلغاة
+  if (typeof isModuleActive === "function" && !isModuleActive("quran")) {
+    toast?.("⚠️ وحدة القرآن مُلغاة من الإعدادات — لا يمكن جلب الآيات", "warn", 2500);
+    return;
+  }
   const surahNum = parseInt($("surah-sel").value) || 1;
   const from = parseInt($("from-aya").value) || 1;
   const to = parseInt($("to-aya").value) || 7;
@@ -3420,8 +4078,46 @@ async function loadVerses() {
     }
   }
 
+  // v0.4.3 — وضع "النصّ فقط" — يُجرَّد صوت القارئ ويصبح النصّ مصدراً حرّاً للتلاوة
+  const textOnly = !!ge("quran-text-only");
+  if (textOnly) {
+    const dur = parseFloat(gv("aya-dur")) || 6;
+    verses = verses.map(v => ({
+      ...v,
+      audio: null,
+      audioSecondary: [],
+      manualDuration: dur,
+      free: true,
+      source: `سورة ${surah?.name || ""} (نصّ فقط)`,
+    }));
+    S.useFreeAsSource = true;
+    // أوقف صوت القارئ إن كان يعمل
+    if (S.recAudioEl) { try { S.recAudioEl.pause(); S.recAudioEl.src = ""; } catch (_) {} }
+    if (S.recAudioSource) {
+      try { S.recAudioSource.onended = null; S.recAudioSource.stop(); } catch (_) {}
+      S.recAudioSource = null;
+    }
+    // فعّل توگل الصوت المخصّص تلقائياً حتى يظهر مستورد الصوت للمستخدم
+    // (محرّر النصّ الحرّ يبقى مُخفياً — لا نحتاج كتابة نصّ هنا، النصّ من القرآن)
+    const audioCb = document.getElementById("free-audio-on");
+    if (audioCb && !audioCb.checked) {
+      audioCb.checked = true;
+      try { localStorage.setItem("gt_sirm_free_audio_on", "1"); } catch (_) {}
+      if (typeof toggleFreeAudioVisibility === "function") toggleFreeAudioVisibility();
+    }
+    // افرض المدّة اليدويّة
+    const autoDurCb = document.getElementById("auto-dur");
+    if (autoDurCb && autoDurCb.checked) {
+      autoDurCb.checked = false;
+      autoDurCb.dispatchEvent(new Event("change"));
+    }
+  } else {
+    S.useFreeAsSource = false;
+  }
+
   S.verses = verses; S.currentAya = 0; S.elapsed = 0; S.ayaDurations = [];
-  $("aya-info").textContent = `✅ ${verses.length} آية من سورة ${surah?.name || ""} ${source}`;
+  const suffix = textOnly ? " · 🔇 نصّ فقط" : "";
+  $("aya-info").textContent = `✅ ${verses.length} آية من سورة ${surah?.name || ""} ${source}${suffix}`;
   updateAyaUI();
   await loadTranslations();
 }
@@ -3432,6 +4128,11 @@ function onTransChange() {
   loadTranslations();
 }
 async function loadTranslations() {
+  // حارس: لا تجلب الترجمات إن كانت وحدة القرآن مُلغاة
+  if (typeof isModuleActive === "function" && !isModuleActive("quran")) {
+    S.translations = [];
+    return;
+  }
   const edition = $("trans-sel").value; if (edition === "none") { S.translations = []; return; }
   const surahNum = parseInt($("surah-sel").value) || 1;
   const from = parseInt($("from-aya").value) || 1;
@@ -3958,7 +4659,7 @@ async function loadSystemFonts() {
   if (found > 0) {
     renderFontGrid();
     toast(`✅ تم اكتشاف ${found} خطوط من النظام`, "success");
-    console.log(`[SQRM] System fonts: ${found} found`);
+    console.log(`[SIRM] System fonts: ${found} found`);
   }
 }
 

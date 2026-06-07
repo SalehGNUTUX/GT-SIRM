@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeImage } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -9,6 +9,54 @@ const { promisify } = require("util");
 const execPromise = promisify(exec);
 
 const isDev = process.env.NODE_ENV === "development";
+
+// ── ضبط هويّة التطبيق على Linux (مهمّ للـ WM_CLASS وأيقونة taskbar) ──
+// يجب أن يأتي قبل أيّ شيء آخر
+app.setName("GT-SIRM");
+process.title = "GT-SIRM";
+app.commandLine.appendSwitch("class", "GT-SIRM");
+
+// مسار الأيقونة المُعتمَد
+const ICON_PATH = path.join(__dirname, "../..", "GT-SIRM-icons", "all", "512x512", "GT-SIRM-icon.png");
+const APP_ICON = (() => {
+  try { return nativeImage.createFromPath(ICON_PATH); } catch (_) { return null; }
+})();
+
+// ── تثبيت .desktop file مؤقّت في وضع التطوير على Linux ─────────────
+// السبب: في dev mode، مدير النوافذ لا يجد الأيقونة من BrowserWindow.icon
+// الحلّ: نسجّل ملفّاً مؤقّتاً في ~/.local/share/applications/ يربط WM_CLASS=GT-SIRM
+// بمسار الأيقونة، فيلتقطه GNOME/KDE/Cinnamon... تلقائياً.
+// عند الحزم في AppImage/DEB/RPM يتولّى electron-builder توليد .desktop صحيح،
+// فيتمّ تجاوز هذا الجزء.
+function installDevDesktopFile() {
+  if (process.platform !== "linux" || !isDev) return;
+  try {
+    const appsDir = path.join(os.homedir(), ".local", "share", "applications");
+    fs.mkdirSync(appsDir, { recursive: true });
+    const desktopPath = path.join(appsDir, "gt-sirm-dev.desktop");
+    const content = `[Desktop Entry]
+Name=GT-SIRM (dev)
+Comment=GnuTux Short Islamic Reels Maker — Development Mode
+Exec=electron .
+Icon=${ICON_PATH}
+Terminal=false
+Type=Application
+StartupWMClass=GT-SIRM
+Categories=AudioVideo;Video;GTK;
+NoDisplay=true
+`;
+    fs.writeFileSync(desktopPath, content, "utf8");
+    // محاولة تحديث icon cache (يعمل على Cinnamon/GNOME، فشله غير مهمّ)
+    try {
+      exec(`update-desktop-database "${appsDir}" 2>/dev/null`);
+    } catch (_) {}
+    console.log("[GT-SIRM] Dev .desktop file installed:", desktopPath);
+  } catch (e) {
+    console.warn("[GT-SIRM] Could not install dev .desktop file:", e.message);
+  }
+}
+
+installDevDesktopFile();
 
 // خريطة لتخزين المسارات بعد العثور عليها (تخزين مؤقت)
 const binaryPaths = {
@@ -95,8 +143,8 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: "GT-SIRM — GnuTux Short Islamic Reels Maker",
-    icon: path.join(__dirname, "../../GT-SIRM-icons/all/512x512/GT-SIRM-icon.png"),
-                                 backgroundColor: "#020b05",
+    icon: APP_ICON || ICON_PATH,
+    backgroundColor: "#020b05",
                                  webPreferences: {
                                    preload: path.join(__dirname, "../preload/preload.js"),
                                  contextIsolation: true,
@@ -106,6 +154,15 @@ function createWindow() {
                                  allowRunningInsecureContent: false,
                                  },
   });
+
+  // تطبيق الأيقونة صراحةً (مهمّ على Linux في وضع التطوير)
+  if (APP_ICON) {
+    try { mainWindow.setIcon(APP_ICON); } catch (_) {}
+    // إعادة تطبيق بعد ready-to-show لأنّ بعض WMs لا يلتقطون الأيقونة قبل العرض الأوّل
+    mainWindow.once("ready-to-show", () => {
+      try { mainWindow.setIcon(APP_ICON); } catch (_) {}
+    });
+  }
 
   mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
 
