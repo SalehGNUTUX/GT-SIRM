@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v7 — release v0.5.2 (إعادة توزيع تلقائيّ للشرائح)
+// GT-SIRM Service Worker v8 — release v0.5.3 (مزامنة فوريّة للشرائح مع المعاينة)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v7";
+const CACHE_VER = "gt-sirm-v8";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

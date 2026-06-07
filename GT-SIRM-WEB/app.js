@@ -377,9 +377,23 @@ function renderPerSliceList() {
         S.freePerSlice[idx].dur = v;
         updatePerSliceStats();
       }
+      syncPerSliceToPlayback();
     });
   });
   updatePerSliceStats();
+}
+
+function syncPerSliceToPlayback() {
+  const items = S.freePerSlice || [];
+  if (!items.length) return;
+  if (!Array.isArray(S.verses) || !S.verses.length) return;
+  const allFree = S.verses.every(v => v && (v.free === true || v.audio === null));
+  if (!allFree || S.verses.length !== items.length) return;
+  items.forEach((it, i) => {
+    if (S.verses[i]) S.verses[i].manualDuration = it.dur;
+    S.ayaDurations[i] = it.dur;
+  });
+  if (typeof updateAyaUI === "function") updateAyaUI();
 }
 
 function redistributePerSliceFromEdit(changedIdx, newDur) {
@@ -451,6 +465,7 @@ function distributePerSlice() {
   const each = audioDur / items.length;
   items.forEach(it => it.dur = each);
   renderPerSliceList();
+  syncPerSliceToPlayback();
   toast?.(`⚖️ تمّ التوزيع: ${each.toFixed(1)}s/شريحة`, "success", 1500);
 }
 

@@ -366,9 +366,25 @@ function renderPerSliceList() {
         S.freePerSlice[idx].dur = v;
         updatePerSliceStats();
       }
+      syncPerSliceToPlayback();
     });
   });
   updatePerSliceStats();
+}
+
+// v0.5.3 — مزامنة فوريّة للمدد على verses + ayaDurations حتى يظهر التغيير في المعاينة
+function syncPerSliceToPlayback() {
+  const items = S.freePerSlice || [];
+  if (!items.length) return;
+  if (!Array.isArray(S.verses) || !S.verses.length) return;
+  // نطبّق فقط إذا verses تخصّ النصّ الحرّ (نفس العدد + free=true)
+  const allFree = S.verses.every(v => v && (v.free === true || v.audio === null));
+  if (!allFree || S.verses.length !== items.length) return;
+  items.forEach((it, i) => {
+    if (S.verses[i]) S.verses[i].manualDuration = it.dur;
+    S.ayaDurations[i] = it.dur;
+  });
+  if (typeof updateAyaUI === "function") updateAyaUI();
 }
 
 // v0.5.2 — إعادة توزيع تلقائيّ: عند تعديل شريحة، الفرق يُوزَّع على الباقي بالتناسب
@@ -446,6 +462,7 @@ function distributePerSlice() {
   const each = audioDur / items.length;
   items.forEach(it => it.dur = each);
   renderPerSliceList();
+  syncPerSliceToPlayback();
   toast?.(`⚖️ تمّ التوزيع: ${each.toFixed(1)}s/شريحة`, "success", 1500);
 }
 
