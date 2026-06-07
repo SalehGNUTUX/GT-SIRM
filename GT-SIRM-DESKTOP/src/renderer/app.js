@@ -1393,6 +1393,25 @@ function initEventListeners() {
   const autoDur = $("auto-dur");
   if (autoDur) autoDur.addEventListener("change", toggleManualDur);
 
+  // v0.5.4 — توگل قسم التوقيت العامّ
+  const timingMaster = $("timing-master-on");
+  const timingCtrl = $("timing-master-ctrl");
+  if (timingMaster && timingCtrl) {
+    try { timingMaster.checked = localStorage.getItem("gt_sirm_timing_master_on") !== "0"; } catch (_) {}
+    const applyTimingMaster = () => {
+      timingCtrl.style.opacity = timingMaster.checked ? "1" : "0.4";
+      timingCtrl.style.pointerEvents = timingMaster.checked ? "" : "none";
+      try { localStorage.setItem("gt_sirm_timing_master_on", timingMaster.checked ? "1" : "0"); } catch (_) {}
+    };
+    timingMaster.addEventListener("change", () => {
+      applyTimingMaster();
+      toast?.(timingMaster.checked
+        ? "🔛 قسم التوقيت العامّ مُفعَّل"
+        : "⏸️ قسم التوقيت العامّ مُعطَّل — لن يُضاف فاصل صمت", "info", 1800);
+    });
+    applyTimingMaster();
+  }
+
   // Range sliders
   const sliders = [
     { id: "aya-dur", outId: "aya-dur-v", unit: "s" },
@@ -1621,7 +1640,13 @@ function startRenderLoop() {
 }
 
 // ── فاصل صمت بين الآيات (نفس الواجهة في النسختين) ──
+// v0.5.4 — احترام قسم التوقيت العامّ
+function isTimingMasterOn() {
+  const el = document.getElementById("timing-master-on");
+  return el ? el.checked : true;
+}
 function getAyaGap() {
+  if (!isTimingMasterOn()) return 0;
   return Math.max(0, parseFloat(gv("aya-gap")) || 0);
 }
 // مدة فعلية لكل "خانة" آية = مدة الصوت + الفاصل

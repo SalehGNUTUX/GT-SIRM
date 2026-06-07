@@ -609,14 +609,17 @@ body.offline .offline-badge{display:block}
 
         <div class="sec">
           <div class="sec-t">⏱️ التوقيت</div>
-          <div class="tgg"><span class="tgl">مدة تلقائية حسب الصوت</span><label class="tg"><input type="checkbox" id="auto-dur" checked><span class="tgs"></span></label></div>
-          <div id="manual-dur" style="display:none;padding-top:5px">
-            <label class="fl">مدة كل آية (ثانية)</label>
-            <div class="sg"><input type="range" min="2" max="25" step=".5" value="6" id="aya-dur"><span class="sv" id="aya-dur-v">6s</span></div>
+          <div class="tgg"><span class="tgl">🔛 تفعيل قسم التوقيت العامّ<br><small style="color:var(--t3)">عند الإلغاء: تُتجاهَل هذه الإعدادات كلّياً — مناسب عند استخدام التوقيت التفصيلي للنصّ الحرّ</small></span><label class="tg"><input type="checkbox" id="timing-master-on" checked><span class="tgs"></span></label></div>
+          <div id="timing-master-ctrl">
+            <div class="tgg"><span class="tgl">مدة تلقائية حسب الصوت</span><label class="tg"><input type="checkbox" id="auto-dur" checked><span class="tgs"></span></label></div>
+            <div id="manual-dur" style="display:none;padding-top:5px">
+              <label class="fl">مدة كل آية (ثانية)</label>
+              <div class="sg"><input type="range" min="2" max="25" step=".5" value="6" id="aya-dur"><span class="sv" id="aya-dur-v">6s</span></div>
+            </div>
+            <div class="fg" style="margin-top:6px"><label class="fl">مدة الانتقال</label><div class="sg"><input type="range" min="0" max="3" step=".1" value=".5" id="trans-dur"><span class="sv" id="trans-dur-v">.5s</span></div></div>
+            <div class="fg" style="margin-top:6px"><label class="fl">🤫 فاصل صمت بين الآيات</label><div class="sg"><input type="range" min="0" max="3" step=".1" value="0" id="aya-gap"><span class="sv" id="aya-gap-v">0s</span></div></div>
+            <span class="note" style="display:block;margin-top:2px">صمت إضافي بعد كل آية قبل بدء التالية — مفيد لإيقاع التلاوة الطبيعي</span>
           </div>
-          <div class="fg" style="margin-top:6px"><label class="fl">مدة الانتقال</label><div class="sg"><input type="range" min="0" max="3" step=".1" value=".5" id="trans-dur"><span class="sv" id="trans-dur-v">.5s</span></div></div>
-          <div class="fg" style="margin-top:6px"><label class="fl">🤫 فاصل صمت بين الآيات</label><div class="sg"><input type="range" min="0" max="3" step=".1" value="0" id="aya-gap"><span class="sv" id="aya-gap-v">0s</span></div></div>
-          <span class="note" style="display:block;margin-top:2px">صمت إضافي بعد كل آية قبل بدء التالية — مفيد لإيقاع التلاوة الطبيعي</span>
         </div>
       </div>
 
@@ -1134,7 +1137,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.3</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.4</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>
