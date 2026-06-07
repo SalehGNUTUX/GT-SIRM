@@ -622,10 +622,32 @@ body.offline .offline-badge{display:block}
             <textarea id="free-text-area" class="fc" rows="6" style="width:100%;font-family:inherit;line-height:1.8;font-size:13px;padding:8px;resize:vertical;direction:rtl"
               placeholder="مثال:&#10;&#10;اللّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا&#10;&#10;وَبِكَ نَحْيَا وَبِكَ نَمُوتُ&#10;&#10;وَإِلَيْكَ النُّشُور"></textarea>
             <div id="free-text-stats" style="font-size:10px;color:var(--t3);margin-top:4px">0 شريحة · 0 ثانية تقريباً</div>
+
+            <!-- v0.5.1 — توگل المزامنة التلقائيّة -->
+            <div class="tgg" style="margin-top:6px">
+              <span class="tgl">🔄 مزامنة المدّة تلقائياً مع الصوت<br><small style="color:var(--t3)">عند التفعيل: مدّة الشرائح = مدّة الصوت ÷ عدد الشرائح. عند الإلغاء: تحكّم يدويّ كامل</small></span>
+              <label class="tg"><input type="checkbox" id="free-auto-sync" checked><span class="tgs"></span></label>
+            </div>
+
             <div class="grid2" style="margin-top:6px">
-              <div class="fg"><label class="fl">مدة كلّ شريحة</label><div class="sg"><input type="range" min="2" max="20" step=".5" value="4" id="free-slice-dur"><span class="sv" id="free-slice-dur-v">4s</span></div></div>
+              <div class="fg"><label class="fl">مدة كلّ شريحة</label><div class="sg"><input type="range" min="0.5" max="30" step=".1" value="4" id="free-slice-dur"><span class="sv" id="free-slice-dur-v">4s</span></div></div>
               <div class="fg"><label class="fl">المصدر/المرجع (اختياريّ)</label><input type="text" class="fc" id="free-source" placeholder="مثلاً: صحيح مسلم"></div>
             </div>
+
+            <!-- v0.5.1 — توقيت تفصيلي لكل شريحة -->
+            <div class="tgg" style="margin-top:6px;background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px">
+              <span class="tgl">⏱️ توقيت تفصيليّ لكلّ شريحة<br><small style="color:var(--t3)">عند التفعيل: اضبط مدّة كلّ شريحة على حدة لدقّة أعلى</small></span>
+              <label class="tg"><input type="checkbox" id="free-per-slice"><span class="tgs"></span></label>
+            </div>
+            <div id="free-per-slice-ctrl" style="display:none;margin-top:6px">
+              <div style="display:flex;gap:5px;margin-bottom:5px">
+                <button class="btn btn-g bsm" id="free-per-slice-rebuild" style="flex:1">🔄 توليد القائمة من النصّ الحاليّ</button>
+                <button class="btn btn-g bsm" id="free-per-slice-distribute" title="توزيع متساوٍ على كامل مدّة الصوت">⚖️ توزيع</button>
+              </div>
+              <div id="free-per-slice-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--b1);border-radius:var(--r);background:var(--bg1)"></div>
+              <div id="free-per-slice-stats" style="font-size:10px;color:var(--t3);margin-top:4px;text-align:center"></div>
+            </div>
+
             <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:5px;margin-top:6px">
               <button class="btn btn-p bsm" id="free-apply-btn">✅ تطبيق النصّ</button>
               <button class="btn btn-g bsm" id="free-restart-btn">↺ إعادة من البداية</button>
@@ -1409,7 +1431,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.0</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.1</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

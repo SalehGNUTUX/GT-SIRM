@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v5 — release v0.5.0 (مرونة الاستيراد + drag-drop + paste)
+// GT-SIRM Service Worker v6 — release v0.5.1 (auto-sync توگل + توقيت تفصيلي)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v5";
+const CACHE_VER = "gt-sirm-v6";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

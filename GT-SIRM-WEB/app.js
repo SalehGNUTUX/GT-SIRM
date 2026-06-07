@@ -318,6 +318,8 @@ function updateFreeTextStats() {
 
 function calcEffectiveSliceDuration(numSlices, baseDur) {
   if (numSlices <= 0) return baseDur;
+  const autoSync = !!ge("free-auto-sync");
+  if (!autoSync) return baseDur;
   let targetTotal = null;
   if (S.freeAudioTrim && ge("free-audio-trim-on")) {
     targetTotal = Math.max(0.5, S.freeAudioTrim.end - S.freeAudioTrim.start);
@@ -327,6 +329,101 @@ function calcEffectiveSliceDuration(numSlices, baseDur) {
   }
   if (targetTotal == null) return baseDur;
   return Math.max(0.5, targetTotal / numSlices);
+}
+
+// ── v0.5.1 — التوقيت التفصيلي ──
+function buildPerSliceList() {
+  const ta = document.getElementById("free-text-area");
+  if (!ta) return [];
+  const slices = parseFreeText(ta.value);
+  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  const effDur = calcEffectiveSliceDuration(slices.length, baseDur);
+  const old = Array.isArray(S.freePerSlice) ? S.freePerSlice : [];
+  S.freePerSlice = slices.map((text, i) => ({
+    text,
+    dur: (old[i] && old[i].text === text) ? old[i].dur : effDur,
+  }));
+  return S.freePerSlice;
+}
+
+function renderPerSliceList() {
+  const list = document.getElementById("free-per-slice-list");
+  if (!list) return;
+  const items = S.freePerSlice || [];
+  if (!items.length) {
+    list.innerHTML = '<div style="text-align:center;color:var(--t3);padding:12px;font-size:11px">اكتب نصّاً أعلاه ثم اضغط 🔄 توليد القائمة</div>';
+    const s = document.getElementById("free-per-slice-stats");
+    if (s) s.textContent = "";
+    return;
+  }
+  list.innerHTML = items.map((it, i) => `
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--b1)">
+      <span style="color:var(--al);font-size:10px;font-weight:700;flex-shrink:0;width:24px;text-align:center">${i + 1}</span>
+      <span style="flex:1;font-size:11px;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl" title="${escapeHtml(it.text)}">${escapeHtml(it.text)}</span>
+      <input type="number" min="0.5" max="60" step="0.1" value="${it.dur.toFixed(1)}" data-slice-idx="${i}" class="fc" style="width:64px;font-size:11px;padding:3px 5px">
+      <span style="font-size:9px;color:var(--t3)">ث</span>
+    </div>
+  `).join("");
+  list.querySelectorAll("input[data-slice-idx]").forEach(inp => {
+    inp.addEventListener("input", () => {
+      const idx = parseInt(inp.dataset.sliceIdx);
+      const v = Math.max(0.5, parseFloat(inp.value) || 0);
+      if (S.freePerSlice[idx]) {
+        S.freePerSlice[idx].dur = v;
+        updatePerSliceStats();
+      }
+    });
+  });
+  updatePerSliceStats();
+}
+
+function updatePerSliceStats() {
+  const stats = document.getElementById("free-per-slice-stats");
+  if (!stats) return;
+  const items = S.freePerSlice || [];
+  const total = items.reduce((sum, it) => sum + (it.dur || 0), 0);
+  let audioInfo = "";
+  if (S.freeAudioTrim && ge("free-audio-trim-on")) {
+    const a = S.freeAudioTrim.end - S.freeAudioTrim.start;
+    const diff = total - a;
+    audioInfo = ` · 🎵 صوت: ${a.toFixed(1)}s · فرق: ${diff > 0 ? "+" : ""}${diff.toFixed(1)}s`;
+  } else if (S.bgAudioEl && isFinite(S.bgAudioEl.duration) && ge("free-audio-on")) {
+    const a = S.bgAudioEl.duration;
+    const diff = total - a;
+    audioInfo = ` · 🎵 صوت: ${a.toFixed(1)}s · فرق: ${diff > 0 ? "+" : ""}${diff.toFixed(1)}s`;
+  }
+  stats.textContent = `${items.length} شريحة · إجمالي: ${total.toFixed(1)}s${audioInfo}`;
+}
+
+function distributePerSlice() {
+  const items = S.freePerSlice || [];
+  if (!items.length) return;
+  let audioDur = null;
+  if (S.freeAudioTrim && ge("free-audio-trim-on")) {
+    audioDur = S.freeAudioTrim.end - S.freeAudioTrim.start;
+  } else if (S.bgAudioEl && isFinite(S.bgAudioEl.duration) && ge("free-audio-on")) {
+    audioDur = S.bgAudioEl.duration;
+  }
+  if (audioDur == null) {
+    toast?.("⚠️ لا يوجد صوت مخصّص للتوزيع عليه", "warn", 1800);
+    return;
+  }
+  const each = audioDur / items.length;
+  items.forEach(it => it.dur = each);
+  renderPerSliceList();
+  toast?.(`⚖️ تمّ التوزيع: ${each.toFixed(1)}s/شريحة`, "success", 1500);
+}
+
+function togglePerSliceVisibility() {
+  const cb = document.getElementById("free-per-slice");
+  const ctrl = document.getElementById("free-per-slice-ctrl");
+  if (!cb || !ctrl) return;
+  ctrl.style.display = cb.checked ? "block" : "none";
+  if (cb.checked) {
+    buildPerSliceList();
+    renderPerSliceList();
+  }
+  try { localStorage.setItem("gt_sirm_free_per_slice", cb.checked ? "1" : "0"); } catch (_) {}
 }
 
 function applyFreeText() {
@@ -339,8 +436,9 @@ function applyFreeText() {
   }
   const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
   const source = document.getElementById("free-source")?.value?.trim() || "";
+  const perSliceMode = !!ge("free-per-slice") && Array.isArray(S.freePerSlice) && S.freePerSlice.length === slices.length;
   const dur = calcEffectiveSliceDuration(slices.length, baseDur);
-  const adjusted = dur > baseDur;
+  const adjusted = !perSliceMode && Math.abs(dur - baseDur) > 0.05;
 
   S.verses = slices.map((text, i) => ({
     text,
@@ -348,7 +446,7 @@ function applyFreeText() {
     number: i + 1,
     audio: null,
     audioSecondary: [],
-    manualDuration: dur,
+    manualDuration: perSliceMode ? (S.freePerSlice[i]?.dur || dur) : dur,
     free: true,
     source,
   }));
@@ -386,10 +484,14 @@ function applyFreeText() {
   if (S.playing) { try { togglePlay(); } catch (_) {} }
   if (typeof updateAyaInfo === "function") updateAyaInfo();
 
-  const totalSec = (slices.length * dur).toFixed(1);
-  const msg = adjusted
-    ? `🔗 تطبيق ${slices.length} شريحة · ${dur.toFixed(1)}s/شريحة (مُمدَّدة لتغطية الصوت) · إجمالي ${totalSec}s`
-    : `🔗 تطبيق ${slices.length} شريحة كمصدر التلاوة (${totalSec}s)`;
+  const totalSec = perSliceMode
+    ? S.verses.reduce((sum, v) => sum + (v.manualDuration || 0), 0).toFixed(1)
+    : (slices.length * dur).toFixed(1);
+  const msg = perSliceMode
+    ? `⏱️ تطبيق ${slices.length} شريحة بتوقيت تفصيليّ (إجمالي ${totalSec}s)`
+    : adjusted
+      ? `🔗 تطبيق ${slices.length} شريحة · ${dur.toFixed(1)}s/شريحة (مُتزامن مع الصوت) · إجمالي ${totalSec}s`
+      : `🔗 تطبيق ${slices.length} شريحة كمصدر التلاوة (${totalSec}s)`;
   toast?.(msg, "success", 2500);
 }
 
@@ -771,6 +873,31 @@ function initFreeTextEditor() {
       if (ge("free-audio-trim-on")) applyFreeAudioTrim();
     });
   });
+
+  const autoSyncCb = document.getElementById("free-auto-sync");
+  if (autoSyncCb) {
+    try { autoSyncCb.checked = localStorage.getItem("gt_sirm_free_auto_sync") !== "0"; } catch (_) {}
+    autoSyncCb.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_free_auto_sync", autoSyncCb.checked ? "1" : "0"); } catch (_) {}
+      updateFreeTextStats();
+      toast?.(autoSyncCb.checked
+        ? "🔄 المزامنة التلقائيّة مع الصوت مُفعَّلة"
+        : "✋ تحكّم يدويّ كامل في مدّة الشرائح", "info", 1800);
+    });
+  }
+
+  const perSliceCb = document.getElementById("free-per-slice");
+  if (perSliceCb) {
+    try { perSliceCb.checked = localStorage.getItem("gt_sirm_free_per_slice") === "1"; } catch (_) {}
+    perSliceCb.addEventListener("change", togglePerSliceVisibility);
+    togglePerSliceVisibility();
+  }
+  document.getElementById("free-per-slice-rebuild")?.addEventListener("click", () => {
+    buildPerSliceList();
+    renderPerSliceList();
+    toast?.("🔄 تمّ توليد القائمة من النصّ الحاليّ", "info", 1500);
+  });
+  document.getElementById("free-per-slice-distribute")?.addEventListener("click", distributePerSlice);
   const dropZone = document.getElementById("free-audio-drop");
   if (dropZone) {
     ["dragover", "dragenter"].forEach(ev => dropZone.addEventListener(ev, e => {
@@ -3253,7 +3380,8 @@ async function startExport(type) {
   }));
 
   const loadedCount = audioBuffers.filter(b => b !== null).length;
-  if (loadedCount === 0) {
+  // v0.5.1 — لا تُظهر التحذير في وضع النصّ الحرّ (لا صوت قارئ مقصود)
+  if (loadedCount === 0 && !skipReciter) {
     toast("⚠️ تعذر جلب الصوت عبر fetch — سيتم التصدير بالصوت الأساسي", "info");
   }
 
