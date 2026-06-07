@@ -11,21 +11,21 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GT-SIRM">
 <meta name="msapplication-TileColor" content="#0a2e1e">
-<meta name="msapplication-TileImage" content="GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
+<meta name="msapplication-TileImage" content="../../GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
 <meta name="theme-color" content="#0a2e1e">
 <title>GT-SIRM — GnuTux Short Islamic Reels Maker</title>
 <link rel="manifest" href="manifest.json" crossorigin="use-credentials">
 <!-- favicon وأيقونات PWA -->
-<link rel="icon" type="image/png" sizes="16x16"  href="GT-SIRM-icons/all/16x16/GT-SIRM-icon.png">
-<link rel="icon" type="image/png" sizes="32x32"  href="GT-SIRM-icons/all/32x32/GT-SIRM-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
-<link rel="icon" type="image/png" sizes="512x512" href="GT-SIRM-icons/all/512x512/GT-SIRM-icon.png">
-<link rel="shortcut icon" href="GT-SIRM-icons/all/32x32/GT-SIRM-icon.png">
+<link rel="icon" type="image/png" sizes="16x16"  href="../../GT-SIRM-icons/all/16x16/GT-SIRM-icon.png">
+<link rel="icon" type="image/png" sizes="32x32"  href="../../GT-SIRM-icons/all/32x32/GT-SIRM-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../../GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
+<link rel="icon" type="image/png" sizes="512x512" href="../../GT-SIRM-icons/all/512x512/GT-SIRM-icon.png">
+<link rel="shortcut icon" href="../../GT-SIRM-icons/all/32x32/GT-SIRM-icon.png">
 <!-- Apple Touch Icons -->
-<link rel="apple-touch-icon" href="GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
-<link rel="apple-touch-icon" sizes="152x152" href="GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
-<link rel="apple-touch-icon" sizes="167x167" href="GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
-<link rel="apple-touch-icon" sizes="180x180" href="GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
+<link rel="apple-touch-icon" href="../../GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
+<link rel="apple-touch-icon" sizes="152x152" href="../../GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
+<link rel="apple-touch-icon" sizes="167x167" href="../../GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
 <!-- خطوط جوجل -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -62,8 +62,8 @@ body{background:var(--bg0);color:var(--t1);font-family:var(--fu);direction:rtl;d
 /* HEADER */
 #hdr{height:68px;flex-shrink:0;background:linear-gradient(90deg,#0c1a0e,var(--bg1));border-bottom:1px solid var(--b1);padding:0 14px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 16px rgba(0,0,0,.4);z-index:100}
 .logo{display:flex;align-items:center;gap:9px}
-.logo-icon{width:58px;height:58px;border-radius:11px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--pd),var(--p),var(--a));cursor:pointer;flex-shrink:0;box-shadow:0 2px 14px rgba(201,162,39,.4);transition:transform .35s cubic-bezier(.34,1.56,.64,1),box-shadow .3s,filter .3s}
-.logo-icon img{width:100%;height:100%;object-fit:contain;display:block;border-radius:9px}
+.logo-icon{width:58px;height:58px;border-radius:11px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:transparent;cursor:pointer;flex-shrink:0;box-shadow:0 2px 14px rgba(201,162,39,.4);transition:transform .35s cubic-bezier(.34,1.56,.64,1),box-shadow .3s,filter .3s}
+.logo-icon img{width:100%;height:100%;object-fit:cover;display:block;border-radius:11px}
 .logo-icon .fi{font-size:28px;display:none}
 .logo-icon:hover{transform:rotate(12deg) scale(1.18);box-shadow:0 4px 20px rgba(201,162,39,.7);filter:brightness(1.15)}
 .logo-icon:active{transform:rotate(-8deg) scale(.88);transition:transform .1s}
@@ -450,12 +450,12 @@ body.offline .offline-badge{display:block}
 <header id="hdr">
   <div class="logo">
     <div class="logo-icon" id="logo-icon">
-      <img src="GT-SIRM-icons/all/512x512/GT-SIRM-icon.png" alt="GT-SQR" onerror="this.style.display='none';document.querySelector('.logo-icon .fi').style.display='block'">
+      <img src="../../GT-SIRM-icons/all/512x512/GT-SIRM-icon.png" alt="GT-SIRM" id="logo-icon-img">
       <span class="fi">📿</span>
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v0.2</small>
+      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v0.4</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -1352,13 +1352,13 @@ body.offline .offline-badge{display:block}
       <!-- ABOUT -->
       <div class="tp" id="tab-about">
         <div class="about-logo">
-          <img src="GT-SIRM-icons/all/256x256/GT-SIRM-icon.png" class="al-icon" alt="GT-SIRM" style="width:80px; height:80px;">
+          <img src="../../GT-SIRM-icons/all/256x256/GT-SIRM-icon.png" class="al-icon" alt="GT-SIRM" style="width:80px; height:80px;">
           <h2>GT-SIRM</h2>
           <p>GnuTux Short Islamic Reels Maker</p>
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.2.0</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.4.9</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
@@ -1445,8 +1445,7 @@ body.offline .offline-badge{display:block}
 
 <!-- شريط تثبيت PWA -->
 <div id="pwa-bar">
-  <img src="GT-SIRM-icons/all/192x192/GT-SIRM-icon.png" class="pwa-icon" alt="GT-SQR"
-       onerror="this.src='GT-SIRM-icons/all/512x512/GT-SIRM-icon.png'">
+  <img src="../../GT-SIRM-icons/all/192x192/GT-SIRM-icon.png" class="pwa-icon" alt="GT-SIRM">
   <div class="pwa-txt">
     <strong>تثبيت GT-SIRM</strong>
     <small>استخدمه بدون إنترنت · أيقونة في الشاشة الرئيسية</small>

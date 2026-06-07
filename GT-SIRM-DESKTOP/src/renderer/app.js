@@ -286,17 +286,32 @@ function updateFreeTextStats() {
   const stats = document.getElementById("free-text-stats");
   if (!ta || !stats) return;
   const slices = parseFreeText(ta.value);
-  const dur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
-  const total = slices.length * dur;
-  stats.textContent = `${slices.length} شريحة · ${total.toFixed(1)} ثانية تقريباً`;
+  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  const effDur = calcEffectiveSliceDuration(slices.length, baseDur);
+  const total = slices.length * effDur;
+  let suffix = "";
+  if (Math.abs(effDur - baseDur) > 0.05 && slices.length > 0) {
+    suffix = ` · 🔄 مُتزامن مع الصوت (${effDur.toFixed(1)}s/شريحة)`;
+  }
+  stats.textContent = `${slices.length} شريحة · ${total.toFixed(1)} ثانية${suffix}`;
 }
 
-// حساب مدة الشريحة الفعلية: تأخذ في الحسبان trim للصوت المستورد
+// حساب مدة الشريحة الفعلية لمزامنة النصّ مع الصوت المخصّص.
+// الأولويّات:
+//   1) إن كان trim مُفعَّلاً → مدّة النصّ = مدّة trim بالضبط
+//   2) إن كان هناك صوت مخصّص محمَّل بلا trim → مدّة النصّ = مدّة الصوت الكاملة
+//   3) لا صوت → استخدم القيمة المُحدَّدة من المستخدم
 function calcEffectiveSliceDuration(numSlices, baseDur) {
-  if (!S.freeAudioTrim || numSlices <= 0) return baseDur;
-  const trimDur = Math.max(0, S.freeAudioTrim.end - S.freeAudioTrim.start);
-  const required = trimDur / numSlices;
-  return Math.max(baseDur, required);
+  if (numSlices <= 0) return baseDur;
+  let targetTotal = null;
+  if (S.freeAudioTrim && ge("free-audio-trim-on")) {
+    targetTotal = Math.max(0.5, S.freeAudioTrim.end - S.freeAudioTrim.start);
+  } else if (S.bgAudioEl && isFinite(S.bgAudioEl.duration) && S.bgAudioEl.duration > 0.5
+             && ge("free-audio-on")) {
+    targetTotal = S.bgAudioEl.duration;
+  }
+  if (targetTotal == null) return baseDur;
+  return Math.max(0.5, targetTotal / numSlices);
 }
 
 function applyFreeText() {
@@ -605,13 +620,15 @@ function applyFreeAudioTrim() {
   // اضبط currentTime
   if (S.bgAudioEl) {
     try { S.bgAudioEl.currentTime = start; } catch (_) {}
-    // أضف معالج لتكرار/إيقاف عند النهاية
+    // أضف معالج لإيقاف الصوت بلطف عند بلوغ end (بدلاً من التكرار حتى لا تنكسر المزامنة)
     if (!S.bgAudioEl._freeTrimHandler) {
       S.bgAudioEl._freeTrimHandler = () => {
         if (!S.freeAudioTrim) return;
-        if (S.bgAudioEl.currentTime >= S.freeAudioTrim.end - 0.05) {
-          // كرّر من البداية إن كان النصّ ما زال يعمل
-          S.bgAudioEl.currentTime = S.freeAudioTrim.start;
+        if (S.bgAudioEl.currentTime >= S.freeAudioTrim.end - 0.02) {
+          try {
+            S.bgAudioEl.pause();
+            S.bgAudioEl.currentTime = S.freeAudioTrim.end;
+          } catch (_) {}
         }
       };
       S.bgAudioEl.addEventListener("timeupdate", S.bgAudioEl._freeTrimHandler);
@@ -2181,11 +2198,14 @@ function drawVerse(ctx, W, H, ts) {
     tLines.forEach((tl, i) => ctx.fillText(tl, W / 2, tStart + i * tfs * 1.4));
   }
 
-  ctx.globalAlpha = alpha * .6;
-  ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
-  ctx.font = `bold ${W * .022}px 'Cairo'`;
-  ctx.fillStyle = $("orn-col").value;
-  ctx.fillText(`❴ ${aya.numberInSurah} ❵`, W / 2, startY + totalH + (hasT ? 0 : W * .04));
+  // رقم الآية يظهر فقط للآيات القرآنيّة الحقيقيّة (ليس للنصّ الحرّ)
+  if (!aya.free) {
+    ctx.globalAlpha = alpha * .6;
+    ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
+    ctx.font = `bold ${W * .022}px 'Cairo'`;
+    ctx.fillStyle = $("orn-col").value;
+    ctx.fillText(`❴ ${aya.numberInSurah} ❵`, W / 2, startY + totalH + (hasT ? 0 : W * .04));
+  }
 
   ctx.restore();
 }
@@ -2817,6 +2837,14 @@ function getBgVidTrim() {
 }
 
 function getBgAudioTrim() {
+  // الأولوية الأولى: trim الخاصّ بالنصّ الحرّ (v0.4.4)
+  if (S.freeAudioTrim && ge("free-audio-trim-on") && S.bgAudioEl) {
+    const s = Math.max(0, S.freeAudioTrim.start || 0);
+    const e = Math.max(s + 0.1, S.freeAudioTrim.end || s + 1);
+    const dur = S.bgAudioEl.duration;
+    return { start: s, end: isFinite(dur) ? Math.min(e, dur) : e };
+  }
+  // الأولوية الثانية: trim الكلاسيكي لصوت الخلفية
   if (!ge("bg-audio-trim-on") || !S.bgAudioEl) return null;
   const s = Math.max(0, parseFloat(gv("bg-audio-trim-start")) || 0);
   const e = Math.max(s + 0.1, parseFloat(gv("bg-audio-trim-end")) || s + 1);
@@ -3431,14 +3459,27 @@ async function startExport(type) {
 
   const ctx = await resumeAudioCtx();
   const manualDur = parseFloat(gv("aya-dur")) || 6;
-  const getDur = (i) => (S.ayaDurations[i] && S.ayaDurations[i] > 0.5) ? S.ayaDurations[i] : manualDur;
+  // v0.4.7 — مدّة الآية تأخذ في الحسبان manualDuration للنصّ الحرّ
+  const getDur = (i) => {
+    const aya = S.verses[i];
+    if (aya?.free || aya?.audio === null) return aya.manualDuration || manualDur;
+    return (S.ayaDurations[i] && S.ayaDurations[i] > 0.5) ? S.ayaDurations[i] : manualDur;
+  };
 
   const surahNum = parseInt($("surah-sel").value) || 1;
   const reciter = S.reciters.find(r => r.id === radioVal("reciter")) || S.reciters[0];
   const gainVal = gv("rec-vol") / 100;
+  // v0.4.7 — تخطّي صوت القارئ نهائيّاً للنصّ الحرّ
+  const skipReciter = !!S.useFreeAsSource || S.verses.every(v => v?.free || v?.audio === null);
   let loaded = 0;
 
   const audioBuffers = await Promise.all(S.verses.map(async (aya, i) => {
+    if (skipReciter || aya?.free || aya?.audio === null) {
+      S.ayaDurations[i] = aya?.manualDuration || manualDur;
+      loaded++;
+      $("rec-sub").textContent = `⏳ تحضير الشرائح… ${loaded}/${S.verses.length}`;
+      return null;
+    }
     const url = buildAudioUrl(reciter.folder, surahNum, aya.numberInSurah);
     try {
       const res = await fetch(url, { cache: "force-cache" });
@@ -5120,14 +5161,31 @@ async function startExportDesktop(codecKey) {
 
   // ── تحميل صوت كل آية كـ AudioBuffer ────────────────
   const manualDur = parseFloat(gv("aya-dur")) || 6;
-  const getDur    = (i) => (S.ayaDurations[i] && S.ayaDurations[i] > 0.5) ? S.ayaDurations[i] : manualDur;
+  // v0.4.7 — مدّة الآية تأخذ في الحسبان manualDuration للنصّ الحرّ
+  const getDur    = (i) => {
+    const aya = S.verses[i];
+    if (aya?.free || aya?.audio === null) {
+      return aya.manualDuration || manualDur;
+    }
+    return (S.ayaDurations[i] && S.ayaDurations[i] > 0.5) ? S.ayaDurations[i] : manualDur;
+  };
   const surahNum  = parseInt($("surah-sel").value) || 1;
   const reciter   = S.reciters.find(r => r.id === radioVal("reciter")) || S.reciters[0];
   const recGain   = gv("rec-vol") / 100;
+  // v0.4.7 — هل نحن في وضع النصّ الحرّ / نصّ القرآن فقط؟
+  const skipReciter = !!S.useFreeAsSource || S.verses.every(v => v?.free || v?.audio === null);
 
   let loaded = 0;
   const audioBuffers = await Promise.all(S.verses.map(async (aya, i) => {
     if (cancelRef.canceled) return null;
+    // v0.4.7 — تخطَّ تحميل صوت القارئ نهائيّاً للنصّ الحرّ
+    if (skipReciter || aya?.free || aya?.audio === null) {
+      // اضبط ayaDurations لتعتمد على manualDuration ليُحسب totalDuration صحيحاً
+      S.ayaDurations[i] = aya?.manualDuration || manualDur;
+      loaded++;
+      $("rec-sub").textContent = `⏳ تحضير الشرائح… ${loaded}/${S.verses.length}`;
+      return null;
+    }
     const url = buildAudioUrl(reciter.folder, surahNum, aya.numberInSurah);
     try {
       const res = await fetch(url, { cache: "force-cache" });

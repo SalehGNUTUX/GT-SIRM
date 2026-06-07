@@ -305,16 +305,27 @@ function updateFreeTextStats() {
   const stats = document.getElementById("free-text-stats");
   if (!ta || !stats) return;
   const slices = parseFreeText(ta.value);
-  const dur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
-  const total = slices.length * dur;
-  stats.textContent = `${slices.length} شريحة · ${total.toFixed(1)} ثانية تقريباً`;
+  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  const effDur = calcEffectiveSliceDuration(slices.length, baseDur);
+  const total = slices.length * effDur;
+  let suffix = "";
+  if (Math.abs(effDur - baseDur) > 0.05 && slices.length > 0) {
+    suffix = ` · 🔄 مُتزامن مع الصوت (${effDur.toFixed(1)}s/شريحة)`;
+  }
+  stats.textContent = `${slices.length} شريحة · ${total.toFixed(1)} ثانية${suffix}`;
 }
 
 function calcEffectiveSliceDuration(numSlices, baseDur) {
-  if (!S.freeAudioTrim || numSlices <= 0) return baseDur;
-  const trimDur = Math.max(0, S.freeAudioTrim.end - S.freeAudioTrim.start);
-  const required = trimDur / numSlices;
-  return Math.max(baseDur, required);
+  if (numSlices <= 0) return baseDur;
+  let targetTotal = null;
+  if (S.freeAudioTrim && ge("free-audio-trim-on")) {
+    targetTotal = Math.max(0.5, S.freeAudioTrim.end - S.freeAudioTrim.start);
+  } else if (S.bgAudioEl && isFinite(S.bgAudioEl.duration) && S.bgAudioEl.duration > 0.5
+             && ge("free-audio-on")) {
+    targetTotal = S.bgAudioEl.duration;
+  }
+  if (targetTotal == null) return baseDur;
+  return Math.max(0.5, targetTotal / numSlices);
 }
 
 function applyFreeText() {
@@ -1981,11 +1992,14 @@ function drawVerse(ctx, W, H, ts) {
     tLines.forEach((tl, i) => ctx.fillText(tl, W / 2, tStart + i * tfs * 1.4));
   }
 
-  ctx.globalAlpha = alpha * .6;
-  ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
-  ctx.font = `bold ${W * .022}px 'Cairo'`;
-  ctx.fillStyle = $("orn-col").value;
-  ctx.fillText(`❴ ${aya.numberInSurah} ❵`, W / 2, startY + totalH + (hasT ? 0 : W * .04));
+  // رقم الآية يظهر فقط للآيات القرآنيّة الحقيقيّة (ليس للنصّ الحرّ)
+  if (!aya.free) {
+    ctx.globalAlpha = alpha * .6;
+    ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
+    ctx.font = `bold ${W * .022}px 'Cairo'`;
+    ctx.fillStyle = $("orn-col").value;
+    ctx.fillText(`❴ ${aya.numberInSurah} ❵`, W / 2, startY + totalH + (hasT ? 0 : W * .04));
+  }
 
   ctx.restore();
 }
@@ -2995,14 +3009,25 @@ async function startExport(type) {
 
   const ctx = await resumeAudioCtx();
   const manualDur = parseFloat(gv("aya-dur")) || 6;
-  const getDur = (i) => (S.ayaDurations[i] && S.ayaDurations[i] > 0.5) ? S.ayaDurations[i] : manualDur;
+  const getDur = (i) => {
+    const aya = S.verses[i];
+    if (aya?.free || aya?.audio === null) return aya.manualDuration || manualDur;
+    return (S.ayaDurations[i] && S.ayaDurations[i] > 0.5) ? S.ayaDurations[i] : manualDur;
+  };
 
   const surahNum = parseInt($("surah-sel").value) || 1;
   const reciter = S.reciters.find(r => r.id === radioVal("reciter")) || S.reciters[0];
   const gainVal = gv("rec-vol") / 100;
+  const skipReciter = !!S.useFreeAsSource || S.verses.every(v => v?.free || v?.audio === null);
   let loaded = 0;
 
   const audioBuffers = await Promise.all(S.verses.map(async (aya, i) => {
+    if (skipReciter || aya?.free || aya?.audio === null) {
+      S.ayaDurations[i] = aya?.manualDuration || manualDur;
+      loaded++;
+      $("rec-sub").textContent = `⏳ تحضير الشرائح… ${loaded}/${S.verses.length}`;
+      return null;
+    }
     const url = buildAudioUrl(reciter.folder, surahNum, aya.numberInSurah);
     try {
       const res = await fetch(url, { cache: "force-cache" });
@@ -3217,6 +3242,11 @@ async function startExport(type) {
     const playExportAya = (idx) => {
       if (idx >= S.verses.length || S.exportCancel) return;
       const aya2 = S.verses[idx];
+      // v0.4.7 — تخطّى صوت القارئ للنصّ الحرّ
+      if (aya2?.free || aya2?.audio === null || skipReciter) {
+        setTimeout(() => playExportAya(idx + 1), (aya2.manualDuration || manualDur) * 1000);
+        return;
+      }
       const url2 = buildAudioUrl(reciter.folder, surahNum, aya2.numberInSurah);
       const a2 = new Audio(url2);
       a2.volume = gainVal;

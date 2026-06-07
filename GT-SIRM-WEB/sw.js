@@ -1,6 +1,6 @@
 // GT-SIRM Service Worker v1 — release v0.2.0 (fork من GT-SQR v3.0)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v1";
+const CACHE_VER = "gt-sirm-v3";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل
