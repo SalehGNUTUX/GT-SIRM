@@ -352,18 +352,63 @@ function renderPerSliceList() {
       <span style="font-size:9px;color:var(--t3)">ث</span>
     </div>
   `).join("");
-  // ربط inputs
+  // ربط inputs — change بدل input حتى لا تُعاد التوزيع بعد كلّ ضغطة
   list.querySelectorAll("input[data-slice-idx]").forEach(inp => {
-    inp.addEventListener("input", () => {
+    inp.addEventListener("change", () => {
       const idx = parseInt(inp.dataset.sliceIdx);
       const v = Math.max(0.5, parseFloat(inp.value) || 0);
-      if (S.freePerSlice[idx]) {
+      if (!S.freePerSlice[idx]) return;
+      const lock = !!ge("free-per-slice-lock");
+      if (lock) {
+        redistributePerSliceFromEdit(idx, v);
+        renderPerSliceList();
+      } else {
         S.freePerSlice[idx].dur = v;
         updatePerSliceStats();
       }
     });
   });
   updatePerSliceStats();
+}
+
+// v0.5.2 — إعادة توزيع تلقائيّ: عند تعديل شريحة، الفرق يُوزَّع على الباقي بالتناسب
+function redistributePerSliceFromEdit(changedIdx, newDur) {
+  const items = S.freePerSlice || [];
+  if (!items.length || changedIdx < 0 || changedIdx >= items.length) return;
+  const MIN = 0.5;
+  const oldDur = items[changedIdx].dur || MIN;
+  const others = items.length - 1;
+  // شريحة وحيدة → لا يوجد ما نوزّع عليه
+  if (others === 0) {
+    items[changedIdx].dur = Math.max(MIN, newDur);
+    return;
+  }
+  // الإجمالي يبقى ثابتاً
+  const total = items.reduce((s, it) => s + (it.dur || 0), 0);
+  const minOthersSum = MIN * others;
+  const maxNew = total - minOthersSum;
+  const finalNew = Math.max(MIN, Math.min(maxNew, newDur));
+  const remainder = total - finalNew;
+  // توزيع المتبقّي على الباقي بالتناسب مع قيمهم الحاليّة
+  const othersSum = total - oldDur;
+  items.forEach((it, i) => {
+    if (i === changedIdx) {
+      it.dur = finalNew;
+    } else {
+      const share = othersSum > 0 ? (it.dur / othersSum) : (1 / others);
+      it.dur = Math.max(MIN, remainder * share);
+    }
+  });
+  // تصحيح أخطاء التقريب على آخر شريحة غير المعدَّلة
+  const actualTotal = items.reduce((s, it) => s + (it.dur || 0), 0);
+  const drift = total - actualTotal;
+  if (Math.abs(drift) > 0.001) {
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (i === changedIdx) continue;
+      const candidate = items[i].dur + drift;
+      if (candidate >= MIN) { items[i].dur = candidate; break; }
+    }
+  }
 }
 
 function updatePerSliceStats() {
@@ -959,6 +1004,18 @@ function initFreeTextEditor() {
     toast?.("🔄 تمّ توليد القائمة من النصّ الحاليّ", "info", 1500);
   });
   document.getElementById("free-per-slice-distribute")?.addEventListener("click", distributePerSlice);
+
+  // v0.5.2 — توگل قفل الإجمالي
+  const lockCb = document.getElementById("free-per-slice-lock");
+  if (lockCb) {
+    try { lockCb.checked = localStorage.getItem("gt_sirm_free_per_slice_lock") !== "0"; } catch (_) {}
+    lockCb.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_free_per_slice_lock", lockCb.checked ? "1" : "0"); } catch (_) {}
+      toast?.(lockCb.checked
+        ? "🔒 الإجمالي مُثبَّت — التعديل يُوزَّع على الباقي"
+        : "🔓 تعديل حرّ — الإجمالي يتغيَّر", "info", 1800);
+    });
+  }
   // drag-drop على منطقة الصوت
   const dropZone = document.getElementById("free-audio-drop");
   if (dropZone) {

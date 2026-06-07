@@ -540,6 +540,10 @@ body.offline .offline-badge{display:block}
                 <button class="btn btn-g bsm" id="free-per-slice-rebuild" style="flex:1">🔄 توليد القائمة من النصّ الحاليّ</button>
                 <button class="btn btn-g bsm" id="free-per-slice-distribute" title="توزيع متساوٍ على كامل مدّة الصوت">⚖️ توزيع</button>
               </div>
+              <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2);cursor:pointer;margin-bottom:5px;padding:5px 8px;background:var(--bg1);border-radius:var(--r);border:1px solid var(--b1)">
+                <input type="checkbox" id="free-per-slice-lock" checked>
+                <span>🔒 ثبّت الإجمالي (إعادة توزيع تلقائيّ على باقي الشرائح)</span>
+              </label>
               <div id="free-per-slice-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--b1);border-radius:var(--r);background:var(--bg1)"></div>
               <div id="free-per-slice-stats" style="font-size:10px;color:var(--t3);margin-top:4px;text-align:center"></div>
             </div>
@@ -1130,7 +1134,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.1</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.2</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>
