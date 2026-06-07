@@ -2622,6 +2622,13 @@ function getBgVidTrim() {
   return { start: s, end: isFinite(dur) ? Math.min(e, dur) : e };
 }
 function getBgAudioTrim() {
+  // الأولوية الأولى: trim الخاصّ بالنصّ الحرّ (v0.4.4)
+  if (S.freeAudioTrim && ge("free-audio-trim-on") && S.bgAudioEl) {
+    const s = Math.max(0, S.freeAudioTrim.start || 0);
+    const e = Math.max(s + 0.1, S.freeAudioTrim.end || s + 1);
+    const dur = S.bgAudioEl.duration;
+    return { start: s, end: isFinite(dur) ? Math.min(e, dur) : e };
+  }
   if (!ge("bg-audio-trim-on") || !S.bgAudioEl) return null;
   const s = Math.max(0, parseFloat(gv("bg-audio-trim-start")) || 0);
   const e = Math.max(s + 0.1, parseFloat(gv("bg-audio-trim-end")) || s + 1);

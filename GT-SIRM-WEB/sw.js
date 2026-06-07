@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v1 — release v0.2.0 (fork من GT-SQR v3.0)
+// GT-SIRM Service Worker v4 — release v0.4.9 (إصلاح ذبذبات الويب + أيقونات)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v3";
+const CACHE_VER = "gt-sirm-v4";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل
