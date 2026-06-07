@@ -134,6 +134,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initEventListeners();
   initModuleManager();   // v0.3.0 — يجب أن يأتي قبل restoreAllSettings
   initFreeTextEditor();  // v0.4.0 — محرّر النصّ الحرّ
+  initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
 
   // ⚠️ الترتيب مهم: نستعيد الإعدادات بعد تسجيل المستمعين فقط
   //   حتى تصل أحداث change/input إلى onBgTypeChange/onFmtChange/إلخ
@@ -419,6 +420,59 @@ function restartFreeText() {
   // استأنف التشغيل إن كان يعمل
   if (wasPlaying) {
     setTimeout(() => { try { togglePlay(); } catch (_) {} }, 50);
+  }
+}
+
+// ↺ زرّ "إعادة من البداية" في المشغّل — يُعيد كلّ شيء (نصّ + صوت + خلفية)
+function restartAll() {
+  if (!S.verses || !S.verses.length) {
+    toast?.("⚠️ لا توجد آيات/شرائح للتشغيل", "warn", 1500);
+    return;
+  }
+  const wasPlaying = !!S.playing;
+  // أوقف التشغيل أولاً
+  if (S.playing) { try { togglePlay(); } catch (_) {} }
+
+  // ارجع إلى الشريحة/الآية الأولى
+  S.currentAya = 0;
+  S.elapsed = 0;
+
+  // أعد كلّ مصادر الصوت إلى نقطة البداية
+  // 1) صوت القارئ (يُعاد تحميله تلقائياً عند بدء التشغيل)
+  if (S.recAudioEl) {
+    try { S.recAudioEl.pause(); S.recAudioEl.currentTime = 0; } catch (_) {}
+  }
+  if (S.recAudioSource) {
+    try { S.recAudioSource.onended = null; S.recAudioSource.stop(); } catch (_) {}
+    S.recAudioSource = null;
+  }
+  // 2) الصوت المخصّص / صوت الخلفية (يحترم trim.start)
+  if (S.bgAudioEl) {
+    try {
+      S.bgAudioEl.pause();
+      S.bgAudioEl.currentTime = S.freeAudioTrim?.start || 0;
+    } catch (_) {}
+  }
+  // 3) فيديو الخلفية
+  if (S.bgVid) {
+    try { S.bgVid.pause(); S.bgVid.currentTime = 0; } catch (_) {}
+  }
+  // 4) قائمة فيديوهات الخلفية (إن وُجدت)
+  if (Array.isArray(S.bgVidItems)) {
+    S.bgVidActiveIdx = 0;
+    S.bgVidItems.forEach(it => {
+      if (it.vid) { try { it.vid.pause(); it.vid.currentTime = 0; } catch (_) {} }
+    });
+  }
+
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+
+  toast?.("↺ إعادة الكلّ من البداية", "info", 1500);
+
+  // استأنف التشغيل إن كان يعمل
+  if (wasPlaying) {
+    setTimeout(() => { try { togglePlay(); } catch (_) {} }, 60);
   }
 }
 
@@ -800,6 +854,151 @@ function escapeHtml(s) {
 }
 
 // ══════════════════════════════════════════════════════
+//  SMART DRAG-DROP + CLIPBOARD PASTE (v0.5.0)
+//  يكتشف نوع الملف تلقائياً ويُوجّهه للوحدة المناسبة:
+//   صورة → onBgMedia(image)  ·  فيديو → onBgMedia(video)
+//   صوت  → handleFreeAudioFile (تلاوة مخصّصة)
+// ══════════════════════════════════════════════════════
+function routeDroppedFile(file) {
+  if (!file || !file.type) return false;
+  const mime = file.type.toLowerCase();
+  // صورة → خلفية
+  if (mime.startsWith("image/")) {
+    const inp = document.getElementById("bg-img-input");
+    if (inp) {
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        inp.files = dt.files;
+        inp.dispatchEvent(new Event("change"));
+        // فعّل radio خلفية="image"
+        const r = document.getElementById("bgt2");
+        if (r && !r.checked) { r.checked = true; r.dispatchEvent(new Event("change")); }
+        toast?.(`🖼️ تطبيق الصورة: ${file.name}`, "success", 1800);
+        return true;
+      } catch (e) { console.warn("[SIRM] image route failed:", e); }
+    }
+  }
+  // فيديو → خلفية
+  if (mime.startsWith("video/")) {
+    const inp = document.getElementById("bg-vid-input");
+    if (inp) {
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        inp.files = dt.files;
+        inp.dispatchEvent(new Event("change"));
+        const r = document.getElementById("bgt3");
+        if (r && !r.checked) { r.checked = true; r.dispatchEvent(new Event("change")); }
+        toast?.(`🎥 تطبيق الفيديو: ${file.name}`, "success", 1800);
+        return true;
+      } catch (e) { console.warn("[SIRM] video route failed:", e); }
+    }
+  }
+  // صوت → تلاوة مخصّصة (الأولوية) أو خلفية
+  if (mime.startsWith("audio/")) {
+    // فعّل توگل الصوت المخصّص تلقائياً
+    const cb = document.getElementById("free-audio-on");
+    if (cb && !cb.checked) {
+      cb.checked = true;
+      try { localStorage.setItem("gt_sirm_free_audio_on", "1"); } catch (_) {}
+      if (typeof toggleFreeAudioVisibility === "function") toggleFreeAudioVisibility();
+    }
+    if (typeof handleFreeAudioFile === "function") {
+      handleFreeAudioFile(file);
+      return true;
+    }
+  }
+  return false;
+}
+
+function showSmartDropOverlay(show) {
+  const ov = document.getElementById("smart-drop-overlay");
+  if (!ov) return;
+  ov.classList.toggle("active", !!show);
+}
+
+function initSmartDrop() {
+  let dragCounter = 0;
+  // الـ overlay يظهر فقط عند سحب ملفّ من خارج المتصفّح
+  document.addEventListener("dragenter", e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes("Files")) return;
+    dragCounter++;
+    showSmartDropOverlay(true);
+  });
+  document.addEventListener("dragleave", e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes("Files")) return;
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      showSmartDropOverlay(false);
+    }
+  });
+  document.addEventListener("dragover", e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  });
+  document.addEventListener("drop", e => {
+    if (!e.dataTransfer) return;
+    e.preventDefault();
+    dragCounter = 0;
+    showSmartDropOverlay(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (!files.length) return;
+    let routed = 0;
+    for (const f of files) {
+      if (routeDroppedFile(f)) routed++;
+    }
+    if (routed === 0) {
+      toast?.("⚠️ لم يُتعرَّف على نوع الملفّ", "warn", 2000);
+    }
+  });
+
+  // لصق من الحافظة (Ctrl+V) — صور أو ملفّات
+  document.addEventListener("paste", e => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file && routeDroppedFile(file)) {
+          e.preventDefault();
+          return;
+        }
+      }
+    }
+  });
+
+  // v0.5.0 — كتم صوت الفيديو الأصليّ
+  const muteCb = document.getElementById("bg-vid-mute-audio");
+  if (muteCb) {
+    try { muteCb.checked = localStorage.getItem("gt_sirm_bg_vid_mute") === "1"; } catch (_) {}
+    muteCb.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_bg_vid_mute", muteCb.checked ? "1" : "0"); } catch (_) {}
+      applyBgVidMute();
+      toast?.(muteCb.checked
+        ? "🔇 كُتم صوت فيديو الخلفية"
+        : "🔊 صوت فيديو الخلفية مُفعَّل", "info", 1500);
+    });
+    // طبّق الحالة المخزَّنة فوراً
+    applyBgVidMute();
+  }
+
+  console.log("[SIRM] Smart Drop + Clipboard Paste initialized");
+}
+
+function applyBgVidMute() {
+  // عند الكتم العامّ: كل الفيديوهات تُكتم.
+  // عند إلغاء الكتم العامّ: نعود لـ per-clip audioEnabled.
+  if (Array.isArray(S.bgVidItems)) {
+    S.bgVidItems.forEach(it => applyBgVidItemAudio(it));
+  } else if (S.bgVid) {
+    try { S.bgVid.muted = !!ge("bg-vid-mute-audio"); } catch (_) {}
+  }
+}
+
+// ══════════════════════════════════════════════════════
 //  EVENT LISTENERS INITIALIZATION
 // ══════════════════════════════════════════════════════
 function initEventListeners() {
@@ -857,6 +1056,8 @@ function initEventListeners() {
   if (prevAyaBtn) prevAyaBtn.addEventListener("click", prevAya);
   const nextAyaBtn = $("next-aya-btn");
   if (nextAyaBtn) nextAyaBtn.addEventListener("click", nextAya);
+  const restartAllBtn = $("restart-all-btn");
+  if (restartAllBtn) restartAllBtn.addEventListener("click", restartAll);
 
   const pbar = $("pbar");
   if (pbar) pbar.addEventListener("click", seekClick);
@@ -3103,7 +3304,9 @@ function activateBgVidByIndex(idx, resetTime = true) {
 
 function applyBgVidItemAudio(item) {
   if (!item || !item.vid) return;
-  item.vid.muted = !item.audioEnabled;
+  // v0.5.0 — يحترم توگل "كتم صوت الفيديو" العام
+  const globalMute = !!ge("bg-vid-mute-audio");
+  item.vid.muted = globalMute || !item.audioEnabled;
   item.vid.volume = Math.max(0, Math.min(1, item.audioGain));
 }
 

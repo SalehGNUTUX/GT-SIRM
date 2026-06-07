@@ -176,6 +176,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initEventListeners();
   initModuleManager();   // v0.3.0 — يجب أن يأتي قبل restoreAllSettings
   initFreeTextEditor();  // v0.4.0 — محرّر النصّ الحرّ
+  initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
   restoreAllSettings();
   restoreLogo();
   restoreMixedAnimsOrder();
@@ -423,6 +424,51 @@ function restartFreeText() {
 
   if (wasPlaying) {
     setTimeout(() => { try { togglePlay(); } catch (_) {} }, 50);
+  }
+}
+
+// ↺ زرّ "إعادة من البداية" في المشغّل — يُعيد كلّ شيء (نصّ + صوت + خلفية)
+function restartAll() {
+  if (!S.verses || !S.verses.length) {
+    toast?.("⚠️ لا توجد آيات/شرائح للتشغيل", "warn", 1500);
+    return;
+  }
+  const wasPlaying = !!S.playing;
+  if (S.playing) { try { togglePlay(); } catch (_) {} }
+
+  S.currentAya = 0;
+  S.elapsed = 0;
+
+  if (S.recAudioEl) {
+    try { S.recAudioEl.pause(); S.recAudioEl.currentTime = 0; } catch (_) {}
+  }
+  if (S.recAudioSource) {
+    try { S.recAudioSource.onended = null; S.recAudioSource.stop(); } catch (_) {}
+    S.recAudioSource = null;
+  }
+  if (S.bgAudioEl) {
+    try {
+      S.bgAudioEl.pause();
+      S.bgAudioEl.currentTime = S.freeAudioTrim?.start || 0;
+    } catch (_) {}
+  }
+  if (S.bgVid) {
+    try { S.bgVid.pause(); S.bgVid.currentTime = 0; } catch (_) {}
+  }
+  if (Array.isArray(S.bgVidItems)) {
+    S.bgVidActiveIdx = 0;
+    S.bgVidItems.forEach(it => {
+      if (it.vid) { try { it.vid.pause(); it.vid.currentTime = 0; } catch (_) {} }
+    });
+  }
+
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+
+  toast?.("↺ إعادة الكلّ من البداية", "info", 1500);
+
+  if (wasPlaying) {
+    setTimeout(() => { try { togglePlay(); } catch (_) {} }, 60);
   }
 }
 
@@ -752,6 +798,130 @@ function escapeHtml(s) {
 }
 
 // ══════════════════════════════════════════════════════
+//  SMART DRAG-DROP + CLIPBOARD PASTE (v0.5.0)
+// ══════════════════════════════════════════════════════
+function routeDroppedFile(file) {
+  if (!file || !file.type) return false;
+  const mime = file.type.toLowerCase();
+  if (mime.startsWith("image/")) {
+    const inp = document.getElementById("bg-img-input");
+    if (inp) {
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        inp.files = dt.files;
+        inp.dispatchEvent(new Event("change"));
+        const r = document.getElementById("bgt2");
+        if (r && !r.checked) { r.checked = true; r.dispatchEvent(new Event("change")); }
+        toast?.(`🖼️ تطبيق الصورة: ${file.name}`, "success", 1800);
+        return true;
+      } catch (e) { console.warn("[SIRM] image route failed:", e); }
+    }
+  }
+  if (mime.startsWith("video/")) {
+    const inp = document.getElementById("bg-vid-input");
+    if (inp) {
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        inp.files = dt.files;
+        inp.dispatchEvent(new Event("change"));
+        const r = document.getElementById("bgt3");
+        if (r && !r.checked) { r.checked = true; r.dispatchEvent(new Event("change")); }
+        toast?.(`🎥 تطبيق الفيديو: ${file.name}`, "success", 1800);
+        return true;
+      } catch (e) { console.warn("[SIRM] video route failed:", e); }
+    }
+  }
+  if (mime.startsWith("audio/")) {
+    const cb = document.getElementById("free-audio-on");
+    if (cb && !cb.checked) {
+      cb.checked = true;
+      try { localStorage.setItem("gt_sirm_free_audio_on", "1"); } catch (_) {}
+      if (typeof toggleFreeAudioVisibility === "function") toggleFreeAudioVisibility();
+    }
+    if (typeof handleFreeAudioFile === "function") {
+      handleFreeAudioFile(file);
+      return true;
+    }
+  }
+  return false;
+}
+
+function showSmartDropOverlay(show) {
+  const ov = document.getElementById("smart-drop-overlay");
+  if (!ov) return;
+  ov.classList.toggle("active", !!show);
+}
+
+function initSmartDrop() {
+  let dragCounter = 0;
+  document.addEventListener("dragenter", e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes("Files")) return;
+    dragCounter++;
+    showSmartDropOverlay(true);
+  });
+  document.addEventListener("dragleave", e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes("Files")) return;
+    dragCounter--;
+    if (dragCounter <= 0) { dragCounter = 0; showSmartDropOverlay(false); }
+  });
+  document.addEventListener("dragover", e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  });
+  document.addEventListener("drop", e => {
+    if (!e.dataTransfer) return;
+    e.preventDefault();
+    dragCounter = 0;
+    showSmartDropOverlay(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (!files.length) return;
+    let routed = 0;
+    for (const f of files) { if (routeDroppedFile(f)) routed++; }
+    if (routed === 0) toast?.("⚠️ لم يُتعرَّف على نوع الملفّ", "warn", 2000);
+  });
+
+  document.addEventListener("paste", e => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file && routeDroppedFile(file)) {
+          e.preventDefault();
+          return;
+        }
+      }
+    }
+  });
+
+  const muteCb = document.getElementById("bg-vid-mute-audio");
+  if (muteCb) {
+    try { muteCb.checked = localStorage.getItem("gt_sirm_bg_vid_mute") === "1"; } catch (_) {}
+    muteCb.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_bg_vid_mute", muteCb.checked ? "1" : "0"); } catch (_) {}
+      applyBgVidMute();
+      toast?.(muteCb.checked
+        ? "🔇 كُتم صوت فيديو الخلفية"
+        : "🔊 صوت فيديو الخلفية مُفعَّل", "info", 1500);
+    });
+    applyBgVidMute();
+  }
+
+  console.log("[SIRM] Smart Drop + Clipboard Paste initialized");
+}
+
+function applyBgVidMute() {
+  if (Array.isArray(S.bgVidItems)) {
+    S.bgVidItems.forEach(it => applyBgVidItemAudio(it));
+  } else if (S.bgVid) {
+    try { S.bgVid.muted = !!ge("bg-vid-mute-audio"); } catch (_) {}
+  }
+}
+
+// ══════════════════════════════════════════════════════
 //  EVENT LISTENERS
 // ══════════════════════════════════════════════════════
 function initEventListeners() {
@@ -809,6 +979,8 @@ function initEventListeners() {
   if (prevAyaBtn) prevAyaBtn.addEventListener("click", prevAya);
   const nextAyaBtn = $("next-aya-btn");
   if (nextAyaBtn) nextAyaBtn.addEventListener("click", nextAya);
+  const restartAllBtn = $("restart-all-btn");
+  if (restartAllBtn) restartAllBtn.addEventListener("click", restartAll);
 
   const pbar = $("pbar");
   if (pbar) pbar.addEventListener("click", seekClick);
@@ -2864,7 +3036,9 @@ function moveBgVidItem(idx, dir) {
 // تطبيق إعدادات صوت العنصر على عنصر الفيديو
 function applyBgVidItemAudio(item) {
   if (!item || !item.vid) return;
-  item.vid.muted = !item.audioEnabled;
+  // v0.5.0 — يحترم توگل "كتم صوت الفيديو" العام
+  const globalMute = !!ge("bg-vid-mute-audio");
+  item.vid.muted = globalMute || !item.audioEnabled;
   item.vid.volume = Math.max(0, Math.min(1, item.audioGain));
 }
 

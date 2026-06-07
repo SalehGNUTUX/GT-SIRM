@@ -410,10 +410,57 @@ body.offline .offline-badge{display:block}
   .module-empty .me-icon{font-size:36px;margin-bottom:10px;opacity:.6}
   .module-empty .me-title{color:var(--al);font-weight:700;margin-bottom:6px}
   .module-empty .me-hint{font-size:11px;color:var(--t3);margin-top:8px}
+  /* ── Smart Drag-Drop Overlay (v0.5.0) ── */
+  #smart-drop-overlay{
+    position:fixed;inset:0;z-index:99998;
+    background:rgba(2,11,5,.85);
+    backdrop-filter:blur(8px);
+    display:none;align-items:center;justify-content:center;
+    pointer-events:none;
+  }
+  #smart-drop-overlay.active{display:flex;pointer-events:auto}
+  .sdo-card{
+    border:3px dashed var(--al);
+    border-radius:var(--rl);
+    padding:60px 80px;
+    text-align:center;
+    background:var(--bg2);
+    box-shadow:0 8px 40px rgba(0,0,0,.6),0 0 60px rgba(240,200,66,.3);
+    max-width:600px;
+    animation:sdo-pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes sdo-pulse{
+    0%,100%{transform:scale(1)}
+    50%{transform:scale(1.02)}
+  }
+  .sdo-icon{font-size:72px;margin-bottom:18px}
+  .sdo-title{color:var(--al);font-size:22px;font-weight:800;margin-bottom:10px}
+  .sdo-types{display:flex;gap:18px;justify-content:center;margin-top:18px;flex-wrap:wrap}
+  .sdo-type{
+    background:var(--bg3);border:1px solid var(--b1);
+    border-radius:var(--r);padding:10px 16px;
+    color:var(--t2);font-size:12px;
+  }
+  .sdo-type span{display:block;font-size:24px;margin-bottom:4px}
 
 </style>
 </head>
 <body>
+
+<!-- Smart Drag-Drop Overlay (v0.5.0) -->
+<div id="smart-drop-overlay">
+  <div class="sdo-card">
+    <div class="sdo-icon">📥</div>
+    <div class="sdo-title">أفلت الملفّ لاكتشافه تلقائياً</div>
+    <div class="sdo-types">
+      <div class="sdo-type"><span>🖼️</span>صورة → خلفية</div>
+      <div class="sdo-type"><span>🎥</span>فيديو → خلفية</div>
+      <div class="sdo-type"><span>🎵</span>صوت → خلفية أو تلاوة مخصّصة</div>
+      <div class="sdo-type"><span>📿</span>الشعار → علامة</div>
+    </div>
+  </div>
+</div>
+
 
 <div class="offline-badge">📵 غير متصل</div>
 <div id="mob-backdrop" onclick="closeMobilePanel()"></div>
@@ -685,6 +732,10 @@ body.offline .offline-badge{display:block}
             </div>
             <div id="bg-vid-thumb"><video id="bg-vid-preview" muted loop playsinline></video></div>
             <div id="bg-vid-info" style="font-size:9px;color:var(--t3);margin-top:3px"></div>
+            <div class="tgg" style="margin-top:7px">
+              <span class="tgl">🔇 كتم الصوت الأصليّ للفيديو<br><small style="color:var(--t3)">يُجرّد الصوت من فيديو الخلفية — مفيد عند استخدام صوت تلاوة مخصّص</small></span>
+              <label class="tg"><input type="checkbox" id="bg-vid-mute-audio"><span class="tgs"></span></label>
+            </div>
             <div class="tgg" style="margin-top:7px">
               <span class="tgl">✂️ تقطيع نطاق زمني (يُطبَّق على المقطع الأول فقط)</span>
               <label class="tg"><input type="checkbox" id="bg-vid-trim-on"><span class="tgs"></span></label>
@@ -1358,7 +1409,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.4.9</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.0</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
@@ -1392,6 +1443,7 @@ body.offline .offline-badge{display:block}
       <div class="pbtns">
         <button class="pbtn" id="next-aya-btn" title="الآية التالية">⏭</button>
         <button class="pbtn" id="prev-aya-btn" title="الآية السابقة">⏮</button>
+        <button class="pbtn" id="restart-all-btn" title="إعادة من البداية (نصّ + صوت + خلفية)" style="font-size:13px">↺</button>
         <div class="aya-ind" id="aya-ind">الآية 1/7</div>
       </div>
     </div>

@@ -372,7 +372,9 @@ async function startWebExportV2(opts) {
   // ── 4) خلط الصوت ────────────────────────────────────
   onProgress(5, "🎵 جاري خلط المسار الصوتي…");
   // اجمع buffers صوتية للمقاطع المُفعّل صوتها (إن وجدت)
-  const bgVidAudioItems = (S.bgVidItems || [])
+  // v0.5.0 — يحترم توگل "كتم صوت الفيديو" العام
+  const globalMute = document.getElementById("bg-vid-mute-audio")?.checked;
+  const bgVidAudioItems = globalMute ? [] : (S.bgVidItems || [])
     .filter(it => it.audioEnabled && it.audioBuffer)
     .map(it => ({ buffer: it.audioBuffer, gain: it.audioGain, dur: it.dur }));
   const mixed = await mixAudioToBufferWeb({
