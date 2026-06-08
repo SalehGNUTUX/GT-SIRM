@@ -2419,6 +2419,33 @@ function getLogoChromaCanvas(w, h) {
 // ══════════════════════════════════════════════════════
 // ── رسم اسم السورة في أعلى المقطع ─────────────────
 // v0.5.6 — عنوان مخصّص للمقطع (مستقلّ، مع توگل لتجنّب التعارض مع اسم السورة)
+// v0.7.4 — ضبط الكانفاس على نسبة الفيديو
+function autoFitCanvasToVideo(vw, vh) {
+  if (!vw || !vh) return;
+  const aspect = vw / vh;
+  const presets = { "9:16": 9 / 16, "16:9": 16 / 9, "1:1": 1, "4:5": 4 / 5 };
+  let bestKey = "9:16", bestDiff = Infinity;
+  for (const [k, ratio] of Object.entries(presets)) {
+    const diff = Math.abs(aspect - ratio);
+    if (diff < bestDiff) { bestDiff = diff; bestKey = k; }
+  }
+  const cv = $("cv");
+  if (!cv) return;
+  if (bestDiff < 0.05) {
+    const radio = document.querySelector(`input[name="fmt"][value="${bestKey}"]`);
+    if (radio && !radio.checked) {
+      radio.checked = true;
+      radio.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    toast?.(`📐 ضُبط الكانفاس على ${bestKey} (${cv.width}×${cv.height})`, "info", 1800);
+  } else {
+    cv.width = vw;
+    cv.height = vh;
+    if (typeof fitCanvas === "function") fitCanvas();
+    toast?.(`📐 ضُبط الكانفاس على أبعاد الفيديو ${vw}×${vh}`, "info", 1800);
+  }
+}
+
 // v0.7.0 — فيديو التلاوة الجاهز
 let _recVidCanvas = null;
 function getRecVidCanvas(W, H) {
@@ -2548,6 +2575,8 @@ function onRecVidFile(input) {
     S.verses = [{ text: "", numberInSurah: 1, number: 1, audio: null, audioSecondary: [], manualDuration: sec, free: true, recvid: true }];
     S.ayaDurations = [sec];
     S.currentAya = 0; S.elapsed = 0;
+    // v0.7.4
+    autoFitCanvasToVideo(v.videoWidth, v.videoHeight);
     if (typeof updateAyaUI === "function") updateAyaUI();
     toast(`🎥 تمّ تحميل فيديو التلاوة (${sec.toFixed(1)}s)`, "success", 2200);
   };
