@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v19 — release v0.7.4 (auto-fit canvas to recvid)
+// GT-SIRM Service Worker v20 — release v0.7.5 (recvid replaces bgAudio)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v19";
+const CACHE_VER = "gt-sirm-v20";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

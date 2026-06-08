@@ -3717,7 +3717,9 @@ function startPlayer() {
   S.playing = true;
   $("btn-play").textContent = "⏸️";
   resumeAudioCtx().catch(console.warn);
-  if (S.bgAudioEl) { S.bgAudioEl.loop = ge("bg-loop"); S.bgAudioEl.play().catch(() => { }); }
+  // v0.7.5 — في وضع recvid: لا تُشغّل صوت الخلفية
+  if (S.bgAudioEl && !recvidActive) { S.bgAudioEl.loop = ge("bg-loop"); S.bgAudioEl.play().catch(() => { }); }
+  else if (S.bgAudioEl && recvidActive) { try { S.bgAudioEl.pause(); } catch (_) {} }
   if (S.bgVid) { try { S.bgVid.play().catch(() => {}); } catch (_) {} }
   if (recvidActive) { try { S.recVidEl.play().catch(() => {}); } catch (_) {} }
   else playRecitationAudio();
@@ -3878,7 +3880,14 @@ async function startExport(type) {
       $("rec-sub").textContent = "🚀 محرّك حتمي V2 (WebCodecs)…";
       // فكّ ترميز صوت الخلفية لخلطه في OfflineAudioContext
       let bgBuffer = null;
-      if (S.bgAudioEl && S.bgAudioEl.src) {
+      // v0.7.5 — في وضع recvid: استخدم صوت فيديو التلاوة بدل bgAudio
+      const _recvidActive = ge("recvid-on") && S.recVidFile;
+      if (_recvidActive) {
+        try {
+          const ab = await S.recVidFile.arrayBuffer();
+          bgBuffer = await ctx.decodeAudioData(ab.slice(0));
+        } catch (e) { console.warn("recvid audio decode failed:", e); }
+      } else if (S.bgAudioEl && S.bgAudioEl.src) {
         try {
           const r = await fetch(S.bgAudioEl.src);
           const ab = await r.arrayBuffer();
