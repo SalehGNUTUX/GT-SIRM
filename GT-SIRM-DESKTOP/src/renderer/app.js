@@ -6376,6 +6376,23 @@ async function serializeProject() {
     }
     assets.push(a);
   }
+  // v0.7.2 — فيديو التلاوة الجاهز
+  if (S.recVidFile) {
+    const a = {
+      key: "recVideo",
+      name: S.recVidFile.name || "recitation.mp4",
+      size: S.recVidFile.size || 0,
+      mime: S.recVidFile.type || "video/mp4",
+    };
+    if (S.recVidFile.size <= ASSET_EMBED_MAX) {
+      a.mode = "embedded";
+      a.dataURL = await fileToDataURL(S.recVidFile);
+    } else {
+      a.mode = "missing";
+      a.reason = "حجم أكبر من 50MB";
+    }
+    assets.push(a);
+  }
   // الشعار
   const logoDataURL = localStorage.getItem("gt_sirm_logo_v1");
   if (logoDataURL) {
@@ -6469,6 +6486,11 @@ async function restoreAssetFromDataURL(asset) {
   } else if (asset.key === "bgAudio") {
     if (typeof onBgAudio === "function") {
       onBgAudio(fakeInput);
+    }
+  } else if (asset.key === "recVideo") {
+    // v0.7.2 — استعادة فيديو التلاوة
+    if (typeof onRecVidFile === "function") {
+      onRecVidFile(fakeInput);
     }
   } else if (asset.key && asset.key.startsWith("bgVideo[")) {
     if (typeof addBgVidItem === "function") {
