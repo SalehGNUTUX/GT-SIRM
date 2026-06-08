@@ -509,7 +509,9 @@ function applyFreeText() {
 
   // ✨ تنظيف بقايا حالة جلسة سابقة (تمنع ظهور الترجمة القديمة كنصّ "مكرَّر")
   S.translations = [];
-  S.ayaDurations = [];
+  // v0.5.5 — ملء ayaDurations من manualDuration لكلّ شريحة
+  // (المعاينة عبر getEffectiveDur تقرأ من ayaDurations[i] لا من verses[i].manualDuration)
+  S.ayaDurations = S.verses.map(v => v.manualDuration || dur);
 
   // أوقف صوت القارئ
   if (S.recAudioEl) { try { S.recAudioEl.pause(); S.recAudioEl.src = ""; } catch (_) {} }

@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v9 — release v0.5.4 (توگل قسم التوقيت العامّ)
+// GT-SIRM Service Worker v10 — release v0.5.5 (إصلاح: ayaDurations يُملأ في المعاينة)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v9";
+const CACHE_VER = "gt-sirm-v10";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

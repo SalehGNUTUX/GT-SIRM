@@ -511,7 +511,8 @@ function applyFreeText() {
 
   // ✨ تنظيف بقايا جلسة سابقة
   S.translations = [];
-  S.ayaDurations = [];
+  // v0.5.5 — ملء ayaDurations من manualDuration لكلّ شريحة (المعاينة تقرأ منها)
+  S.ayaDurations = S.verses.map(v => v.manualDuration || dur);
 
   if (S.recAudioEl) { try { S.recAudioEl.pause(); S.recAudioEl.src = ""; } catch (_) {} }
   if (S.recAudioSource) {
