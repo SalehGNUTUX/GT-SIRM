@@ -1238,6 +1238,24 @@ function initEventListeners() {
     const ctrl = $("chromakey-ctrl");
     if (ctrl) ctrl.style.display = e.target.checked ? "block" : "none";
   });
+
+  // v0.7.0 — فيديو التلاوة
+  const recvidOn = $("recvid-on");
+  if (recvidOn) recvidOn.addEventListener("change", (e) => {
+    const ctrl = $("recvid-ctrl");
+    if (ctrl) ctrl.style.display = e.target.checked ? "block" : "none";
+    if (e.target.checked) {
+      toast("🎥 وضع فيديو التلاوة مُفعَّل — ارفع فيديو لتفعيل العرض", "info", 2200);
+    } else if (S.recVidEl) {
+      try { S.recVidEl.pause(); } catch (_) {}
+    }
+  });
+  const recvidFile = $("recvid-file");
+  if (recvidFile) recvidFile.addEventListener("change", (e) => onRecVidFile(e.target));
+  $("recvid-remove")?.addEventListener("click", () => {
+    removeRecVid();
+    toast("🗑️ تمّت إزالة الفيديو", "info", 1500);
+  });
   $("chromakey-preset-green")?.addEventListener("click", () => {
     const inp = $("chromakey-color"); if (inp) { inp.value = "#00b140"; inp.dispatchEvent(new Event("change")); }
   });
@@ -1282,6 +1300,11 @@ function initEventListeners() {
     { id: "chromakey-similarity", outId: "chromakey-similarity-v", unit: "" },
     { id: "chromakey-smoothness", outId: "chromakey-smoothness-v", unit: "" },
     { id: "chromakey-spill", outId: "chromakey-spill-v", unit: "" },
+    { id: "recvid-x", outId: "recvid-x-v", unit: "%" },
+    { id: "recvid-y", outId: "recvid-y-v", unit: "%" },
+    { id: "recvid-scale", outId: "recvid-scale-v", unit: "%" },
+    { id: "recvid-threshold", outId: "recvid-threshold-v", unit: "" },
+    { id: "recvid-softness", outId: "recvid-softness-v", unit: "" },
     { id: "orn-op", outId: "orn-op-v", unit: "%" },
     { id: "dim", outId: "dim-v", unit: "%" },
     { id: "bright", outId: "bright-v", unit: "%" },
@@ -1626,7 +1649,10 @@ function drawFrame(ts) {
   if (ge("fx-kaleido")) applyKaleido(ctx, W, H);
   if (ge("fx-glitch"))  applyGlitch(ctx, W, H);
   if (ge("fx-oldfilm")) applyOldFilm(ctx, W, H, ts);
-  if (S.verses.length) drawVerse(ctx, W, H, ts);
+  // v0.7.0 — فيديو التلاوة الجاهز يستبدل النصّ/الآيات
+  const recvidActive = ge("recvid-on") && S.recVidEl;
+  if (recvidActive) drawRecitationVideo(ctx, W, H);
+  else if (S.verses.length) drawVerse(ctx, W, H, ts);
   drawSurahName(ctx, W, H);
   drawVideoTitle(ctx, W, H);
   drawWave(ctx, W, H, ts);
@@ -2344,6 +2370,102 @@ function drawLogo(ctx, W, H) {
 // ══════════════════════════════════════════════════════
 // ── رسم اسم السورة في أعلى المقطع ─────────────────
 // v0.5.6 — عنوان مخصّص للمقطع (مستقلّ، مع توگل لتجنّب التعارض مع اسم السورة)
+// v0.7.0 — فيديو التلاوة الجاهز
+let _recVidCanvas = null;
+function getRecVidCanvas(W, H) {
+  if (!_recVidCanvas) _recVidCanvas = document.createElement("canvas");
+  if (_recVidCanvas.width !== W) _recVidCanvas.width = W;
+  if (_recVidCanvas.height !== H) _recVidCanvas.height = H;
+  return _recVidCanvas;
+}
+function drawRecitationVideo(ctx, W, H) {
+  const v = S.recVidEl;
+  if (!v || v.readyState < 2) return;
+  const sw = v.videoWidth, sh = v.videoHeight;
+  if (!sw || !sh) return;
+  const fit = $("recvid-fit")?.value || "contain";
+  const xPct = parseFloat(gv("recvid-x")) || 0;
+  const yPct = parseFloat(gv("recvid-y")) || 0;
+  const scale = (parseFloat(gv("recvid-scale")) || 100) / 100;
+  let dw, dh;
+  const ir = sw / sh, cr = W / H;
+  if (fit === "stretch") { dw = W; dh = H; }
+  else if (fit === "actual") { dw = sw; dh = sh; }
+  else if (fit === "cover") {
+    if (ir > cr) { dh = H; dw = dh * ir; } else { dw = W; dh = dw / ir; }
+  } else {
+    if (ir > cr) { dw = W; dh = dw / ir; } else { dh = H; dw = dh * ir; }
+  }
+  dw *= scale; dh *= scale;
+  const dx = (W - dw) / 2 + (xPct / 100) * W;
+  const dy = (H - dh) / 2 + (yPct / 100) * H;
+  const tmp = getRecVidCanvas(W, H);
+  const tctx = tmp.getContext("2d", { willReadFrequently: true });
+  tctx.clearRect(0, 0, W, H);
+  tctx.drawImage(v, dx, dy, dw, dh);
+  const rx = Math.max(0, Math.floor(dx)), ry = Math.max(0, Math.floor(dy));
+  const rw = Math.min(W - rx, Math.ceil(dw)), rh = Math.min(H - ry, Math.ceil(dh));
+  if (rw > 0 && rh > 0) removeBlackBackground(tctx, rx, ry, rw, rh);
+  ctx.drawImage(tmp, 0, 0);
+}
+function removeBlackBackground(ctx, x, y, w, h) {
+  const threshold = parseFloat(gv("recvid-threshold")) || 25;
+  const softness = parseFloat(gv("recvid-softness")) || 10;
+  const lo = threshold * 2.55;
+  const hi = lo + softness * 2.55;
+  const range = Math.max(0.5, hi - lo);
+  const img = ctx.getImageData(x, y, w, h);
+  const d = img.data;
+  const len = d.length;
+  for (let i = 0; i < len; i += 4) {
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    const lum = Math.max(r, g, b);
+    let alpha;
+    if (lum <= lo) alpha = 0;
+    else if (lum >= hi) alpha = 1;
+    else alpha = (lum - lo) / range;
+    d[i + 3] = d[i + 3] * alpha;
+  }
+  ctx.putImageData(img, x, y);
+}
+function onRecVidFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  removeRecVid();
+  const url = URL.createObjectURL(file);
+  const v = document.createElement("video");
+  v.src = url; v.playsInline = true; v.preload = "auto"; v.crossOrigin = "anonymous";
+  v.onloadedmetadata = () => {
+    const sec = isFinite(v.duration) ? v.duration : 0;
+    const info = $("recvid-info");
+    if (info) info.textContent = `✅ ${file.name} · ${v.videoWidth}×${v.videoHeight} · ${sec.toFixed(1)}s · ${(file.size / 1e6).toFixed(1)}MB`;
+    resumeAudioCtx().then(ctx => {
+      try {
+        const src = ctx.createMediaElementSource(v);
+        src.connect(ctx.destination);
+        src.connect(S.analyser);
+        src.connect(S.exportDest);
+        S.recVidAudioSource = src;
+      } catch (_) {}
+    }).catch(console.warn);
+    S.verses = [{ text: "", numberInSurah: 1, number: 1, audio: null, audioSecondary: [], manualDuration: sec, free: true, recvid: true }];
+    S.ayaDurations = [sec];
+    S.currentAya = 0; S.elapsed = 0;
+    if (typeof updateAyaUI === "function") updateAyaUI();
+    toast(`🎥 تمّ تحميل فيديو التلاوة (${sec.toFixed(1)}s)`, "success", 2200);
+  };
+  v.onerror = () => toast("❌ فشل تحميل الفيديو", "error", 2500);
+  S.recVidEl = v;
+  S.recVidFile = file;
+  input.value = "";
+}
+function removeRecVid() {
+  if (S.recVidAudioSource) { try { S.recVidAudioSource.disconnect(); } catch (_) {} S.recVidAudioSource = null; }
+  if (S.recVidEl) { try { S.recVidEl.pause(); S.recVidEl.src = ""; } catch (_) {} S.recVidEl = null; }
+  S.recVidFile = null;
+  const info = $("recvid-info"); if (info) info.textContent = "";
+}
+
 function drawVideoTitle(ctx, W, H) {
   if (!ge("vtitle-on")) return;
   const text = ($("vtitle-text")?.value || "").trim();
@@ -3489,14 +3611,15 @@ function togglePlay() {
 }
 
 function startPlayer() {
-  if (!S.verses.length) { toast("⚠️ لا توجد آيات مُحمَّلة", "error"); return; }
+  const recvidActive = ge("recvid-on") && S.recVidEl;
+  if (!recvidActive && !S.verses.length) { toast("⚠️ لا توجد آيات مُحمَّلة", "error"); return; }
   S.playing = true;
   $("btn-play").textContent = "⏸️";
   resumeAudioCtx().catch(console.warn);
   if (S.bgAudioEl) { S.bgAudioEl.loop = ge("bg-loop"); S.bgAudioEl.play().catch(() => { }); }
-  // شغّل فيديو الخلفية مع المشغّل (متناغم مع play/pause)
   if (S.bgVid) { try { S.bgVid.play().catch(() => {}); } catch (_) {} }
-  playRecitationAudio();
+  if (recvidActive) { try { S.recVidEl.play().catch(() => {}); } catch (_) {} }
+  else playRecitationAudio();
 }
 
 function pausePlayer() {
@@ -3504,8 +3627,9 @@ function pausePlayer() {
   $("btn-play").textContent = "▶️";
   stopRecitationAudio();
   if (S.bgAudioEl) S.bgAudioEl.pause();
-  // أوقف فيديو الخلفية مع الإيقاف
   if (S.bgVid) { try { S.bgVid.pause(); } catch (_) {} }
+  // v0.7.0
+  if (S.recVidEl) { try { S.recVidEl.pause(); S.recVidEl.currentTime = 0; } catch (_) {} }
 }
 
 function prevAya() { if (S.currentAya > 0) { S.currentAya--; S.elapsed = 0; updateAyaUI(); if (S.playing) playRecitationAudio(); } }

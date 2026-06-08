@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v14 — release v0.6.0 (Chromakey)
+// GT-SIRM Service Worker v15 — release v0.7.0 (Recitation Video)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v14";
+const CACHE_VER = "gt-sirm-v15";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل
