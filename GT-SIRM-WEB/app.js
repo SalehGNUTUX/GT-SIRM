@@ -176,6 +176,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initEventListeners();
   initModuleManager();   // v0.3.0 — يجب أن يأتي قبل restoreAllSettings
   initFreeTextEditor();  // v0.4.0 — محرّر النصّ الحرّ
+  initHadithModule();    // v0.8.0 — وحدة الحديث الشريف
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
   restoreAllSettings();
   restoreLogo();
@@ -198,7 +199,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 // ══════════════════════════════════════════════════════
 const MODULES = {
   quran:  { default: true,  label: "القرآن الكريم",        impl: true  },
-  hadith: { default: true,  label: "الحديث الشريف",         impl: false },
+  hadith: { default: true,  label: "الحديث الشريف",         impl: true  },
   azkar:  { default: true,  label: "الأذكار",               impl: false },
   asma:   { default: true,  label: "أسماء الله الحسنى",     impl: false },
   duas:   { default: true,  label: "الأدعية المأثورة",      impl: false },
@@ -892,6 +893,107 @@ function saveFreeTemplate() {
   document.getElementById("free-tpl-name").value = "";
   renderFreeTemplates();
   toast?.(`💾 حُفظ القالب: ${name}`, "success", 1500);
+}
+
+// ══════════════════════════════════════════════════════
+//  v0.8.0 — وحدة الحديث الشريف
+// ══════════════════════════════════════════════════════
+function initHadithModule() {
+  const data = window.HADITH_DATA;
+  if (!data || !Array.isArray(data.collections)) return;
+  const collSel = document.getElementById("hadith-collection");
+  const searchInp = document.getElementById("hadith-search");
+  const hadithSel = document.getElementById("hadith-select");
+  const preview = document.getElementById("hadith-preview");
+  const applyBtn = document.getElementById("apply-hadith-btn");
+  if (!collSel || !searchInp || !hadithSel) return;
+
+  collSel.innerHTML = '<option value="">— اختر مجموعة —</option>' +
+    data.collections.map(c => `<option value="${c.id}">📜 ${c.name} (${c.hadiths.length})</option>`).join("");
+
+  let currentColl = null;
+  let currentHadiths = [];
+  let selectedIdx = -1;
+
+  const renderList = (list) => {
+    if (!list.length) { hadithSel.innerHTML = '<option disabled>(لا نتائج)</option>'; return; }
+    hadithSel.innerHTML = list.map(h => {
+      const p = h.text.slice(0, 60).replace(/\s+/g, " ");
+      return `<option value="${h.n}">${h.n}. ${p}…</option>`;
+    }).join("");
+  };
+
+  const showPreview = (h) => {
+    if (!h || !preview) { if (preview) preview.style.display = "none"; if (applyBtn) applyBtn.style.display = "none"; return; }
+    document.getElementById("hadith-prev-meta").innerHTML =
+      `<span style="background:var(--bg2);padding:2px 6px;border-radius:3px">حديث ${h.n}</span>` +
+      `<span style="background:#1f4d2b;color:#bff5cf;padding:2px 6px;border-radius:3px">${h.grade || "صحيح"}</span>` +
+      `<span style="color:var(--t2)">${h.chapter || ""}</span>`;
+    document.getElementById("hadith-prev-text").textContent = h.text;
+    document.getElementById("hadith-prev-narrator").textContent = "📖 " + (h.narrator || "");
+    document.getElementById("hadith-prev-source").textContent = "📚 " + (h.source || "");
+    preview.style.display = "block";
+    if (applyBtn) applyBtn.style.display = "block";
+  };
+
+  collSel.addEventListener("change", () => {
+    const id = collSel.value;
+    currentColl = data.collections.find(c => c.id === id) || null;
+    currentHadiths = currentColl ? currentColl.hadiths.slice() : [];
+    searchInp.value = "";
+    renderList(currentHadiths);
+    showPreview(null);
+  });
+
+  searchInp.addEventListener("input", () => {
+    if (!currentColl) return;
+    const q = normalizeArabic(searchInp.value.trim());
+    if (!q) { currentHadiths = currentColl.hadiths.slice(); renderList(currentHadiths); return; }
+    currentHadiths = currentColl.hadiths.filter(h => {
+      const t = normalizeArabic(h.text + " " + (h.chapter || "") + " " + (h.narrator || ""));
+      return t.includes(q);
+    });
+    renderList(currentHadiths);
+  });
+
+  hadithSel.addEventListener("change", () => {
+    const n = parseInt(hadithSel.value);
+    const h = currentHadiths.find(x => x.n === n);
+    if (h) { selectedIdx = h.n; showPreview(h); }
+  });
+
+  if (applyBtn) applyBtn.addEventListener("click", () => {
+    if (!currentColl) { toast("⚠️ اختر مجموعة أوّلاً", "warn", 1500); return; }
+    const h = currentColl.hadiths.find(x => x.n === selectedIdx);
+    if (!h) { toast("⚠️ اختر حديثاً أوّلاً", "warn", 1500); return; }
+    applyHadith(h, currentColl);
+  });
+}
+
+function applyHadith(h, coll) {
+  const text = h.text.trim();
+  const rawSlices = text.split(/[.،؛!؟]+\s*/u).map(s => s.trim()).filter(s => s.length > 1);
+  const slices = rawSlices.length ? rawSlices : [text];
+  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  S.verses = slices.map((t, i) => ({
+    text: t,
+    numberInSurah: i + 1,
+    number: i + 1,
+    audio: null,
+    audioSecondary: [],
+    manualDuration: baseDur,
+    free: true,
+    hadith: true,
+    source: `${coll.name} · حديث ${h.n}${h.grade ? " (" + h.grade + ")" : ""}`,
+  }));
+  S.ayaDurations = S.verses.map(v => v.manualDuration);
+  S.currentAya = 0;
+  S.elapsed = 0;
+  S.useFreeAsSource = true;
+  S.translations = [];
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+  toast(`📜 تمّ تطبيق الحديث (${slices.length} شريحة)`, "success", 2200);
 }
 
 function initFreeTextEditor() {
