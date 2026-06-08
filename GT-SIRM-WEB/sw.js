@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v10 — release v0.5.5 (إصلاح: ayaDurations يُملأ في المعاينة)
+// GT-SIRM Service Worker v11 — release v0.5.6 (عنوان المقطع المخصّص)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v10";
+const CACHE_VER = "gt-sirm-v11";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

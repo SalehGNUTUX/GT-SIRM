@@ -720,6 +720,33 @@ body.offline .offline-badge{display:block}
 
       <!-- TEXTS -->
       <div class="tp" id="tab-txt">
+        <div class="sec">
+          <div class="sec-t">🎬 عنوان المقطع <span class="badge-new">v0.5.6</span></div>
+          <div class="tgg">
+            <span class="tgl">إظهار عنوان مخصّص في أعلى الفيديو<br><small style="color:var(--t3)">عند تفعيل وحدة القرآن الكريم: ألغِ هذا التوگل لتجنّب التعارض مع اسم السورة، أو غيّر الموضع العمودي</small></span>
+            <label class="tg"><input type="checkbox" id="vtitle-on"><span class="tgs"></span></label>
+          </div>
+          <div id="vtitle-ctrl" style="display:none;padding-top:5px">
+            <div class="fg" style="margin-bottom:6px">
+              <input type="text" class="fc" id="vtitle-text" placeholder="مثال: تأمّلات في سورة البقرة" maxlength="80" dir="rtl">
+            </div>
+            <div class="grid2">
+              <div class="fg"><label class="fl">الموضع العمودي</label><div class="sg"><input type="range" min="0" max="40" step="0.5" value="6" id="vtitle-y"><span class="sv" id="vtitle-y-v">6%</span></div></div>
+              <div class="fg"><label class="fl">حجم الخط</label><div class="sg"><input type="range" min="20" max="220" step="5" value="90" id="vtitle-size"><span class="sv" id="vtitle-size-v">90%</span></div></div>
+            </div>
+            <div class="grid2">
+              <div class="fg"><label class="fl">اللون</label><div class="cpg"><input type="color" id="vtitle-col" value="#ffe082"></div></div>
+              <div class="fg"><label class="fl">التأثير</label>
+                <select class="fc" id="vtitle-fx">
+                  <option value="shadow" selected>ظلّ</option>
+                  <option value="glow">توهّج</option>
+                  <option value="outline">حدود</option>
+                  <option value="none">بدون</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="sec" data-module="quran">
           <div class="sec-t">📿 اسم السورة (عنوان علوي)</div>
           <div class="tgg">
@@ -1137,7 +1164,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.5</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.6</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>

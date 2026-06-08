@@ -1217,6 +1217,13 @@ function initEventListeners() {
     const ctrl = $("sname-ctrl");
     if (ctrl) ctrl.style.display = e.target.checked ? "block" : "none";
   });
+
+  // v0.5.6 — عنوان المقطع
+  const vtitleOn = $("vtitle-on");
+  if (vtitleOn) vtitleOn.addEventListener("change", (e) => {
+    const ctrl = $("vtitle-ctrl");
+    if (ctrl) ctrl.style.display = e.target.checked ? "block" : "none";
+  });
   const surahSel = $("surah-sel");
   if (surahSel) surahSel.addEventListener("change", onSurahChange);
   const transSel = $("trans-sel");
@@ -1250,6 +1257,8 @@ function initEventListeners() {
     { id: "wave-gain", outId: "wave-gain-v", unit: "%" },
     { id: "sname-y", outId: "sname-y-v", unit: "%" },
     { id: "sname-size", outId: "sname-size-v", unit: "%" },
+    { id: "vtitle-y", outId: "vtitle-y-v", unit: "%" },
+    { id: "vtitle-size", outId: "vtitle-size-v", unit: "%" },
     { id: "orn-op", outId: "orn-op-v", unit: "%" },
     { id: "dim", outId: "dim-v", unit: "%" },
     { id: "bright", outId: "bright-v", unit: "%" },
@@ -1596,6 +1605,7 @@ function drawFrame(ts) {
   if (ge("fx-oldfilm")) applyOldFilm(ctx, W, H, ts);
   if (S.verses.length) drawVerse(ctx, W, H, ts);
   drawSurahName(ctx, W, H);
+  drawVideoTitle(ctx, W, H);
   drawWave(ctx, W, H, ts);
   drawLogo(ctx, W, H);
   drawWatermark(ctx, W, H);
@@ -2238,6 +2248,49 @@ function drawLogo(ctx, W, H) {
 //  VERSE RENDERING
 // ══════════════════════════════════════════════════════
 // ── رسم اسم السورة في أعلى المقطع ─────────────────
+// v0.5.6 — عنوان مخصّص للمقطع (مستقلّ، مع توگل لتجنّب التعارض مع اسم السورة)
+function drawVideoTitle(ctx, W, H) {
+  if (!ge("vtitle-on")) return;
+  const text = ($("vtitle-text")?.value || "").trim();
+  if (!text) return;
+
+  const font = fontVal();
+  const fsz = W * 0.055 * ((parseFloat(gv("vtitle-size")) || 90) / 100);
+  const yPct = parseFloat(gv("vtitle-y")) || 6;
+  const y = (yPct / 100) * H + fsz;
+  const col = $("vtitle-col")?.value || "#ffe082";
+  const fx = $("vtitle-fx")?.value || "shadow";
+
+  ctx.save();
+  ctx.font = `bold ${fsz}px ${font}`;
+  ctx.fillStyle = col;
+  ctx.textAlign = "center";
+  ctx.direction = "rtl";
+
+  if (fx === "shadow") {
+    ctx.shadowColor = "rgba(0,0,0,.75)";
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 3;
+    ctx.fillText(text, W / 2, y);
+  } else if (fx === "glow") {
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 24;
+    ctx.fillText(text, W / 2, y);
+    ctx.shadowBlur = 0;
+    ctx.fillText(text, W / 2, y);
+  } else if (fx === "outline") {
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.lineWidth = Math.max(2, fsz * 0.06);
+    ctx.strokeStyle = "rgba(0,0,0,.85)";
+    ctx.strokeText(text, W / 2, y);
+    ctx.fillText(text, W / 2, y);
+  } else {
+    ctx.fillText(text, W / 2, y);
+  }
+  ctx.restore();
+}
+
 function drawSurahName(ctx, W, H) {
   if (!ge("sname-on")) return;
   if (!S.surahs || !S.surahs.length) return;
