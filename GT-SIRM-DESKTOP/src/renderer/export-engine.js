@@ -298,6 +298,27 @@ async function loadBitmapFromPath(filePath) {
   return await createImageBitmap(blob);
 }
 
+// v0.7.3 — seek HTMLVideoElement مع انتظار اكتمال الإطار
+function seekVideoToTime(v, t) {
+  return new Promise(resolve => {
+    if (!v || !isFinite(v.duration)) return resolve();
+    const target = Math.min(t, Math.max(0, v.duration - 1e-4));
+    if (Math.abs(v.currentTime - target) < 0.02) return resolve();
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      try { v.removeEventListener("seeked", onSeeked); } catch (_) {}
+      resolve();
+    };
+    const onSeeked = () => finish();
+    v.addEventListener("seeked", onSeeked);
+    try { v.currentTime = target; } catch (_) { finish(); return; }
+    // أمان: timeout بعد 800ms
+    setTimeout(finish, 800);
+  });
+}
+
 // ── استخراج بايتات الفيديو من HTMLVideoElement ─────────
 async function fetchVideoBytes(vid) {
   if (!vid || !vid.src) return null;
@@ -488,6 +509,10 @@ async function startDesktopExportV2(opts) {
       // بيانات الموجة الصوتية للإطار الحالي (V2 يخلط الصوت offline فلا توجد analyser data)
       S._exportWaveData = exportWaveData[i];
       if (setStateForTime) setStateForTime(t);
+      // v0.7.3 — مزامنة فيديو التلاوة مع الزمن الحتميّ للإطار (V2 deterministic)
+      if (S.recVidEl && typeof ge === "function" && ge("recvid-on")) {
+        await seekVideoToTime(S.recVidEl, t);
+      }
       drawFrame(t);
 
       const frameBuf = canvasToRgbaBuffer(ctx, W, H);

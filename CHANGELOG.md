@@ -7,6 +7,32 @@
 
 ---
 
+## [0.7.3] — 2026-06-07
+
+### 🐛 إصلاحات: فيديو التلاوة في التصدير + Refresh الصفحة على الويب
+
+#### 1) فيديو التلاوة كان يبقى ثابتاً في التصدير
+- **V2 الحتميّ** (Desktop ffmpeg / Web WebCodecs): الفيديو لم يكن يُسحَب لزمن الإطار قبل drawFrame.
+- الحلّ: قبل كلّ `drawFrame(t)`، نُجري `await seekVideoToTime(S.recVidEl, t)` ينتظر `seeked` event.
+- timeout أمان 800ms لتجنّب التعليق إذا فشل الـ seek.
+
+#### 2) V1 الحيّ (MediaRecorder): الفيديو لم يكن يُشغَّل
+- في بداية التصدير الحيّ: `S.recVidEl.currentTime = 0; play()`.
+- في نهاية `stopExportSources()`: إيقافه وإعادته إلى 0.
+
+#### 3) Refresh الصفحة على الويب لا يُحذِّر
+- السبب: `beforeunload` يعتمد على `S.projectDirty` لكن رفع الملفّات لم يكن يُحدِّث الحالة.
+- الحلّ: استدعاء `markProjectDirty()` في:
+  - `onBgMedia` (صورة + فيديو خلفية)
+  - `onBgAudio` (صوت خلفية)
+  - `addBgVidItem` (كلّ مقطع playlist)
+  - `onRecVidFile` (فيديو التلاوة)
+- الآن أيّ رفع ملفّ → `S.projectDirty = true` → refresh يعرض تنبيه المتصفّح.
+
+📦 PWA cache bump → v18.
+
+---
+
 ## [0.7.2] — 2026-06-07
 
 ### 🐛 إصلاح: فيديو التلاوة لا يُستعاد عند فتح المشروع

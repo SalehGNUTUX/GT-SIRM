@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v17 — release v0.7.2 (recvid serialize)
+// GT-SIRM Service Worker v18 — release v0.7.3 (recvid export sync + file uploads mark dirty)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v17";
+const CACHE_VER = "gt-sirm-v18";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

@@ -2554,6 +2554,7 @@ function onRecVidFile(input) {
   v.onerror = () => toast("❌ فشل تحميل الفيديو", "error", 2500);
   S.recVidEl = v;
   S.recVidFile = file;
+  if (typeof markProjectDirty === "function") markProjectDirty();
   input.value = "";
 }
 function removeRecVid() {
@@ -3436,6 +3437,7 @@ function onBgAudio(input) {
   a.volume = gv("bg-vol") / 100;
   S.bgAudioEl = a;
   S.bgAudioFile = file; // v0.5.8
+  if (typeof markProjectDirty === "function") markProjectDirty();
   resumeAudioCtx().then(ctx => {
     try {
       const src = ctx.createMediaElementSource(a);
@@ -3469,6 +3471,7 @@ function onBgMedia(input, type) {
     img.onerror = () => toast("❌ فشل تحميل الصورة", "error");
     img.src = url;
     S.bgImgFile = file; // v0.5.8
+    if (typeof markProjectDirty === "function") markProjectDirty();
     const thumb = $("bg-img-thumb");
     $("bg-img-preview").src = url;
     thumb.style.display = "block";
@@ -3497,6 +3500,7 @@ function addBgVidItem(file) {
       audioBuffer: null,     // يُفكّ ترميزه عند تفعيل الصوت (lazy)
     };
     S.bgVidItems.push(item);
+    if (typeof markProjectDirty === "function") markProjectDirty();
     if (!S.bgVid) {
       S.bgVid = vid;
       S.bgVidActiveIdx = S.bgVidItems.length - 1;
@@ -4037,6 +4041,11 @@ async function startExport(type) {
 
   if (S.bgAudioEl) { S.bgAudioEl.currentTime = 0; S.bgAudioEl.play().catch(() => {}); }
 
+  // v0.7.3 — V1: شغّل فيديو التلاوة الجاهز من البداية
+  if (ge("recvid-on") && S.recVidEl) {
+    try { S.recVidEl.currentTime = 0; S.recVidEl.play().catch(() => {}); } catch (_) {}
+  }
+
   const savedAya = S.currentAya;
   const savedElapsed = S.elapsed;
   const savedPlaying = S.playing;
@@ -4117,6 +4126,8 @@ function stopExportSources() {
     try { s.gain.disconnect(); } catch (_) {}
   });
   S.exportSources = [];
+  // v0.7.3 — أوقف فيديو التلاوة عند نهاية التصدير الحيّ
+  if (S.recVidEl) { try { S.recVidEl.pause(); S.recVidEl.currentTime = 0; } catch (_) {} }
 }
 
 function cancelExport() {
