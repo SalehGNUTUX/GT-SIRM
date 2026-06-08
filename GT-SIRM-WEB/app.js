@@ -1231,6 +1231,19 @@ function initEventListeners() {
     const ctrl = $("vtitle-ctrl");
     if (ctrl) ctrl.style.display = e.target.checked ? "block" : "none";
   });
+
+  // v0.6.0 — Chromakey
+  const chromaOn = $("chromakey-on");
+  if (chromaOn) chromaOn.addEventListener("change", (e) => {
+    const ctrl = $("chromakey-ctrl");
+    if (ctrl) ctrl.style.display = e.target.checked ? "block" : "none";
+  });
+  $("chromakey-preset-green")?.addEventListener("click", () => {
+    const inp = $("chromakey-color"); if (inp) { inp.value = "#00b140"; inp.dispatchEvent(new Event("change")); }
+  });
+  $("chromakey-preset-blue")?.addEventListener("click", () => {
+    const inp = $("chromakey-color"); if (inp) { inp.value = "#0047bb"; inp.dispatchEvent(new Event("change")); }
+  });
   const surahSel = $("surah-sel");
   if (surahSel) surahSel.addEventListener("change", onSurahChange);
   const transSel = $("trans-sel");
@@ -1266,6 +1279,9 @@ function initEventListeners() {
     { id: "sname-size", outId: "sname-size-v", unit: "%" },
     { id: "vtitle-y", outId: "vtitle-y-v", unit: "%" },
     { id: "vtitle-size", outId: "vtitle-size-v", unit: "%" },
+    { id: "chromakey-similarity", outId: "chromakey-similarity-v", unit: "" },
+    { id: "chromakey-smoothness", outId: "chromakey-smoothness-v", unit: "" },
+    { id: "chromakey-spill", outId: "chromakey-spill-v", unit: "" },
     { id: "orn-op", outId: "orn-op-v", unit: "%" },
     { id: "dim", outId: "dim-v", unit: "%" },
     { id: "bright", outId: "bright-v", unit: "%" },
@@ -1628,39 +1644,111 @@ function drawBg(ctx, W, H, ts) {
   const bgt = radioVal("bgt");
   const bgm = radioVal("bgm");
   const bright = gv("bright") / 100;
+  const chromaOn = ge("chromakey-on");
 
   ctx.save();
   ctx.filter = `brightness(${bright}) saturate(${gv("satur") / 100})`;
 
-  if (bgt === "gradient" || (!S.bgImg && !S.bgVid)) {
-    drawGradient(ctx, W, H);
-  } else if (bgt === "image" && S.bgImg) {
-    ctx.save();
-    applyBgMotion(ctx, W, H, bgm, ts);
-    imgCover(ctx, S.bgImg, 0, 0, W, H);
-    ctx.restore();
-  } else if (bgt === "video" && S.bgVid) {
-    if (S.bgVid.readyState >= 2) {
-      // Crossfade سلس بين مقطعَين في playlist
+  // v0.6.0 — رسم الوسائط على canvas منفصل عند تفعيل Chromakey
+  const drawMediaToCanvas = (targetCtx, applyMotion) => {
+    if (bgt === "image" && S.bgImg) {
+      targetCtx.save();
+      if (applyMotion) applyBgMotion(targetCtx, W, H, bgm, ts);
+      imgCover(targetCtx, S.bgImg, 0, 0, W, H);
+      targetCtx.restore();
+      return true;
+    } else if (bgt === "video" && S.bgVid) {
+      if (S.bgVid.readyState < 2) return false;
       updateBgVidCrossfade();
       const alpha = S.bgVidFadeProgress;
-      ctx.save();
-      applyBgMotion(ctx, W, H, bgm, ts);
-      ctx.globalAlpha = 1 - alpha;
-      imgCover(ctx, S.bgVid, 0, 0, W, H);
+      targetCtx.save();
+      if (applyMotion) applyBgMotion(targetCtx, W, H, bgm, ts);
+      targetCtx.globalAlpha = 1 - alpha;
+      imgCover(targetCtx, S.bgVid, 0, 0, W, H);
       if (S.bgVidNext && S.bgVidNext.readyState >= 2 && alpha > 0) {
-        ctx.globalAlpha = alpha;
-        imgCover(ctx, S.bgVidNext, 0, 0, W, H);
+        targetCtx.globalAlpha = alpha;
+        imgCover(targetCtx, S.bgVidNext, 0, 0, W, H);
       }
-      ctx.restore();
-    } else {
-      drawGradient(ctx, W, H);
+      targetCtx.restore();
+      return true;
+    }
+    return false;
+  };
+
+  const hasMedia = (bgt === "image" && S.bgImg) || (bgt === "video" && S.bgVid && S.bgVid.readyState >= 2);
+  if (bgt === "gradient" || !hasMedia) {
+    drawGradient(ctx, W, H);
+  } else if (chromaOn) {
+    drawGradient(ctx, W, H);
+    const tmp = getChromakeyCanvas(W, H);
+    const tctx = tmp.getContext("2d", { willReadFrequently: true });
+    tctx.clearRect(0, 0, W, H);
+    tctx.filter = ctx.filter;
+    const drawn = drawMediaToCanvas(tctx, true);
+    tctx.filter = "none";
+    if (drawn) {
+      applyChromakeyToCanvas(tctx, W, H);
+      ctx.filter = "none";
+      ctx.drawImage(tmp, 0, 0);
     }
   } else {
-    drawGradient(ctx, W, H);
+    drawMediaToCanvas(ctx, true) || drawGradient(ctx, W, H);
   }
   ctx.restore();
   ctx.filter = "none";
+}
+
+// v0.6.0 — Chromakey support
+let _chromakeyCanvas = null;
+function getChromakeyCanvas(W, H) {
+  if (!_chromakeyCanvas) _chromakeyCanvas = document.createElement("canvas");
+  if (_chromakeyCanvas.width !== W) _chromakeyCanvas.width = W;
+  if (_chromakeyCanvas.height !== H) _chromakeyCanvas.height = H;
+  return _chromakeyCanvas;
+}
+function hexToRgb(hex) {
+  const m = (hex || "#00b140").replace("#", "");
+  return { r: parseInt(m.substr(0, 2), 16), g: parseInt(m.substr(2, 2), 16), b: parseInt(m.substr(4, 2), 16) };
+}
+function applyChromakeyToCanvas(ctx, W, H) {
+  const colorHex = $("chromakey-color")?.value || "#00b140";
+  const { r: kR, g: kG, b: kB } = hexToRgb(colorHex);
+  const similarity = (parseFloat(gv("chromakey-similarity")) || 30);
+  const smoothness = (parseFloat(gv("chromakey-smoothness")) || 15);
+  const spill = (parseFloat(gv("chromakey-spill")) || 20) / 100;
+
+  const keyCb = -0.168736 * kR - 0.331264 * kG + 0.5 * kB + 128;
+  const keyCr = 0.5 * kR - 0.418688 * kG - 0.081312 * kB + 128;
+  const sim = similarity * 1.5;
+  const smooth = Math.max(0.5, smoothness * 1.5);
+
+  const img = ctx.getImageData(0, 0, W, H);
+  const d = img.data;
+  const len = d.length;
+  for (let i = 0; i < len; i += 4) {
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    const cb = -0.168736 * r - 0.331264 * g + 0.5 * b + 128;
+    const cr = 0.5 * r - 0.418688 * g - 0.081312 * b + 128;
+    const dx = cb - keyCb, dy = cr - keyCr;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    let alpha = 1;
+    if (dist < sim) alpha = 0;
+    else if (dist < sim + smooth) alpha = (dist - sim) / smooth;
+    d[i + 3] = d[i + 3] * alpha;
+    if (alpha > 0 && spill > 0) {
+      if (kG > kR && kG > kB) {
+        const avg = (r + b) / 2;
+        if (g > avg) d[i + 1] = g + (avg - g) * spill;
+      } else if (kB > kR && kB > kG) {
+        const avg = (r + g) / 2;
+        if (b > avg) d[i + 2] = b + (avg - b) * spill;
+      } else if (kR > kG && kR > kB) {
+        const avg = (g + b) / 2;
+        if (r > avg) d[i] = r + (avg - r) * spill;
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
 }
 
 function drawGradient(ctx, W, H) {

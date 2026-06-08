@@ -878,6 +878,31 @@ body.offline .offline-badge{display:block}
         </div>
 
         <div class="sec">
+          <div class="sec-t">🎭 Chromakey (شاشة خضراء) <span class="badge-new">v0.6.0</span></div>
+          <div class="note">يحذف لوناً محدّداً من خلفية الصورة/الفيديو ويستبدله بالتدرّج. مفيد لدمج لقطات الشاشة الخضراء مع خلفية إسلاميّة.</div>
+          <div class="tgg">
+            <span class="tgl">تفعيل Chromakey</span>
+            <label class="tg"><input type="checkbox" id="chromakey-on"><span class="tgs"></span></label>
+          </div>
+          <div id="chromakey-ctrl" style="display:none;padding-top:5px">
+            <div class="grid2">
+              <div class="fg"><label class="fl">اللون المراد حذفه</label>
+                <div style="display:flex;gap:5px;align-items:center">
+                  <div class="cpg" style="flex:1"><input type="color" id="chromakey-color" value="#00b140"></div>
+                  <button class="btn btn-g bsm" id="chromakey-preset-green" title="أخضر قياسيّ">🟢</button>
+                  <button class="btn btn-g bsm" id="chromakey-preset-blue" title="أزرق قياسيّ">🔵</button>
+                </div>
+              </div>
+              <div class="fg"><label class="fl">التشابه (similarity)</label><div class="sg"><input type="range" min="0" max="100" step="1" value="30" id="chromakey-similarity"><span class="sv" id="chromakey-similarity-v">30</span></div></div>
+            </div>
+            <div class="grid2">
+              <div class="fg"><label class="fl">النعومة (smoothness)</label><div class="sg"><input type="range" min="0" max="100" step="1" value="15" id="chromakey-smoothness"><span class="sv" id="chromakey-smoothness-v">15</span></div></div>
+              <div class="fg"><label class="fl">إزالة الانعكاس (spill)</label><div class="sg"><input type="range" min="0" max="100" step="1" value="20" id="chromakey-spill"><span class="sv" id="chromakey-spill-v">20</span></div></div>
+            </div>
+            <span class="note" style="display:block;margin-top:4px;font-size:9px">💡 ابدأ بالقيم الافتراضيّة. زِد التشابه إذا بقيت آثار. زِد النعومة لحواف ناعمة. زِد إزالة الانعكاس لتقليل اللون المتسرّب على الموضوع.</span>
+          </div>
+        </div>
+        <div class="sec">
           <div class="sec-t">🎞️ حركة الخلفية</div>
           <div class="rg c2">
             <div class="rc"><input type="radio" name="bgm" id="bgm1" value="static" checked><label for="bgm1"><span class="ri">⏸️</span><span>ثابت</span></label></div>
@@ -1487,7 +1512,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.8</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.6.0</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
