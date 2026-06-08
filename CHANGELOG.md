@@ -7,6 +7,34 @@
 
 ---
 
+## [0.7.1] — 2026-06-07
+
+### 🎨 لون قابل للاختيار لإزالة الخلفيّة + Chromakey للشعار
+
+#### 1) فيديو التلاوة — لون خلفيّة قابل للتغيير
+- color picker جديد `recvid-bgcolor` (افتراضي `#000000`).
+- 4 presets: ⚫ أسود · ⚪ أبيض · 🟢 أخضر · 🔵 أزرق.
+- الخوارزميّة الجديدة `removeBgColorFromRegion` تتكيّف تلقائياً:
+  - **أسود** (luminance < 60) → `Math.max(r,g,b)` threshold.
+  - **أبيض** (luminance > 195) → `Math.min(r,g,b)` threshold.
+  - **ألوان** → مسافة YCbCr (Cb, Cr distance) مثل chromakey.
+
+#### 2) Chromakey للشعار (قسم 🖼️ شعار مخصص)
+- توگل جديد `logo-chroma-on` (افتراضي OFF — لا يأخذ مساحة).
+- color picker `logo-chroma-color` (افتراضي `#ffffff` — للشعارات بخلفيّة بيضاء).
+- 3 presets: ⚪ أبيض · ⚫ أسود · 🟢 أخضر.
+- المنزلقان: العتبة + النعومة.
+- يطبَّق على canvas off-screen قبل composite الشعار → جودة عالية بلا تشويه.
+
+#### المعمار التقنيّ
+- `removeBgColorFromRegion` دالّة موحّدة تخدم recvid والشعار.
+- `removeBlackBackground` تبقى كـalias للتوافق العكسيّ.
+- canvas off-screen قابل لإعادة الاستخدام لكلّ من recvid والشعار.
+
+📦 PWA cache bump → v16.
+
+---
+
 ## [0.7.0] — 2026-06-07
 
 ### 🎥 فيديو تلاوة جاهز

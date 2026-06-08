@@ -736,12 +736,21 @@ body.offline .offline-badge{display:block}
             </div>
             <div class="fg"><label class="fl">الحجم النسبيّ</label><div class="sg"><input type="range" min="20" max="200" step="1" value="100" id="recvid-scale"><span class="sv" id="recvid-scale-v">100%</span></div></div>
 
-            <div style="font-size:11px;color:var(--al);font-weight:700;margin:8px 0 4px 0">⚫ إزالة الخلفيّة السوداء</div>
+            <div style="font-size:11px;color:var(--al);font-weight:700;margin:8px 0 4px 0">🎨 إزالة خلفيّة الفيديو</div>
+            <div class="fg"><label class="fl">لون الخلفيّة المراد إزالته</label>
+              <div style="display:flex;gap:5px;align-items:center">
+                <div class="cpg" style="flex:1"><input type="color" id="recvid-bgcolor" value="#000000"></div>
+                <button class="btn btn-g bsm" id="recvid-bgcolor-black" title="أسود">⚫</button>
+                <button class="btn btn-g bsm" id="recvid-bgcolor-white" title="أبيض">⚪</button>
+                <button class="btn btn-g bsm" id="recvid-bgcolor-green" title="أخضر">🟢</button>
+                <button class="btn btn-g bsm" id="recvid-bgcolor-blue" title="أزرق">🔵</button>
+              </div>
+            </div>
             <div class="grid2">
-              <div class="fg"><label class="fl">عتبة السواد</label><div class="sg"><input type="range" min="0" max="100" step="1" value="25" id="recvid-threshold"><span class="sv" id="recvid-threshold-v">25</span></div></div>
+              <div class="fg"><label class="fl">العتبة (threshold)</label><div class="sg"><input type="range" min="0" max="100" step="1" value="25" id="recvid-threshold"><span class="sv" id="recvid-threshold-v">25</span></div></div>
               <div class="fg"><label class="fl">نعومة الحواف</label><div class="sg"><input type="range" min="0" max="50" step="1" value="10" id="recvid-softness"><span class="sv" id="recvid-softness-v">10</span></div></div>
             </div>
-            <span class="note" style="display:block;margin-top:4px;font-size:9px">💡 إذا بقي إطار أسود حول النصّ: زِد العتبة. لحواف ناعمة بلا حدّة: زِد النعومة.</span>
+            <span class="note" style="display:block;margin-top:4px;font-size:9px">💡 الأسود والأبيض يستخدمان مقياس السطوع، الألوان الأخرى تستخدم YCbCr. زِد العتبة إذا بقي إطار.</span>
 
             <button class="btn btn-g bsm" id="recvid-remove" style="margin-top:6px;width:100%">🗑️ إزالة الفيديو</button>
           </div>
@@ -1203,6 +1212,26 @@ body.offline .offline-badge{display:block}
             </div>
           </div>
           <button class="btn btn-d bsm" id="remove-logo-btn" style="margin-top:5px;">🗑️ إزالة الشعار</button>
+
+          <!-- v0.7.1 — Chromakey للشعار -->
+          <div class="tgg" style="margin-top:8px;background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px">
+            <span class="tgl">🎭 إزالة خلفيّة الشعار (Chromakey)<br><small style="color:var(--t3)">يجعل لوناً محدّداً شفّافاً — مفيد للشعارات بدون قناة ألفا</small></span>
+            <label class="tg"><input type="checkbox" id="logo-chroma-on"><span class="tgs"></span></label>
+          </div>
+          <div id="logo-chroma-ctrl" style="display:none;margin-top:5px">
+            <div class="fg"><label class="fl">لون الخلفيّة المراد إزالته</label>
+              <div style="display:flex;gap:5px;align-items:center">
+                <div class="cpg" style="flex:1"><input type="color" id="logo-chroma-color" value="#ffffff"></div>
+                <button class="btn btn-g bsm" id="logo-chroma-white" title="أبيض">⚪</button>
+                <button class="btn btn-g bsm" id="logo-chroma-black" title="أسود">⚫</button>
+                <button class="btn btn-g bsm" id="logo-chroma-green" title="أخضر">🟢</button>
+              </div>
+            </div>
+            <div class="grid2">
+              <div class="fg"><label class="fl">العتبة</label><div class="sg"><input type="range" min="0" max="100" step="1" value="25" id="logo-chroma-threshold"><span class="sv" id="logo-chroma-threshold-v">25</span></div></div>
+              <div class="fg"><label class="fl">نعومة الحواف</label><div class="sg"><input type="range" min="0" max="50" step="1" value="10" id="logo-chroma-softness"><span class="sv" id="logo-chroma-softness-v">10</span></div></div>
+            </div>
+          </div>
         </div>
         <div class="sec">
           <div class="sec-t">📊 الموجات الصوتية</div>
@@ -1554,7 +1583,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.7.0</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.7.1</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

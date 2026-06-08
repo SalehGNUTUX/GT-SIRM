@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v15 — release v0.7.0 (Recitation Video)
+// GT-SIRM Service Worker v16 — release v0.7.1 (logo chromakey + recvid color picker)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v15";
+const CACHE_VER = "gt-sirm-v16";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

@@ -1408,6 +1408,27 @@ function initEventListeners() {
     removeRecVid();
     toast("🗑️ تمّت إزالة الفيديو", "info", 1500);
   });
+  // v0.7.1 — presets ألوان خلفيّة الفيديو
+  const setRecvidBg = (hex) => {
+    const inp = $("recvid-bgcolor"); if (inp) { inp.value = hex; inp.dispatchEvent(new Event("change")); }
+  };
+  $("recvid-bgcolor-black")?.addEventListener("click", () => setRecvidBg("#000000"));
+  $("recvid-bgcolor-white")?.addEventListener("click", () => setRecvidBg("#ffffff"));
+  $("recvid-bgcolor-green")?.addEventListener("click", () => setRecvidBg("#00b140"));
+  $("recvid-bgcolor-blue")?.addEventListener("click", () => setRecvidBg("#0047bb"));
+
+  // v0.7.1 — Chromakey للشعار
+  const logoChromaOn = $("logo-chroma-on");
+  if (logoChromaOn) logoChromaOn.addEventListener("change", (e) => {
+    const ctrl = $("logo-chroma-ctrl");
+    if (ctrl) ctrl.style.display = e.target.checked ? "block" : "none";
+  });
+  const setLogoChroma = (hex) => {
+    const inp = $("logo-chroma-color"); if (inp) { inp.value = hex; inp.dispatchEvent(new Event("change")); }
+  };
+  $("logo-chroma-white")?.addEventListener("click", () => setLogoChroma("#ffffff"));
+  $("logo-chroma-black")?.addEventListener("click", () => setLogoChroma("#000000"));
+  $("logo-chroma-green")?.addEventListener("click", () => setLogoChroma("#00b140"));
   // أزرار presets
   $("chromakey-preset-green")?.addEventListener("click", () => {
     const inp = $("chromakey-color"); if (inp) { inp.value = "#00b140"; inp.dispatchEvent(new Event("change")); }
@@ -1478,6 +1499,8 @@ function initEventListeners() {
     { id: "recvid-scale", outId: "recvid-scale-v", unit: "%" },
     { id: "recvid-threshold", outId: "recvid-threshold-v", unit: "" },
     { id: "recvid-softness", outId: "recvid-softness-v", unit: "" },
+    { id: "logo-chroma-threshold", outId: "logo-chroma-threshold-v", unit: "" },
+    { id: "logo-chroma-softness", outId: "logo-chroma-softness-v", unit: "" },
     { id: "orn-op", outId: "orn-op-v", unit: "%" },
     { id: "dim", outId: "dim-v", unit: "%" },
     { id: "bright", outId: "bright-v", unit: "%" },
@@ -2606,11 +2629,38 @@ function drawLogo(ctx, W, H) {
     default: x = W - drawW - pad; y = H - drawH - pad;
   }
 
-  ctx.save();
-  ctx.globalAlpha = opacity;
-  ctx.globalCompositeOperation = "source-over";
-  ctx.drawImage(src, x, y, drawW, drawH);
-  ctx.restore();
+  // v0.7.1 — Chromakey للشعار
+  const chromaOn = ge("logo-chroma-on");
+  if (chromaOn) {
+    const tmp = getLogoChromaCanvas(Math.ceil(drawW), Math.ceil(drawH));
+    const tctx = tmp.getContext("2d", { willReadFrequently: true });
+    tctx.clearRect(0, 0, tmp.width, tmp.height);
+    tctx.drawImage(src, 0, 0, drawW, drawH);
+    removeBgColorFromRegion(tctx, 0, 0, Math.ceil(drawW), Math.ceil(drawH), {
+      colorHex: $("logo-chroma-color")?.value || "#ffffff",
+      threshold: parseFloat(gv("logo-chroma-threshold")) || 25,
+      softness: parseFloat(gv("logo-chroma-softness")) || 10,
+    });
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    ctx.drawImage(tmp, x, y);
+    ctx.restore();
+  } else {
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(src, x, y, drawW, drawH);
+    ctx.restore();
+  }
+}
+
+// v0.7.1 — canvas off-screen للشعار
+let _logoChromaCanvas = null;
+function getLogoChromaCanvas(w, h) {
+  if (!_logoChromaCanvas) _logoChromaCanvas = document.createElement("canvas");
+  if (_logoChromaCanvas.width !== w) _logoChromaCanvas.width = w;
+  if (_logoChromaCanvas.height !== h) _logoChromaCanvas.height = h;
+  return _logoChromaCanvas;
 }
 
 // ══════════════════════════════════════════════════════
@@ -2667,26 +2717,79 @@ function drawRecitationVideo(ctx, W, H) {
   ctx.drawImage(tmp, 0, 0);
 }
 
-function removeBlackBackground(ctx, x, y, w, h) {
-  const threshold = parseFloat(gv("recvid-threshold")) || 25;
-  const softness = parseFloat(gv("recvid-softness")) || 10;
-  // نقيس السطوع بالحدّ الأقصى للقنوات (يكشف النصّ الأبيض بشكل أفضل من luminance)
-  const lo = threshold * 2.55;
-  const hi = lo + softness * 2.55;
-  const range = Math.max(0.5, hi - lo);
+// v0.7.1 — خوارزميّة موحّدة لإزالة لون خلفيّة من منطقة canvas
+// تتكيّف تلقائياً: أسود/أبيض → سطوع، ألوان → YCbCr
+function removeBgColorFromRegion(ctx, x, y, w, h, opts) {
+  const colorHex = opts.colorHex || "#000000";
+  const { r: kR, g: kG, b: kB } = hexToRgb(colorHex);
+  const threshold = opts.threshold ?? 25;
+  const softness = opts.softness ?? 10;
+
+  // اكتشف هل المفتاح رماديّ (لتطبيق منطق السطوع)
+  const maxCh = Math.max(kR, kG, kB);
+  const minCh = Math.min(kR, kG, kB);
+  const isGrayscale = (maxCh - minCh) < 25;
+  const isDark = isGrayscale && maxCh < 60;
+  const isLight = isGrayscale && minCh > 195;
+
+  let mode, lo, hi, range;
+  let keyCb, keyCr, sim, smooth;
+  if (isDark) {
+    mode = "dark";
+    lo = threshold * 2.55;
+    hi = lo + softness * 2.55;
+    range = Math.max(0.5, hi - lo);
+  } else if (isLight) {
+    mode = "light";
+    hi = 255 - threshold * 2.55;
+    lo = hi - softness * 2.55;
+    range = Math.max(0.5, hi - lo);
+  } else {
+    // YCbCr للألوان المُشبَعة
+    mode = "ycbcr";
+    keyCb = -0.168736 * kR - 0.331264 * kG + 0.5 * kB + 128;
+    keyCr = 0.5 * kR - 0.418688 * kG - 0.081312 * kB + 128;
+    sim = threshold * 1.5;
+    smooth = Math.max(0.5, softness * 1.5);
+  }
+
   const img = ctx.getImageData(x, y, w, h);
   const d = img.data;
   const len = d.length;
   for (let i = 0; i < len; i += 4) {
     const r = d[i], g = d[i + 1], b = d[i + 2];
-    const lum = Math.max(r, g, b);
     let alpha;
-    if (lum <= lo) alpha = 0;
-    else if (lum >= hi) alpha = 1;
-    else alpha = (lum - lo) / range;
+    if (mode === "dark") {
+      const lum = Math.max(r, g, b);
+      if (lum <= lo) alpha = 0;
+      else if (lum >= hi) alpha = 1;
+      else alpha = (lum - lo) / range;
+    } else if (mode === "light") {
+      const lum = Math.min(r, g, b);
+      if (lum >= hi) alpha = 0;
+      else if (lum <= lo) alpha = 1;
+      else alpha = (hi - lum) / range;
+    } else {
+      const cb = -0.168736 * r - 0.331264 * g + 0.5 * b + 128;
+      const cr = 0.5 * r - 0.418688 * g - 0.081312 * b + 128;
+      const dx = cb - keyCb, dy = cr - keyCr;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < sim) alpha = 0;
+      else if (dist < sim + smooth) alpha = (dist - sim) / smooth;
+      else alpha = 1;
+    }
     d[i + 3] = d[i + 3] * alpha;
   }
   ctx.putImageData(img, x, y);
+}
+
+// alias قديم للتوافق العكسيّ
+function removeBlackBackground(ctx, x, y, w, h) {
+  removeBgColorFromRegion(ctx, x, y, w, h, {
+    colorHex: $("recvid-bgcolor")?.value || "#000000",
+    threshold: parseFloat(gv("recvid-threshold")) || 25,
+    softness: parseFloat(gv("recvid-softness")) || 10,
+  });
 }
 
 function onRecVidFile(input) {
