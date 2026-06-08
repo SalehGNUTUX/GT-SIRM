@@ -62,6 +62,8 @@ contextBridge.exposeInMainWorld("SIRM", {
   projectAssetCheck: (p)            => ipcRenderer.invoke("project-asset-check", p),
   projectAssetRead:  (p)            => ipcRenderer.invoke("project-asset-read", p),
   onProjectOpenFromDisk: (cb)       => ipcRenderer.on("project-open-from-disk", (_e, p) => cb(p)),
+  onRequestCloseConfirm: (cb)       => ipcRenderer.on("request-close-confirm", () => cb()),
+  confirmClose:          ()         => ipcRenderer.invoke("confirm-close"),
 
   // ── نسخة التطبيق ──────────────────────────────────
   version: process.env.npm_package_version || "1.2.0",

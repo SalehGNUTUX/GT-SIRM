@@ -7,6 +7,31 @@
 
 ---
 
+## [0.5.8] — 2026-06-07
+
+### 🐛 إصلاحات حرجة لحفظ المشاريع + ترتيب اسم السورة
+
+#### 1) المصادر الخارجيّة لم تكن تُستعاد عند الاستيراد
+- السبب: `restoreAssetFromDataURL` كانت تستدعي دوالّ غير موجودة (`handleBgImageFile`, `addBgVidItemFromFile`).
+- الحلّ: تستخدم الآن الدوالّ الموجودة فعلاً (`onBgMedia`, `onBgAudio`, `addBgVidItem`) عبر fake input.
+- أيضاً: `S.bgImgFile` و `S.bgAudioFile` لم تكن تُحفظ → أُضيفت إلى `onBgMedia` و `onBgAudio`.
+- أسماء حقول الفيديو صُحِّحت: `audioEnabled`/`audioGain` بدلاً من `audioOn`/`audioVol`.
+
+#### 2) حوار الإغلاق الثلاثيّ (إلغاء/حفظ/إنهاء دون حفظ)
+- في الديسكتوب: `beforeunload` لا يدعم حوارات مخصّصة في Electron.
+- الحلّ: `main.js` يعترض `close` event ويبعث IPC `request-close-confirm`.
+- الـ renderer يعرض modal بثلاث خيارات. عند اختيار "إنهاء" يبعث `confirmClose` IPC.
+- على الويب: `beforeunload` يعرض تنبيه المتصفّح الافتراضي (قيود الأمان).
+
+#### 3) ترتيب قسم "اسم السورة"
+- نُقل إلى **أعلى تبويب النصوص** (بدلاً من المنتصف).
+- يبقى مُحمّلاً بـ `data-module="quran"` فيختفي عند إلغاء الوحدة.
+- v0.5.8 إضافة: عند إلغاء وحدة القرآن → `sname-on.checked = false` تلقائياً.
+
+📦 PWA cache bump → v13.
+
+---
+
 ## [0.5.7] — 2026-06-07
 
 ### 💾 نظام حفظ/فتح المشاريع (.gtsirm)

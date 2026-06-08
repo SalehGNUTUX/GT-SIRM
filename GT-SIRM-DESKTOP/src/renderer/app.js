@@ -202,6 +202,13 @@ function applyModuleVisibility(state) {
 
   // عند إلغاء وحدة القرآن: تنظيف كامل ومنع جلب صوت/نصّ من المصدر
   if (!state.quran) {
+    // v0.5.8 — ألغِ تفعيل اسم السورة تلقائياً (يعتمد على بيانات وحدة القرآن)
+    const snameOn = document.getElementById("sname-on");
+    if (snameOn && snameOn.checked) {
+      snameOn.checked = false;
+      const snameCtrl = document.getElementById("sname-ctrl");
+      if (snameCtrl) snameCtrl.style.display = "none";
+    }
     // ١) انتقل بعيداً عن تبويب التلاوة إن كان نشطاً
     const recBtn = document.querySelector('.tab-btn[data-tab="rec"]');
     if (recBtn && recBtn.classList.contains("on")) {
@@ -3387,6 +3394,7 @@ function onBgAudio(input) {
   a.loop = ge("bg-loop");
   a.volume = gv("bg-vol") / 100;
   S.bgAudioEl = a;
+  S.bgAudioFile = file; // v0.5.8 — لحفظ المشروع
   resumeAudioCtx().then(ctx => {
     try {
       const src = ctx.createMediaElementSource(a);
@@ -3425,6 +3433,7 @@ function onBgMedia(input, type) {
     img.onload = () => { S.bgImg = img; toast("🖼️ تم تحميل الصورة", "success"); };
     img.onerror = () => toast("❌ فشل تحميل الصورة", "error");
     img.src = url;
+    S.bgImgFile = file; // v0.5.8 — لحفظ المشروع
     const thumb = $("bg-img-thumb");
     $("bg-img-preview").src = url;
     thumb.style.display = "block";
@@ -5950,7 +5959,7 @@ async function serializeProject() {
 
   // المصادر
   const assets = [];
-  // فيديوهات الخلفية
+  // فيديوهات الخلفية — حقول حقيقيّة: audioEnabled / audioGain
   if (Array.isArray(S.bgVidItems)) {
     for (let i = 0; i < S.bgVidItems.length; i++) {
       const item = S.bgVidItems[i];
@@ -5960,8 +5969,8 @@ async function serializeProject() {
         size: item.file?.size || 0,
         mime: item.file?.type || "video/mp4",
         active: i === S.bgVidActiveIdx,
-        audioOn: item.audioOn !== false,
-        audioVol: item.audioVol ?? 100,
+        audioEnabled: !!item.audioEnabled,
+        audioGain: item.audioGain ?? 0.5,
       };
       if (item.file && item.file.size <= ASSET_EMBED_MAX) {
         a.mode = "embedded";
@@ -6087,34 +6096,34 @@ async function deserializeProject(proj) {
 async function restoreAssetFromDataURL(asset) {
   const blob = dataURLToBlob(asset.dataURL);
   const file = new File([blob], asset.name, { type: asset.mime || blob.type });
+  const fakeInput = { files: [file], value: "" };
 
   if (asset.key === "logo") {
     try { localStorage.setItem("gt_sirm_logo_v1", asset.dataURL); } catch (_) {}
     if (typeof restoreLogo === "function") restoreLogo();
   } else if (asset.key === "bgImage") {
-    S.bgImgFile = file;
-    if (typeof handleBgImageFile === "function") {
-      await handleBgImageFile(file);
-    } else {
-      const url = URL.createObjectURL(file);
-      const img = new Image(); img.onload = () => { S.bgImg = img; };
-      img.src = url;
+    // استخدام الدالّة الموجودة onBgMedia مع fake input
+    if (typeof onBgMedia === "function") {
+      onBgMedia(fakeInput, "image");
     }
   } else if (asset.key === "bgAudio") {
-    S.bgAudioFile = file;
-    if (typeof handleBgAudioFile === "function") {
-      await handleBgAudioFile(file);
-    } else if (S.bgAudioEl) {
-      S.bgAudioEl.src = URL.createObjectURL(file);
+    if (typeof onBgAudio === "function") {
+      onBgAudio(fakeInput);
     }
   } else if (asset.key && asset.key.startsWith("bgVideo[")) {
-    if (typeof addBgVidItemFromFile === "function") {
-      await addBgVidItemFromFile(file, { audioOn: asset.audioOn, audioVol: asset.audioVol });
-    } else {
-      // fallback: build minimal item
-      S.bgVidItems = S.bgVidItems || [];
-      const url = URL.createObjectURL(file);
-      S.bgVidItems.push({ file, name: file.name, url, audioOn: asset.audioOn !== false, audioVol: asset.audioVol ?? 100 });
+    if (typeof addBgVidItem === "function") {
+      addBgVidItem(file);
+      // طبّق الإعدادات الصوتيّة على آخر عنصر بعد التحميل
+      setTimeout(() => {
+        if (Array.isArray(S.bgVidItems) && S.bgVidItems.length) {
+          const last = S.bgVidItems[S.bgVidItems.length - 1];
+          if (last) {
+            if (asset.audioEnabled !== undefined) last.audioEnabled = !!asset.audioEnabled;
+            if (asset.audioGain !== undefined) last.audioGain = asset.audioGain;
+            if (typeof renderBgVidList === "function") renderBgVidList();
+          }
+        }
+      }, 250);
     }
   }
 }
@@ -6291,6 +6300,33 @@ function stopAutoSave() {
   if (_autoSaveTimer) { clearInterval(_autoSaveTimer); _autoSaveTimer = null; }
 }
 
+// v0.5.8 — نافذة تأكيد الإغلاق بثلاث خيارات (الديسكتوب فقط)
+function showCloseConfirmModal() {
+  const modal = document.getElementById("close-confirm-modal");
+  if (!modal) {
+    // fallback: simple confirm dialog
+    if (confirm("لديك تغييرات غير محفوظة. هل تريد الحفظ قبل الإغلاق؟ (OK = حفظ، Cancel = تجاهل)")) {
+      saveProjectInteractive().then(() => { if (!S.projectDirty) window.SIRM?.confirmClose(); });
+    } else {
+      window.SIRM?.confirmClose();
+    }
+    return;
+  }
+  modal.style.display = "flex";
+
+  const close = () => { modal.style.display = "none"; };
+  document.getElementById("close-confirm-cancel").onclick = close;
+  document.getElementById("close-confirm-quit").onclick = () => {
+    close();
+    if (IS_DESKTOP_BUILD) window.SIRM.confirmClose();
+  };
+  document.getElementById("close-confirm-save").onclick = async () => {
+    close();
+    await saveProjectInteractive();
+    if (!S.projectDirty && IS_DESKTOP_BUILD) window.SIRM.confirmClose();
+  };
+}
+
 // ربط الأزرار + حماية الإغلاق + استعادة آخر مشروع
 function initProjectSystem() {
   document.getElementById("proj-save-btn")?.addEventListener("click", saveProjectInteractive);
@@ -6320,14 +6356,25 @@ function initProjectSystem() {
     }
   } catch (_) {}
 
-  // حماية الإغلاق
-  window.addEventListener("beforeunload", (e) => {
-    if (S.projectDirty) {
-      e.preventDefault();
-      e.returnValue = "لديك تغييرات غير محفوظة في المشروع. هل تريد الإغلاق؟";
-      return e.returnValue;
-    }
-  });
+  // v0.5.8 — حماية الإغلاق على الديسكتوب: modal مخصّص بثلاث خيارات
+  if (IS_DESKTOP_BUILD && window.SIRM.onRequestCloseConfirm) {
+    window.SIRM.onRequestCloseConfirm(() => {
+      if (!S.projectDirty) {
+        window.SIRM.confirmClose();
+        return;
+      }
+      showCloseConfirmModal();
+    });
+  } else {
+    // Web fallback
+    window.addEventListener("beforeunload", (e) => {
+      if (S.projectDirty) {
+        e.preventDefault();
+        e.returnValue = "لديك تغييرات غير محفوظة في المشروع.";
+        return e.returnValue;
+      }
+    });
+  }
 
   // الديسكتوب: استقبال فتح ملفّ من القرص
   if (IS_DESKTOP_BUILD && window.SIRM.onProjectOpenFromDisk) {

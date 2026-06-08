@@ -205,10 +205,24 @@ function createWindow() {
     }
   });
 
+  // v0.5.8 — حماية الإغلاق مع modal مخصّص
+  mainWindow.on("close", (e) => {
+    if (mainWindow._allowClose) return;
+    e.preventDefault();
+    mainWindow.webContents.send("request-close-confirm");
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
 }
+
+ipcMain.handle("confirm-close", () => {
+  if (mainWindow) {
+    mainWindow._allowClose = true;
+    mainWindow.close();
+  }
+});
 
 // v0.5.7 — فتح ملفّ .gtsirm من سطر الأوامر (Linux/Windows) أو File Association
 let _pendingProjectFile = null;

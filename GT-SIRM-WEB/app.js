@@ -236,6 +236,13 @@ function applyModuleVisibility(state) {
   });
 
   if (!state.quran) {
+    // v0.5.8 — ألغِ تفعيل اسم السورة تلقائياً
+    const snameOn = document.getElementById("sname-on");
+    if (snameOn && snameOn.checked) {
+      snameOn.checked = false;
+      const snameCtrl = document.getElementById("sname-ctrl");
+      if (snameCtrl) snameCtrl.style.display = "none";
+    }
     const recBtn = document.querySelector('.tab-btn[data-tab="rec"]');
     if (recBtn && recBtn.classList.contains("on")) {
       const sceneBtn = document.querySelector('.tab-btn[data-tab="scene"]');
@@ -3121,6 +3128,7 @@ function onBgAudio(input) {
   a.loop = ge("bg-loop");
   a.volume = gv("bg-vol") / 100;
   S.bgAudioEl = a;
+  S.bgAudioFile = file; // v0.5.8
   resumeAudioCtx().then(ctx => {
     try {
       const src = ctx.createMediaElementSource(a);
@@ -3153,6 +3161,7 @@ function onBgMedia(input, type) {
     img.onload = () => { S.bgImg = img; toast("🖼️ تم تحميل الصورة", "success"); };
     img.onerror = () => toast("❌ فشل تحميل الصورة", "error");
     img.src = url;
+    S.bgImgFile = file; // v0.5.8
     const thumb = $("bg-img-thumb");
     $("bg-img-preview").src = url;
     thumb.style.display = "block";
@@ -4704,8 +4713,8 @@ async function serializeProject() {
         size: item.file?.size || 0,
         mime: item.file?.type || "video/mp4",
         active: i === S.bgVidActiveIdx,
-        audioOn: item.audioOn !== false,
-        audioVol: item.audioVol ?? 100,
+        audioEnabled: !!item.audioEnabled,
+        audioGain: item.audioGain ?? 0.5,
       };
       if (item.file && item.file.size <= ASSET_EMBED_MAX) {
         a.mode = "embedded";
@@ -4820,33 +4829,28 @@ async function deserializeProject(proj) {
 async function restoreAssetFromDataURL(asset) {
   const blob = dataURLToBlob(asset.dataURL);
   const file = new File([blob], asset.name, { type: asset.mime || blob.type });
+  const fakeInput = { files: [file], value: "" };
 
   if (asset.key === "logo") {
     try { localStorage.setItem("gt_sirm_logo_v1", asset.dataURL); } catch (_) {}
     if (typeof restoreLogo === "function") restoreLogo();
   } else if (asset.key === "bgImage") {
-    S.bgImgFile = file;
-    if (typeof handleBgImageFile === "function") {
-      await handleBgImageFile(file);
-    } else {
-      const url = URL.createObjectURL(file);
-      const img = new Image(); img.onload = () => { S.bgImg = img; };
-      img.src = url;
-    }
+    if (typeof onBgMedia === "function") onBgMedia(fakeInput, "image");
   } else if (asset.key === "bgAudio") {
-    S.bgAudioFile = file;
-    if (typeof handleBgAudioFile === "function") {
-      await handleBgAudioFile(file);
-    } else if (S.bgAudioEl) {
-      S.bgAudioEl.src = URL.createObjectURL(file);
-    }
+    if (typeof onBgAudio === "function") onBgAudio(fakeInput);
   } else if (asset.key && asset.key.startsWith("bgVideo[")) {
-    if (typeof addBgVidItemFromFile === "function") {
-      await addBgVidItemFromFile(file, { audioOn: asset.audioOn, audioVol: asset.audioVol });
-    } else {
-      S.bgVidItems = S.bgVidItems || [];
-      const url = URL.createObjectURL(file);
-      S.bgVidItems.push({ file, name: file.name, url, audioOn: asset.audioOn !== false, audioVol: asset.audioVol ?? 100 });
+    if (typeof addBgVidItem === "function") {
+      addBgVidItem(file);
+      setTimeout(() => {
+        if (Array.isArray(S.bgVidItems) && S.bgVidItems.length) {
+          const last = S.bgVidItems[S.bgVidItems.length - 1];
+          if (last) {
+            if (asset.audioEnabled !== undefined) last.audioEnabled = !!asset.audioEnabled;
+            if (asset.audioGain !== undefined) last.audioGain = asset.audioGain;
+            if (typeof renderBgVidList === "function") renderBgVidList();
+          }
+        }
+      }, 250);
     }
   }
 }
@@ -4970,6 +4974,29 @@ function startAutoSave() {
 }
 function stopAutoSave() {
   if (_autoSaveTimer) { clearInterval(_autoSaveTimer); _autoSaveTimer = null; }
+}
+
+// v0.5.8 — modal تأكيد الإغلاق (الويب يستخدم beforeunload للحماية الأساسية،
+// و modal للأزرار اليدويّة من داخل التطبيق)
+function showCloseConfirmModal(onQuit) {
+  const modal = document.getElementById("close-confirm-modal");
+  if (!modal) {
+    if (confirm("لديك تغييرات غير محفوظة. حفظ قبل الإغلاق؟")) {
+      saveProjectInteractive().then(() => { if (onQuit) onQuit(); });
+    } else {
+      if (onQuit) onQuit();
+    }
+    return;
+  }
+  modal.style.display = "flex";
+  const close = () => { modal.style.display = "none"; };
+  document.getElementById("close-confirm-cancel").onclick = close;
+  document.getElementById("close-confirm-quit").onclick = () => { close(); if (onQuit) onQuit(); };
+  document.getElementById("close-confirm-save").onclick = async () => {
+    close();
+    await saveProjectInteractive();
+    if (!S.projectDirty && onQuit) onQuit();
+  };
 }
 
 function initProjectSystem() {

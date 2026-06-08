@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v12 — release v0.5.7 (حفظ المشاريع .gtsirm)
+// GT-SIRM Service Worker v13 — release v0.5.8 (إصلاحات حفظ المشاريع + ترتيب اسم السورة)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v12";
+const CACHE_VER = "gt-sirm-v13";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

@@ -723,6 +723,29 @@ body.offline .offline-badge{display:block}
 
       <!-- TEXTS -->
       <div class="tp" id="tab-txt">
+        <div class="sec" data-module="quran">
+          <div class="sec-t">📿 اسم السورة (عنوان علوي)</div>
+          <div class="tgg">
+            <span class="tgl">إظهار اسم السورة في الأعلى</span>
+            <label class="tg"><input type="checkbox" id="sname-on"><span class="tgs"></span></label>
+          </div>
+          <div id="sname-ctrl" style="display:none;padding-top:5px">
+            <div class="grid2">
+              <div class="fg"><label class="fl">الموضع العمودي</label><div class="sg"><input type="range" min="0" max="25" step="0.5" value="5" id="sname-y"><span class="sv" id="sname-y-v">5%</span></div></div>
+              <div class="fg"><label class="fl">حجم الخط</label><div class="sg"><input type="range" min="30" max="200" step="5" value="80" id="sname-size"><span class="sv" id="sname-size-v">80%</span></div></div>
+            </div>
+            <div class="grid2">
+              <div class="fg"><label class="fl">اللون</label><div class="cpg"><input type="color" id="sname-col" value="#f0c842"></div></div>
+              <div class="fg"><label class="fl">البادئة</label>
+                <select class="fc" id="sname-prefix">
+                  <option value="surah" selected>سُورَةُ [الاسم]</option>
+                  <option value="bare">[الاسم] فقط</option>
+                  <option value="hizb">حِزْبُ [الاسم]</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="sec">
           <div class="sec-t">🎬 عنوان المقطع <span class="badge-new">v0.5.6</span></div>
           <div class="tgg">
@@ -759,29 +782,6 @@ body.offline .offline-badge{display:block}
           <div class="fg"><label class="fl">حجم الخط</label><div class="sg"><input type="range" min="40" max="200" value="100" id="fsize"><span class="sv" id="fsize-v">100%</span></div></div>
           <div class="fg"><label class="fl">ارتفاع السطر</label><div class="sg"><input type="range" min="1" max="3" step=".1" value="1.6" id="lh"><span class="sv" id="lh-v">1.6</span></div></div>
           <div class="fg"><label class="fl">موضع النص</label><div class="rg"><div class="rc"><input type="radio" name="tpos" id="tp1" value="top"><label for="tp1"><span class="ri">⬆</span><span>أعلى</span></label></div><div class="rc"><input type="radio" name="tpos" id="tp2" value="center" checked><label for="tp2"><span class="ri">⬛</span><span>وسط</span></label></div><div class="rc"><input type="radio" name="tpos" id="tp3" value="bottom"><label for="tp3"><span class="ri">⬇</span><span>أسفل</span></label></div></div></div>
-        </div>
-        <div class="sec" data-module="quran">
-          <div class="sec-t">📿 اسم السورة (عنوان علوي)</div>
-          <div class="tgg">
-            <span class="tgl">إظهار اسم السورة في الأعلى</span>
-            <label class="tg"><input type="checkbox" id="sname-on"><span class="tgs"></span></label>
-          </div>
-          <div id="sname-ctrl" style="display:none;padding-top:5px">
-            <div class="grid2">
-              <div class="fg"><label class="fl">الموضع العمودي</label><div class="sg"><input type="range" min="0" max="25" step="0.5" value="5" id="sname-y"><span class="sv" id="sname-y-v">5%</span></div></div>
-              <div class="fg"><label class="fl">حجم الخط</label><div class="sg"><input type="range" min="30" max="200" step="5" value="80" id="sname-size"><span class="sv" id="sname-size-v">80%</span></div></div>
-            </div>
-            <div class="grid2">
-              <div class="fg"><label class="fl">اللون</label><div class="cpg"><input type="color" id="sname-col" value="#f0c842"></div></div>
-              <div class="fg"><label class="fl">البادئة</label>
-                <select class="fc" id="sname-prefix">
-                  <option value="surah" selected>سُورَةُ [الاسم]</option>
-                  <option value="bare">[الاسم] فقط</option>
-                  <option value="hizb">حِزْبُ [الاسم]</option>
-                </select>
-              </div>
-            </div>
-          </div>
         </div>
         <div class="sec">
           <div class="sec-t">🖋️ الخط</div>
@@ -1187,7 +1187,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.7</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.8</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>
@@ -1251,6 +1251,20 @@ body.offline .offline-badge{display:block}
 </div>
 
 <!-- WebCodecs muxers — classic scripts للعمل تحت file:// (بدون HTTP server) -->
+<!-- v0.5.8 — نافذة تأكيد الإغلاق -->
+<div id="close-confirm-modal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.78);align-items:center;justify-content:center">
+  <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:var(--r);padding:18px;max-width:420px;width:92%;direction:rtl;text-align:center">
+    <div style="font-size:36px;margin-bottom:8px">⚠️</div>
+    <h3 style="margin:0 0 8px 0;color:var(--al);font-size:15px">تغييرات غير محفوظة</h3>
+    <p style="font-size:11px;color:var(--t2);margin:0 0 16px 0">لديك تغييرات لم تُحفظ في المشروع. ماذا تريد أن تفعل؟</p>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <button class="btn btn-g" id="close-confirm-save" style="background:var(--al);color:#000;font-weight:700">💾 حفظ ثم إغلاق</button>
+      <button class="btn btn-g" id="close-confirm-quit" style="background:#a33">⚠️ إنهاء دون حفظ</button>
+      <button class="btn btn-g" id="close-confirm-cancel">↩️ إلغاء</button>
+    </div>
+  </div>
+</div>
+
 <!-- v0.5.7 — نافذة المصادر المفقودة عند الاستيراد -->
 <div id="missing-assets-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);align-items:center;justify-content:center">
   <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:var(--r);padding:16px;max-width:560px;width:92%;max-height:80vh;overflow-y:auto;direction:rtl">
