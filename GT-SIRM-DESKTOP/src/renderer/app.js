@@ -5876,3 +5876,486 @@ function toast(msg, type = "info", duration = 3600) {
   $("toast-c").appendChild(el);
   setTimeout(() => el.remove(), duration);
 }
+
+// ═══════════════════════════════════════════════════════
+//  v0.5.7 — حفظ/فتح المشاريع (.gtsirm)
+// ═══════════════════════════════════════════════════════
+
+const PROJECT_FORMAT = "GT-SIRM-Project";
+const PROJECT_FORMAT_VERSION = 1;
+const ASSET_EMBED_MAX = 50 * 1024 * 1024;        // 50MB لكلّ مصدر
+const PROJECT_APP_VERSION = "0.5.7";
+const IS_DESKTOP_BUILD = !!(window.SIRM && window.SIRM.isDesktop);
+
+let _autoSaveTimer = null;
+
+function markProjectDirty() {
+  S.projectDirty = true;
+  updateProjectTitle();
+}
+function clearProjectDirty() {
+  S.projectDirty = false;
+  updateProjectTitle();
+}
+function updateProjectTitle() {
+  const base = S.projectFileName || "بدون اسم";
+  const dirty = S.projectDirty ? " ●" : "";
+  document.title = `${base}${dirty} — GT-SIRM`;
+  const subtitle = document.getElementById("app-subtitle");
+  if (subtitle && S.projectFileName) {
+    subtitle.textContent = `📁 ${base}${dirty}`;
+  }
+}
+
+// تحويل File إلى dataURL
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+function dataURLToBlob(dataURL) {
+  const [meta, b64] = dataURL.split(",");
+  const mime = (meta.match(/data:([^;]+)/) || [, "application/octet-stream"])[1];
+  const bin = atob(b64);
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return new Blob([u8], { type: mime });
+}
+
+// جمع كلّ حالة المشروع
+async function serializeProject() {
+  // الإعدادات DOM
+  const byId = {}, byName = {};
+  document.querySelectorAll("input, select, textarea").forEach(el => {
+    if (el.type === "file" || el.type === "button" || el.type === "submit") return;
+    if (el.type === "checkbox" || el.type === "radio") {
+      if (el.id) byId[el.id] = el.checked;
+      if (el.name && (el.type !== "radio" || el.checked)) byName[el.name] = el.value;
+    } else {
+      if (el.id) byId[el.id] = el.value;
+    }
+  });
+
+  let modules = {};
+  try { modules = JSON.parse(localStorage.getItem("gt_sirm_modules_v1") || "{}"); } catch (_) {}
+
+  const freeText = {
+    text: document.getElementById("free-text-area")?.value || "",
+    perSlice: S.freePerSlice ? JSON.parse(JSON.stringify(S.freePerSlice)) : [],
+    audioTrim: S.freeAudioTrim ? { start: S.freeAudioTrim.start, end: S.freeAudioTrim.end } : null,
+  };
+
+  // المصادر
+  const assets = [];
+  // فيديوهات الخلفية
+  if (Array.isArray(S.bgVidItems)) {
+    for (let i = 0; i < S.bgVidItems.length; i++) {
+      const item = S.bgVidItems[i];
+      const a = {
+        key: `bgVideo[${i}]`,
+        name: item.name || `video-${i}.mp4`,
+        size: item.file?.size || 0,
+        mime: item.file?.type || "video/mp4",
+        active: i === S.bgVidActiveIdx,
+        audioOn: item.audioOn !== false,
+        audioVol: item.audioVol ?? 100,
+      };
+      if (item.file && item.file.size <= ASSET_EMBED_MAX) {
+        a.mode = "embedded";
+        a.dataURL = await fileToDataURL(item.file);
+      } else {
+        a.mode = "missing";
+        a.reason = item.file ? "حجم أكبر من 50MB" : "غير متوفّر";
+      }
+      assets.push(a);
+    }
+  }
+  // صورة خلفية
+  if (S.bgImgFile) {
+    const a = {
+      key: "bgImage",
+      name: S.bgImgFile.name || "bg.jpg",
+      size: S.bgImgFile.size || 0,
+      mime: S.bgImgFile.type || "image/jpeg",
+    };
+    if (S.bgImgFile.size <= ASSET_EMBED_MAX) {
+      a.mode = "embedded";
+      a.dataURL = await fileToDataURL(S.bgImgFile);
+    } else {
+      a.mode = "missing";
+      a.reason = "حجم أكبر من 50MB";
+    }
+    assets.push(a);
+  }
+  // صوت خلفية
+  if (S.bgAudioFile) {
+    const a = {
+      key: "bgAudio",
+      name: S.bgAudioFile.name || "audio.mp3",
+      size: S.bgAudioFile.size || 0,
+      mime: S.bgAudioFile.type || "audio/mpeg",
+    };
+    if (S.bgAudioFile.size <= ASSET_EMBED_MAX) {
+      a.mode = "embedded";
+      a.dataURL = await fileToDataURL(S.bgAudioFile);
+    } else {
+      a.mode = "missing";
+      a.reason = "حجم أكبر من 50MB";
+    }
+    assets.push(a);
+  }
+  // الشعار
+  const logoDataURL = localStorage.getItem("gt_sirm_logo_v1");
+  if (logoDataURL) {
+    assets.push({ key: "logo", name: "logo.png", mode: "embedded", dataURL: logoDataURL });
+  }
+
+  return {
+    format: PROJECT_FORMAT,
+    formatVersion: PROJECT_FORMAT_VERSION,
+    appVersion: PROJECT_APP_VERSION,
+    platform: IS_DESKTOP_BUILD ? "desktop" : "web",
+    savedAt: new Date().toISOString(),
+    settings: { byId, byName },
+    modules,
+    freeText,
+    assets,
+  };
+}
+
+// استعادة الحالة
+async function deserializeProject(proj) {
+  if (!proj || proj.format !== PROJECT_FORMAT) throw new Error("ملفّ مشروع غير صالح");
+
+  // الإعدادات
+  const byId = proj.settings?.byId || {};
+  const byName = proj.settings?.byName || {};
+  for (const [id, value] of Object.entries(byId)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (el.type === "checkbox") el.checked = !!value;
+    else if (el.type === "radio") { /* skip — يأتي عبر byName */ }
+    else el.value = value;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  for (const [name, value] of Object.entries(byName)) {
+    const els = document.querySelectorAll(`input[name="${name}"]`);
+    els.forEach(el => {
+      if (el.type === "radio") {
+        el.checked = (el.value === value);
+        if (el.checked) el.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+  }
+
+  // الوحدات
+  if (proj.modules) {
+    try { localStorage.setItem("gt_sirm_modules_v1", JSON.stringify(proj.modules)); } catch (_) {}
+    if (typeof initModuleManager === "function") initModuleManager();
+  }
+
+  // النصّ الحرّ
+  if (proj.freeText) {
+    const ta = document.getElementById("free-text-area");
+    if (ta && proj.freeText.text) ta.value = proj.freeText.text;
+    S.freePerSlice = proj.freeText.perSlice || [];
+    if (proj.freeText.audioTrim) S.freeAudioTrim = proj.freeText.audioTrim;
+    if (typeof renderPerSliceList === "function") renderPerSliceList();
+  }
+
+  // المصادر — تتبع المفقودة
+  const missing = [];
+  for (const a of (proj.assets || [])) {
+    if (a.mode === "embedded" && a.dataURL) {
+      await restoreAssetFromDataURL(a);
+    } else {
+      missing.push(a);
+    }
+  }
+  if (missing.length) {
+    showMissingAssetsModal(missing);
+  }
+
+  clearProjectDirty();
+  return { restored: (proj.assets || []).length - missing.length, missing: missing.length };
+}
+
+async function restoreAssetFromDataURL(asset) {
+  const blob = dataURLToBlob(asset.dataURL);
+  const file = new File([blob], asset.name, { type: asset.mime || blob.type });
+
+  if (asset.key === "logo") {
+    try { localStorage.setItem("gt_sirm_logo_v1", asset.dataURL); } catch (_) {}
+    if (typeof restoreLogo === "function") restoreLogo();
+  } else if (asset.key === "bgImage") {
+    S.bgImgFile = file;
+    if (typeof handleBgImageFile === "function") {
+      await handleBgImageFile(file);
+    } else {
+      const url = URL.createObjectURL(file);
+      const img = new Image(); img.onload = () => { S.bgImg = img; };
+      img.src = url;
+    }
+  } else if (asset.key === "bgAudio") {
+    S.bgAudioFile = file;
+    if (typeof handleBgAudioFile === "function") {
+      await handleBgAudioFile(file);
+    } else if (S.bgAudioEl) {
+      S.bgAudioEl.src = URL.createObjectURL(file);
+    }
+  } else if (asset.key && asset.key.startsWith("bgVideo[")) {
+    if (typeof addBgVidItemFromFile === "function") {
+      await addBgVidItemFromFile(file, { audioOn: asset.audioOn, audioVol: asset.audioVol });
+    } else {
+      // fallback: build minimal item
+      S.bgVidItems = S.bgVidItems || [];
+      const url = URL.createObjectURL(file);
+      S.bgVidItems.push({ file, name: file.name, url, audioOn: asset.audioOn !== false, audioVol: asset.audioVol ?? 100 });
+    }
+  }
+}
+
+// نافذة المصادر المفقودة
+function showMissingAssetsModal(missing) {
+  const modal = document.getElementById("missing-assets-modal");
+  const list = document.getElementById("missing-assets-list");
+  if (!modal || !list) return;
+  const replacements = new Map();
+  list.innerHTML = missing.map((a, i) => {
+    const acceptByKey = a.key === "bgImage" ? "image/*"
+                      : a.key === "bgAudio" ? "audio/*"
+                      : (a.key || "").startsWith("bgVideo") ? "video/*"
+                      : a.key === "logo" ? "image/*" : "*/*";
+    return `
+      <div style="padding:8px;background:var(--bg1);border-radius:var(--r);border:1px solid var(--b1)">
+        <div style="font-size:11px;color:var(--t1);margin-bottom:4px"><b style="color:var(--al)">${a.key}</b> — ${a.name || ""}</div>
+        <div style="font-size:10px;color:var(--t3);margin-bottom:6px">السبب: ${a.reason || "غير متوفّر"}</div>
+        <input type="file" data-missing-idx="${i}" accept="${acceptByKey}" style="font-size:10px;width:100%">
+      </div>
+    `;
+  }).join("");
+  list.querySelectorAll("input[data-missing-idx]").forEach(inp => {
+    inp.addEventListener("change", (e) => {
+      const idx = parseInt(inp.dataset.missingIdx);
+      const f = e.target.files?.[0];
+      if (f) replacements.set(idx, f);
+    });
+  });
+  modal.style.display = "flex";
+
+  const close = () => { modal.style.display = "none"; };
+  document.getElementById("missing-assets-skip").onclick = () => {
+    toast(`⏭️ تمّ تخطّي ${missing.length} مصدر`, "info", 1800);
+    close();
+  };
+  document.getElementById("missing-assets-apply").onclick = async () => {
+    let n = 0;
+    for (const [idx, file] of replacements.entries()) {
+      const orig = missing[idx];
+      const fakeAsset = { ...orig, dataURL: await fileToDataURL(file), mode: "embedded", name: file.name, mime: file.type };
+      await restoreAssetFromDataURL(fakeAsset);
+      n++;
+    }
+    toast(`✅ تمّ استبدال ${n} مصدر`, "success", 2000);
+    close();
+  };
+}
+
+// حفظ المشروع (يدويّاً أو إلى آخر مسار)
+async function saveProjectToPath(filePath) {
+  const proj = await serializeProject();
+  const json = JSON.stringify(proj, null, 2);
+  if (IS_DESKTOP_BUILD && filePath) {
+    const r = await window.SIRM.projectWrite(filePath, json);
+    if (!r.ok) { toast(`❌ فشل الحفظ: ${r.error}`, "error", 3000); return false; }
+    S.projectFilePath = filePath;
+    S.projectFileName = filePath.split(/[\\/]/).pop();
+    try { localStorage.setItem("gt_sirm_last_project", filePath); } catch (_) {}
+  } else {
+    // Web أو fallback: download blob
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const fname = (S.projectFileName || `gt-sirm-project-${Date.now()}.gtsirm`).replace(/\.json$/, ".gtsirm");
+    a.href = url; a.download = fname;
+    a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    S.projectFileName = fname;
+  }
+  clearProjectDirty();
+  return true;
+}
+
+async function saveProjectInteractive() {
+  if (IS_DESKTOP_BUILD) {
+    const fp = await window.SIRM.projectSaveDialog(S.projectFileName || null);
+    if (!fp) return;
+    const fixed = fp.endsWith(".gtsirm") ? fp : fp + ".gtsirm";
+    const ok = await saveProjectToPath(fixed);
+    if (ok) toast(`💾 تمّ الحفظ: ${fixed.split(/[\\/]/).pop()}`, "success", 2200);
+  } else {
+    const ok = await saveProjectToPath(null);
+    if (ok) toast("💾 تمّ تنزيل ملفّ المشروع", "success", 2200);
+  }
+}
+
+async function openProjectInteractive() {
+  if (S.projectDirty) {
+    if (!confirm("لديك تغييرات غير محفوظة. فتح مشروع آخر سيُلغيها. متابعة؟")) return;
+  }
+  if (IS_DESKTOP_BUILD) {
+    const fp = await window.SIRM.projectOpenDialog();
+    if (!fp) return;
+    await openProjectFromPath(fp);
+  } else {
+    document.getElementById("proj-open-input")?.click();
+  }
+}
+
+async function openProjectFromPath(filePath) {
+  if (!IS_DESKTOP_BUILD) return;
+  const r = await window.SIRM.projectRead(filePath);
+  if (!r.ok) { toast(`❌ فشل الفتح: ${r.error}`, "error", 3000); return; }
+  try {
+    const proj = JSON.parse(r.content);
+    const result = await deserializeProject(proj);
+    S.projectFilePath = filePath;
+    S.projectFileName = filePath.split(/[\\/]/).pop();
+    try { localStorage.setItem("gt_sirm_last_project", filePath); } catch (_) {}
+    updateProjectTitle();
+    toast(`📂 ${S.projectFileName} (${result.restored} مصدر${result.missing ? ` · ⚠️ ${result.missing} مفقود` : ""})`, result.missing ? "warn" : "success", 2800);
+  } catch (e) {
+    toast(`❌ ملفّ غير صالح: ${e.message}`, "error", 3000);
+  }
+}
+
+async function openProjectFromBlob(file) {
+  if (S.projectDirty) {
+    if (!confirm("لديك تغييرات غير محفوظة. متابعة؟")) return;
+  }
+  const text = await file.text();
+  try {
+    const proj = JSON.parse(text);
+    const result = await deserializeProject(proj);
+    S.projectFileName = file.name;
+    updateProjectTitle();
+    toast(`📂 ${file.name} (${result.restored} مصدر${result.missing ? ` · ⚠️ ${result.missing} مفقود` : ""})`, result.missing ? "warn" : "success", 2800);
+  } catch (e) {
+    toast(`❌ ملفّ غير صالح: ${e.message}`, "error", 3000);
+  }
+}
+
+// الحفظ التلقائي
+function startAutoSave() {
+  stopAutoSave();
+  const enabled = ge("autosave-on");
+  const intervalMin = parseInt(document.getElementById("autosave-interval")?.value || 5);
+  const status = document.getElementById("autosave-status");
+  if (!enabled) {
+    if (status) status.textContent = "⏸️ غير مُفعَّل";
+    try { localStorage.setItem("gt_sirm_autosave_on", "0"); } catch (_) {}
+    return;
+  }
+  if (!S.projectFilePath && IS_DESKTOP_BUILD) {
+    if (status) status.textContent = "⚠️ احفظ المشروع يدوياً أوّل مرة لتحديد المسار";
+    return;
+  }
+  try {
+    localStorage.setItem("gt_sirm_autosave_on", "1");
+    localStorage.setItem("gt_sirm_autosave_interval", String(intervalMin));
+  } catch (_) {}
+  const intervalMs = intervalMin * 60 * 1000;
+  if (status) status.textContent = `🟢 مُفعَّل — كلّ ${intervalMin} دقيقة`;
+  _autoSaveTimer = setInterval(async () => {
+    if (!S.projectDirty) return;
+    if (IS_DESKTOP_BUILD && S.projectFilePath) {
+      const ok = await saveProjectToPath(S.projectFilePath);
+      if (ok) toast(`💾 حفظ تلقائيّ — ${new Date().toLocaleTimeString("ar")}`, "info", 1500);
+    } else if (!IS_DESKTOP_BUILD) {
+      // ويب: حفظ في IndexedDB (مبسّط: localStorage مع حدّ أقصى)
+      try {
+        const proj = await serializeProject();
+        const json = JSON.stringify(proj);
+        if (json.length < 4_500_000) {
+          localStorage.setItem("gt_sirm_autosave_blob", json);
+          toast(`💾 حفظ تلقائيّ في المتصفّح — ${new Date().toLocaleTimeString("ar")}`, "info", 1500);
+        }
+      } catch (_) {}
+    }
+  }, intervalMs);
+}
+function stopAutoSave() {
+  if (_autoSaveTimer) { clearInterval(_autoSaveTimer); _autoSaveTimer = null; }
+}
+
+// ربط الأزرار + حماية الإغلاق + استعادة آخر مشروع
+function initProjectSystem() {
+  document.getElementById("proj-save-btn")?.addEventListener("click", saveProjectInteractive);
+  document.getElementById("proj-open-btn")?.addEventListener("click", openProjectInteractive);
+  document.getElementById("proj-open-input")?.addEventListener("change", (e) => {
+    const f = e.target.files?.[0]; if (f) openProjectFromBlob(f);
+    e.target.value = "";
+  });
+
+  const autosaveOn = document.getElementById("autosave-on");
+  if (autosaveOn) {
+    try { autosaveOn.checked = localStorage.getItem("gt_sirm_autosave_on") === "1"; } catch (_) {}
+    autosaveOn.addEventListener("change", () => {
+      const ctrl = document.getElementById("autosave-ctrl");
+      if (ctrl) ctrl.style.display = autosaveOn.checked ? "block" : "none";
+      startAutoSave();
+    });
+    autosaveOn.dispatchEvent(new Event("change"));
+  }
+  document.getElementById("autosave-interval")?.addEventListener("change", () => {
+    if (ge("autosave-on")) startAutoSave();
+  });
+  try {
+    const savedIv = localStorage.getItem("gt_sirm_autosave_interval");
+    if (savedIv && document.getElementById("autosave-interval")) {
+      document.getElementById("autosave-interval").value = savedIv;
+    }
+  } catch (_) {}
+
+  // حماية الإغلاق
+  window.addEventListener("beforeunload", (e) => {
+    if (S.projectDirty) {
+      e.preventDefault();
+      e.returnValue = "لديك تغييرات غير محفوظة في المشروع. هل تريد الإغلاق؟";
+      return e.returnValue;
+    }
+  });
+
+  // الديسكتوب: استقبال فتح ملفّ من القرص
+  if (IS_DESKTOP_BUILD && window.SIRM.onProjectOpenFromDisk) {
+    window.SIRM.onProjectOpenFromDisk((fp) => {
+      openProjectFromPath(fp);
+    });
+  }
+
+  // تتبّع التغييرات → markDirty
+  const trackInputs = () => {
+    document.querySelectorAll("input, select, textarea").forEach(el => {
+      if (el._dirtyTracked) return;
+      if (el.type === "button" || el.type === "submit" || el.type === "file") return;
+      el._dirtyTracked = true;
+      const handler = () => markProjectDirty();
+      el.addEventListener("change", handler);
+      if (el.type !== "checkbox" && el.type !== "radio") el.addEventListener("input", handler);
+    });
+  };
+  trackInputs();
+  // تتبّع لاحق للعناصر المُضافة ديناميكياً
+  setTimeout(trackInputs, 2000);
+
+  updateProjectTitle();
+}
+// تشغيل عند جاهزيّة الـ DOM
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => setTimeout(initProjectSystem, 100));
+} else {
+  setTimeout(initProjectSystem, 100);
+}

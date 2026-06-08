@@ -210,7 +210,49 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+// v0.5.7 — فتح ملفّ .gtsirm من سطر الأوامر (Linux/Windows) أو File Association
+let _pendingProjectFile = null;
+function extractProjectFileArg(argv) {
+  for (const a of argv.slice(1)) {
+    if (a && a.toLowerCase().endsWith(".gtsirm") && fs.existsSync(a)) return a;
+  }
+  return null;
+}
+_pendingProjectFile = extractProjectFileArg(process.argv);
+
+app.on("open-file", (event, filePath) => {
+  event.preventDefault();
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send("project-open-from-disk", filePath);
+  } else {
+    _pendingProjectFile = filePath;
+  }
+});
+
+// منع تشغيل عدّة نسخ: تمرير ملفّ المشروع للنسخة الموجودة
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_e, argv) => {
+    const f = extractProjectFileArg(argv);
+    if (f && mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send("project-open-from-disk", f);
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
+app.whenReady().then(() => {
+  createWindow();
+  if (_pendingProjectFile && mainWindow) {
+    mainWindow.webContents.once("did-finish-load", () => {
+      mainWindow.webContents.send("project-open-from-disk", _pendingProjectFile);
+      _pendingProjectFile = null;
+    });
+  }
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
@@ -871,3 +913,64 @@ ipcMain.handle("sys-info", () => ({
                                   home: os.homedir(),
                                   appVer: app.getVersion(),
 }));
+
+// ═══════════════════════════════════════════════════════
+//  v0.5.7 — حفظ/فتح المشاريع (.gtsirm)
+// ═══════════════════════════════════════════════════════
+
+ipcMain.handle("project-save-dialog", async (_e, defaultName) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "حفظ المشروع",
+    defaultPath: defaultName || `gt-sirm-project-${Date.now()}.gtsirm`,
+    filters: [{ name: "GT-SIRM Project", extensions: ["gtsirm"] }],
+  });
+  return result.canceled ? null : result.filePath;
+});
+
+ipcMain.handle("project-open-dialog", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "فتح مشروع",
+    properties: ["openFile"],
+    filters: [
+      { name: "GT-SIRM Project", extensions: ["gtsirm"] },
+      { name: "All Files", extensions: ["*"] },
+    ],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle("project-write", async (_e, filePath, jsonStr) => {
+  try {
+    fs.writeFileSync(filePath, jsonStr, "utf8");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("project-read", async (_e, filePath) => {
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    return { ok: true, content };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("project-asset-check", async (_e, filePath) => {
+  try {
+    const stats = fs.statSync(filePath);
+    return { exists: stats.isFile(), size: stats.size };
+  } catch (_) {
+    return { exists: false };
+  }
+});
+
+ipcMain.handle("project-asset-read", async (_e, filePath) => {
+  try {
+    const buf = fs.readFileSync(filePath);
+    return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});

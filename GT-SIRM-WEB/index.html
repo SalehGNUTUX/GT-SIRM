@@ -407,8 +407,11 @@ body.offline .offline-badge{display:block}
     </div>
   </div>
   <div class="hdr-r">
-    <button class="btn btn-g bsm" id="open-tpl-modal-btn">💾 <span>حفظ</span></button>
-    <button class="btn btn-g bsm" id="go-tpl-tab-btn">📂 <span>القوالب</span></button>
+    <button class="btn btn-g bsm" id="proj-save-btn" title="حفظ المشروع كملفّ .gtsirm">💾 <span>المشروع</span></button>
+    <button class="btn btn-g bsm" id="proj-open-btn" title="فتح ملفّ مشروع .gtsirm">📂 <span>فتح</span></button>
+    <input type="file" id="proj-open-input" accept=".gtsirm,.json" style="display:none">
+    <button class="btn btn-g bsm" id="open-tpl-modal-btn" title="قوالب الإعدادات">🎯 <span>قالب</span></button>
+    <button class="btn btn-g bsm" id="go-tpl-tab-btn" title="إدارة القوالب">📋</button>
     <button id="mob-toggle" title="الأدوات">🛠 الأدوات</button>
   </div>
 </header>
@@ -747,6 +750,16 @@ body.offline .offline-badge{display:block}
             </div>
           </div>
         </div>
+        <div class="sec">
+          <div class="sec-t">🎨 تنسيق النص</div>
+          <div class="grid2">
+            <div class="fg"><label class="fl">لون النص</label><div class="cpg"><input type="color" id="txt-col" value="#ffffff"></div></div>
+            <div class="fg"><label class="fl">لون الظل</label><div class="cpg"><input type="color" id="shd-col" value="#000000"></div></div>
+          </div>
+          <div class="fg"><label class="fl">حجم الخط</label><div class="sg"><input type="range" min="40" max="200" value="100" id="fsize"><span class="sv" id="fsize-v">100%</span></div></div>
+          <div class="fg"><label class="fl">ارتفاع السطر</label><div class="sg"><input type="range" min="1" max="3" step=".1" value="1.6" id="lh"><span class="sv" id="lh-v">1.6</span></div></div>
+          <div class="fg"><label class="fl">موضع النص</label><div class="rg"><div class="rc"><input type="radio" name="tpos" id="tp1" value="top"><label for="tp1"><span class="ri">⬆</span><span>أعلى</span></label></div><div class="rc"><input type="radio" name="tpos" id="tp2" value="center" checked><label for="tp2"><span class="ri">⬛</span><span>وسط</span></label></div><div class="rc"><input type="radio" name="tpos" id="tp3" value="bottom"><label for="tp3"><span class="ri">⬇</span><span>أسفل</span></label></div></div></div>
+        </div>
         <div class="sec" data-module="quran">
           <div class="sec-t">📿 اسم السورة (عنوان علوي)</div>
           <div class="tgg">
@@ -778,16 +791,6 @@ body.offline .offline-badge{display:block}
           </div>
           <div class="font-grid" id="font-grid"></div>
           <div class="fu-area"><input type="file" accept=".ttf,.otf,.woff,.woff2" multiple id="custom-fonts-input"><div class="fu-icon">➕</div><div class="fu-txt">رفع خط مخصص <span class="badge-new">جديد</span><br><small>TTF · OTF · WOFF · WOFF2</small></div></div>
-        </div>
-        <div class="sec">
-          <div class="sec-t">🎨 تنسيق النص</div>
-          <div class="grid2">
-            <div class="fg"><label class="fl">لون النص</label><div class="cpg"><input type="color" id="txt-col" value="#ffffff"></div></div>
-            <div class="fg"><label class="fl">لون الظل</label><div class="cpg"><input type="color" id="shd-col" value="#000000"></div></div>
-          </div>
-          <div class="fg"><label class="fl">حجم الخط</label><div class="sg"><input type="range" min="40" max="200" value="100" id="fsize"><span class="sv" id="fsize-v">100%</span></div></div>
-          <div class="fg"><label class="fl">ارتفاع السطر</label><div class="sg"><input type="range" min="1" max="3" step=".1" value="1.6" id="lh"><span class="sv" id="lh-v">1.6</span></div></div>
-          <div class="fg"><label class="fl">موضع النص</label><div class="rg"><div class="rc"><input type="radio" name="tpos" id="tp1" value="top"><label for="tp1"><span class="ri">⬆</span><span>أعلى</span></label></div><div class="rc"><input type="radio" name="tpos" id="tp2" value="center" checked><label for="tp2"><span class="ri">⬛</span><span>وسط</span></label></div><div class="rc"><input type="radio" name="tpos" id="tp3" value="bottom"><label for="tp3"><span class="ri">⬇</span><span>أسفل</span></label></div></div></div>
         </div>
         <div class="sec">
           <div class="sec-t">✨ تأثير النص</div>
@@ -1045,6 +1048,26 @@ body.offline .offline-badge{display:block}
       <!-- SETTINGS -->
       <div class="tp" id="tab-settings">
         <div class="sec">
+          <div class="sec-t">💾 الحفظ التلقائي <span class="badge-new">v0.5.7</span></div>
+          <div class="note">في النسخة الويب: الحفظ التلقائي يحدث في تخزين المتصفّح. صدّر يدوياً إلى ملفّ .gtsirm من حين لآخر للنسخ الاحتياطيّ.</div>
+          <div class="tgg">
+            <span class="tgl">تفعيل الحفظ التلقائي</span>
+            <label class="tg"><input type="checkbox" id="autosave-on"><span class="tgs"></span></label>
+          </div>
+          <div id="autosave-ctrl" style="display:none;padding-top:5px">
+            <div class="fg"><label class="fl">المدّة بين كلّ حفظ</label>
+              <select class="fc" id="autosave-interval">
+                <option value="1">كلّ دقيقة</option>
+                <option value="5" selected>كلّ 5 دقائق</option>
+                <option value="10">كلّ 10 دقائق</option>
+                <option value="15">كلّ 15 دقيقة</option>
+                <option value="30">كلّ 30 دقيقة</option>
+              </select>
+            </div>
+            <div id="autosave-status" style="font-size:10px;color:var(--t3);margin-top:4px;padding:4px 8px;background:var(--bg1);border-radius:var(--r)">⏸️ غير مُفعَّل</div>
+          </div>
+        </div>
+        <div class="sec">
           <div class="sec-t">📦 وحدات المحتوى</div>
           <div class="note">فعّل/ألغِ كلّ وحدة محتوى حسب حاجتك. التغييرات تُحفظ تلقائياً وتُطبَّق فوراً.</div>
           <div class="tgg">
@@ -1164,7 +1187,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.6</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.5.7</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>
@@ -1228,6 +1251,18 @@ body.offline .offline-badge{display:block}
 </div>
 
 <!-- WebCodecs muxers — classic scripts للعمل تحت file:// (بدون HTTP server) -->
+<!-- v0.5.7 — نافذة المصادر المفقودة عند الاستيراد -->
+<div id="missing-assets-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);align-items:center;justify-content:center">
+  <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:var(--r);padding:16px;max-width:560px;width:92%;max-height:80vh;overflow-y:auto;direction:rtl">
+    <h3 style="margin:0 0 10px 0;color:var(--al);font-size:15px">⚠️ مصادر مفقودة في المشروع</h3>
+    <p style="font-size:11px;color:var(--t2);margin:0 0 10px 0">المصادر التالية لم يستطع البرنامج العثور عليها. يمكنك اختيار بديل لكلّ منها أو تجاوزها.</p>
+    <div id="missing-assets-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:6px;justify-content:flex-end">
+      <button class="btn btn-g bsm" id="missing-assets-skip">تخطّي الكلّ</button>
+      <button class="btn btn-g bsm" id="missing-assets-apply">تطبيق</button>
+    </div>
+  </div>
+</div>
 <script src="mp4-muxer.js"></script>
 <script src="webm-muxer.js"></script>
 <script src="export-engine-web.js"></script>
