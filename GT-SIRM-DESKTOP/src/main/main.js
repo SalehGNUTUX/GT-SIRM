@@ -703,8 +703,13 @@ ipcMain.handle("ytdlp-download", async (event, opts) => {
 
   let args;
   if (type === "audio") {
-    // v0.8.9 — اسمح بتحديد صيغة الصوت (افتراضياً mp3؛ ogg مطلوب من قسم الصوت المخصّص في النصّ الحرّ)
-    const af = (audioFormat || "mp3").toLowerCase();
+    // v0.8.9 — اسمح بتحديد صيغة الصوت (افتراضياً mp3)
+    // v0.8.11 — yt-dlp لا يقبل "ogg" مباشرة؛ الكوديك المناسب لحاوية OGG هو "vorbis" (الناتج .ogg)
+    let af = (audioFormat || "mp3").toLowerCase();
+    if (af === "ogg") af = "vorbis";
+    // قائمة الصيغ المدعومة في yt-dlp
+    const allowed = ["best", "aac", "alac", "flac", "m4a", "mp3", "opus", "vorbis", "wav"];
+    if (!allowed.includes(af)) af = "mp3";
     args = ["-x", "--audio-format", af, "--audio-quality", "0", "-o", outTmpl, url];
   } else {
     args = [
