@@ -1934,9 +1934,9 @@ function initEventListeners() {
   const timingCtrl = $("timing-master-ctrl");
   if (timingMaster && timingCtrl) {
     try { timingMaster.checked = localStorage.getItem("gt_sirm_timing_master_on") !== "0"; } catch (_) {}
+    // v0.8.16 — عند الإلغاء: إخفاء كامل لأدوات التحكّم بدل التعتيم (ترشيد المساحة)
     const applyTimingMaster = () => {
-      timingCtrl.style.opacity = timingMaster.checked ? "1" : "0.4";
-      timingCtrl.style.pointerEvents = timingMaster.checked ? "" : "none";
+      timingCtrl.style.display = timingMaster.checked ? "" : "none";
       try { localStorage.setItem("gt_sirm_timing_master_on", timingMaster.checked ? "1" : "0"); } catch (_) {}
     };
     timingMaster.addEventListener("change", () => {
