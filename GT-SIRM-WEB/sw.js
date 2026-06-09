@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v33 — release v0.8.12 (paste + clear buttons)
+// GT-SIRM Service Worker v34 — release v0.8.13 (trim loops within range)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v33";
+const CACHE_VER = "gt-sirm-v34";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

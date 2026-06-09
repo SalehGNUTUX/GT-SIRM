@@ -953,22 +953,43 @@ function applyFreeAudioTrim() {
     if (typeof updateAyaUI === "function") updateAyaUI();
   }
 
-  // اضبط currentTime
+  // v0.8.13 — تعطيل الـloop الأصليّ + معالج يدويّ يلفّ داخل نطاق [start, end]
+  // العطل قديماً: loop=true يلفّ إلى 0 (الجزء المُجتزَأ) قبل أن يلتقط timeupdate نهاية trim
   if (S.bgAudioEl) {
-    try { S.bgAudioEl.currentTime = start; } catch (_) {}
-    // أضف معالج لإيقاف الصوت بلطف عند بلوغ end (بدلاً من التكرار حتى لا تنكسر المزامنة)
-    if (!S.bgAudioEl._freeTrimHandler) {
-      S.bgAudioEl._freeTrimHandler = () => {
-        if (!S.freeAudioTrim) return;
-        if (S.bgAudioEl.currentTime >= S.freeAudioTrim.end - 0.02) {
-          try {
-            S.bgAudioEl.pause();
-            S.bgAudioEl.currentTime = S.freeAudioTrim.end;
-          } catch (_) {}
-        }
-      };
-      S.bgAudioEl.addEventListener("timeupdate", S.bgAudioEl._freeTrimHandler);
+    try {
+      S.bgAudioEl.loop = false;
+      S.bgAudioEl.currentTime = start;
+    } catch (_) {}
+    // أزل المعالج القديم إن وُجد
+    if (S.bgAudioEl._freeTrimHandler) {
+      try { S.bgAudioEl.removeEventListener("timeupdate", S.bgAudioEl._freeTrimHandler); } catch (_) {}
     }
+    if (S.bgAudioEl._freeTrimEndedHandler) {
+      try { S.bgAudioEl.removeEventListener("ended", S.bgAudioEl._freeTrimEndedHandler); } catch (_) {}
+    }
+    // معالج timeupdate: عند بلوغ end، عُد إلى start (لفّ يدويّ داخل النطاق)
+    S.bgAudioEl._freeTrimHandler = () => {
+      if (!S.freeAudioTrim) return;
+      if (S.bgAudioEl.currentTime >= S.freeAudioTrim.end - 0.05) {
+        try {
+          S.bgAudioEl.currentTime = S.freeAudioTrim.start;
+          // إن كان قد توقّف لحدّ ما، أعد التشغيل
+          if (S.bgAudioEl.paused && !S.bgAudioEl.ended) {
+            S.bgAudioEl.play().catch(() => {});
+          }
+        } catch (_) {}
+      }
+    };
+    S.bgAudioEl.addEventListener("timeupdate", S.bgAudioEl._freeTrimHandler);
+    // معالج ended: إن وصل لنهاية الملفّ الفعليّة (trim.end ≈ duration)، اقفز للـstart
+    S.bgAudioEl._freeTrimEndedHandler = () => {
+      if (!S.freeAudioTrim) return;
+      try {
+        S.bgAudioEl.currentTime = S.freeAudioTrim.start;
+        S.bgAudioEl.play().catch(() => {});
+      } catch (_) {}
+    };
+    S.bgAudioEl.addEventListener("ended", S.bgAudioEl._freeTrimEndedHandler);
   }
 }
 
@@ -976,9 +997,17 @@ function clearFreeAudioTrim() {
   S.freeAudioTrim = null;
   const info = document.getElementById("free-audio-trim-info");
   if (info) info.textContent = "";
-  if (S.bgAudioEl && S.bgAudioEl._freeTrimHandler) {
-    try { S.bgAudioEl.removeEventListener("timeupdate", S.bgAudioEl._freeTrimHandler); } catch (_) {}
-    S.bgAudioEl._freeTrimHandler = null;
+  if (S.bgAudioEl) {
+    if (S.bgAudioEl._freeTrimHandler) {
+      try { S.bgAudioEl.removeEventListener("timeupdate", S.bgAudioEl._freeTrimHandler); } catch (_) {}
+      S.bgAudioEl._freeTrimHandler = null;
+    }
+    if (S.bgAudioEl._freeTrimEndedHandler) {
+      try { S.bgAudioEl.removeEventListener("ended", S.bgAudioEl._freeTrimEndedHandler); } catch (_) {}
+      S.bgAudioEl._freeTrimEndedHandler = null;
+    }
+    // أعد تفعيل loop الأصليّ
+    try { S.bgAudioEl.loop = ge("bg-loop"); } catch (_) {}
   }
 }
 
@@ -1373,6 +1402,18 @@ function initFreeTextEditor() {
     if (el) el.addEventListener("input", () => {
       if (ge("free-audio-trim-on")) applyFreeAudioTrim();
     });
+  });
+  // v0.8.13 — زرّ "📏" يملأ حقل النهاية بالمدّة الكاملة للمقطع المرفوع
+  document.getElementById("free-audio-trim-end-max")?.addEventListener("click", () => {
+    const endInp = document.getElementById("free-audio-trim-end");
+    if (!endInp) return;
+    if (!S.bgAudioEl || !isFinite(S.bgAudioEl.duration) || S.bgAudioEl.duration <= 0) {
+      toast?.("⚠️ ارفع الصوت أوّلاً ليُحسَب مدّته", "warn", 2000);
+      return;
+    }
+    endInp.value = S.bgAudioEl.duration.toFixed(1);
+    endInp.dispatchEvent(new Event("input", { bubbles: true }));
+    toast?.(`📏 المدّة الكاملة: ${S.bgAudioEl.duration.toFixed(1)}s`, "info", 1500);
   });
 
   // ── v0.5.1 — توگل المزامنة التلقائيّة ──

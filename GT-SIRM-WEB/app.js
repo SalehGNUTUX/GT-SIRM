@@ -885,17 +885,38 @@ function applyFreeAudioTrim() {
     if (typeof updateAyaInfo === "function") updateAyaInfo();
     if (typeof updateAyaUI === "function") updateAyaUI();
   }
+  // v0.8.13 — تعطيل loop الأصليّ + لفّ يدويّ داخل [start, end]
   if (S.bgAudioEl) {
-    try { S.bgAudioEl.currentTime = start; } catch (_) {}
-    if (!S.bgAudioEl._freeTrimHandler) {
-      S.bgAudioEl._freeTrimHandler = () => {
-        if (!S.freeAudioTrim) return;
-        if (S.bgAudioEl.currentTime >= S.freeAudioTrim.end - 0.05) {
-          S.bgAudioEl.currentTime = S.freeAudioTrim.start;
-        }
-      };
-      S.bgAudioEl.addEventListener("timeupdate", S.bgAudioEl._freeTrimHandler);
+    try {
+      S.bgAudioEl.loop = false;
+      S.bgAudioEl.currentTime = start;
+    } catch (_) {}
+    if (S.bgAudioEl._freeTrimHandler) {
+      try { S.bgAudioEl.removeEventListener("timeupdate", S.bgAudioEl._freeTrimHandler); } catch (_) {}
     }
+    if (S.bgAudioEl._freeTrimEndedHandler) {
+      try { S.bgAudioEl.removeEventListener("ended", S.bgAudioEl._freeTrimEndedHandler); } catch (_) {}
+    }
+    S.bgAudioEl._freeTrimHandler = () => {
+      if (!S.freeAudioTrim) return;
+      if (S.bgAudioEl.currentTime >= S.freeAudioTrim.end - 0.05) {
+        try {
+          S.bgAudioEl.currentTime = S.freeAudioTrim.start;
+          if (S.bgAudioEl.paused && !S.bgAudioEl.ended) {
+            S.bgAudioEl.play().catch(() => {});
+          }
+        } catch (_) {}
+      }
+    };
+    S.bgAudioEl.addEventListener("timeupdate", S.bgAudioEl._freeTrimHandler);
+    S.bgAudioEl._freeTrimEndedHandler = () => {
+      if (!S.freeAudioTrim) return;
+      try {
+        S.bgAudioEl.currentTime = S.freeAudioTrim.start;
+        S.bgAudioEl.play().catch(() => {});
+      } catch (_) {}
+    };
+    S.bgAudioEl.addEventListener("ended", S.bgAudioEl._freeTrimEndedHandler);
   }
 }
 
@@ -903,9 +924,16 @@ function clearFreeAudioTrim() {
   S.freeAudioTrim = null;
   const info = document.getElementById("free-audio-trim-info");
   if (info) info.textContent = "";
-  if (S.bgAudioEl && S.bgAudioEl._freeTrimHandler) {
-    try { S.bgAudioEl.removeEventListener("timeupdate", S.bgAudioEl._freeTrimHandler); } catch (_) {}
-    S.bgAudioEl._freeTrimHandler = null;
+  if (S.bgAudioEl) {
+    if (S.bgAudioEl._freeTrimHandler) {
+      try { S.bgAudioEl.removeEventListener("timeupdate", S.bgAudioEl._freeTrimHandler); } catch (_) {}
+      S.bgAudioEl._freeTrimHandler = null;
+    }
+    if (S.bgAudioEl._freeTrimEndedHandler) {
+      try { S.bgAudioEl.removeEventListener("ended", S.bgAudioEl._freeTrimEndedHandler); } catch (_) {}
+      S.bgAudioEl._freeTrimEndedHandler = null;
+    }
+    try { S.bgAudioEl.loop = ge("bg-loop"); } catch (_) {}
   }
 }
 
@@ -1235,6 +1263,18 @@ function initFreeTextEditor() {
     if (el) el.addEventListener("input", () => {
       if (ge("free-audio-trim-on")) applyFreeAudioTrim();
     });
+  });
+  // v0.8.13 — زرّ "📏" يملأ حقل النهاية بالمدّة الكاملة
+  document.getElementById("free-audio-trim-end-max")?.addEventListener("click", () => {
+    const endInp = document.getElementById("free-audio-trim-end");
+    if (!endInp) return;
+    if (!S.bgAudioEl || !isFinite(S.bgAudioEl.duration) || S.bgAudioEl.duration <= 0) {
+      toast?.("⚠️ ارفع الصوت أوّلاً ليُحسَب مدّته", "warn", 2000);
+      return;
+    }
+    endInp.value = S.bgAudioEl.duration.toFixed(1);
+    endInp.dispatchEvent(new Event("input", { bubbles: true }));
+    toast?.(`📏 المدّة الكاملة: ${S.bgAudioEl.duration.toFixed(1)}s`, "info", 1500);
   });
 
   const autoSyncCb = document.getElementById("free-auto-sync");

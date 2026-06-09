@@ -512,7 +512,12 @@ body.offline .offline-badge{display:block}
             <div id="free-audio-trim-ctrl" style="display:none;margin-top:4px">
               <div class="grid2">
                 <div class="fg"><label class="fl">من (ثانية)</label><input type="number" class="fc" id="free-audio-trim-start" min="0" step="0.1" value="0"></div>
-                <div class="fg"><label class="fl">إلى (ثانية)</label><input type="number" class="fc" id="free-audio-trim-end" min="0.1" step="0.1" value="30"></div>
+                <div class="fg"><label class="fl">إلى (ثانية)</label>
+                  <div style="display:flex;gap:3px">
+                    <input type="number" class="fc" id="free-audio-trim-end" min="0.1" step="0.1" value="30" style="flex:1">
+                    <button class="btn btn-g bsm" id="free-audio-trim-end-max" type="button" title="استخدم المدّة الكاملة للمقطع" style="padding:3px 8px">📏</button>
+                  </div>
+                </div>
               </div>
               <div id="free-audio-trim-info" style="font-size:10px;color:var(--al);margin-top:4px"></div>
               <div class="note" style="margin-top:4px">📐 المدّة المختارة <strong>تُفرض على النصّ</strong> — تُمدَّد مدّة الشرائح تلقائياً ليُغطّي النصّ كامل الصوت.</div>
@@ -1327,7 +1332,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.12</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.13</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>
