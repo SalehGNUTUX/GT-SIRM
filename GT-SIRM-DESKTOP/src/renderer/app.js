@@ -160,14 +160,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 //  quran · hadith · azkar · asma · duas · hikam
 //  النصّ الحرّ (free) متاح دائماً ولا توگل له.
 // ══════════════════════════════════════════════════════
+// v0.8.14 — المنع المتبادل: وحدة واحدة فقط مفعّلة في الإعدادات
 const MODULES = {
   quran:  { default: true,  label: "القرآن الكريم",        impl: true  },
-  hadith: { default: true,  label: "الحديث الشريف",         impl: true  },
-  azkar:  { default: true,  label: "الأذكار",               impl: false },
-  asma:   { default: true,  label: "أسماء الله الحسنى",     impl: false },
-  duas:   { default: true,  label: "الأدعية المأثورة",      impl: false },
-  hikam:  { default: true,  label: "الحِكَم والمواعظ",       impl: false },
-  free:   { default: true,  label: "النصّ الحرّ",            impl: true,  alwaysOn: true },
+  hadith: { default: false, label: "الحديث الشريف",         impl: true  },
+  azkar:  { default: false, label: "الأذكار",               impl: false },
+  asma:   { default: false, label: "أسماء الله الحسنى",     impl: false },
+  duas:   { default: false, label: "الأدعية المأثورة",      impl: false },
+  hikam:  { default: false, label: "الحِكَم والمواعظ",       impl: false },
+  free:   { default: false, label: "النصّ الحرّ",            impl: true  },
 };
 const MODULES_KEY = "gt_sirm_modules_v1";
 const FREE_TPL_KEY = "gt_sirm_free_templates_v1";
@@ -250,21 +251,33 @@ function isModuleActive(key) {
 }
 
 function initModuleManager() {
-  // أوّلاً: اضبط .module-active على كل العناصر المعلَّمة وفق الحالة المحفوظة
   const state = loadModuleStates();
+  // v0.8.14 — تأكد من المنع المتبادل: لو الحالة المحفوظة بها أكثر من وحدة مفعّلة
+  // (مهاجَرة من إصدارات سابقة)، أبقِ أوّل وحدة مفعّلة فقط
+  enforceSingleModuleActive(state);
   applyModuleVisibility(state);
 
-  // اربط toggles في تبويب الإعدادات
   for (const key of Object.keys(MODULES)) {
     const cb = document.getElementById(`mod-${key}`);
     if (!cb) continue;
     cb.checked = state[key];
-    // وحدات غير مُنفَّذة بعد: مُعطَّلة (disabled) — لكن الحالة محفوظة للمستقبل
     if (!MODULES[key].impl) {
       cb.disabled = true;
-      cb.checked = state[key]; // اعرض الحالة كما هي
+      cb.checked = state[key];
     }
     cb.addEventListener("change", () => {
+      // v0.8.14 — المنع المتبادل
+      if (cb.checked) {
+        // ألغِ كل الوحدات الأخرى
+        for (const otherKey of Object.keys(MODULES)) {
+          if (otherKey === key) continue;
+          if (state[otherKey]) {
+            state[otherKey] = false;
+            const otherCb = document.getElementById(`mod-${otherKey}`);
+            if (otherCb && otherCb.checked) otherCb.checked = false;
+          }
+        }
+      }
       state[key] = cb.checked;
       persistModuleStates(state);
       applyModuleVisibility(state);
@@ -274,7 +287,20 @@ function initModuleManager() {
       }
     });
   }
-  console.log("[SIRM] Module Manager initialized:", state);
+  console.log("[SIRM] Module Manager initialized (mutex):", state);
+}
+
+// v0.8.14 — يُبقي أوّل وحدة مفعّلة فقط ضمن الحالة
+function enforceSingleModuleActive(state) {
+  let found = null;
+  for (const key of Object.keys(MODULES)) {
+    if (state[key]) {
+      if (found === null) found = key;
+      else state[key] = false;
+    }
+  }
+  // إن لم يكن هناك أيّ مفعّلة، فعّل القرآن افتراضياً
+  if (found === null) state.quran = true;
 }
 
 // ══════════════════════════════════════════════════════

@@ -546,8 +546,8 @@ body.offline .offline-badge{display:block}
 
         <!-- ═══ Free Text Editor + Custom Audio (v0.4.4) ═══ -->
         <div class="sec" data-module="free">
-          <div class="sec-t">✍️ النصّ الحرّ &amp; 🎤 صوت مخصّص <span class="badge-new">v0.4</span></div>
-          <div class="note">للأذكار والأدعية والأحاديث والحِكَم — أو لاستخدام تلاوة محليّة مع آيات القرآن.</div>
+          <div class="sec-t">✍️ النصّ الحرّ <span class="badge-new">v0.4</span></div>
+          <div class="note">للأذكار والأدعية والأحاديث والحِكَم — اكتب نصّك يدوياً ليُعرض كشرائح.</div>
 
           <!-- ── Toggle A: محرّر النصّ الحرّ ── -->
           <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px;margin-top:6px">
@@ -589,63 +589,6 @@ body.offline .offline-badge{display:block}
               </div>
             </details>
           </div>
-
-          <!-- ── Toggle B: صوت تلاوة مخصّص ── -->
-          <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px;margin-top:10px">
-            <span class="tgl">🎤 استخدام صوت تلاوة مخصّص<br><small style="color:var(--t3)">يستبدل صوت القارئ الافتراضيّ بصوت محلّيّ — يعمل مع آيات القرآن أو النصّ الحرّ</small></span>
-            <label class="tg"><input type="checkbox" id="free-audio-on"><span class="tgs"></span></label>
-          </div>
-
-          <div id="free-audio-ctrl" style="display:none;margin-top:6px;padding:8px;background:var(--bg2);border:1px dashed var(--b1);border-radius:var(--r)">
-            <div class="fu-area" id="free-audio-drop">
-              <input type="file" id="free-audio-file" accept="audio/*,video/*">
-              <div class="fu-icon">🎵</div>
-              <div class="fu-txt">اسحب أو اختر ملفّ صوت/فيديو<br><small>MP3 · WAV · M4A · OGG · MP4 (يُستخرج الصوت)</small></div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">
-              <div id="free-audio-info" style="font-size:10px;color:var(--t3);flex:1;min-width:60%"></div>
-              <button class="btn btn-g bsm" id="free-audio-restart-btn" style="display:none;padding:3px 10px">↺ إعادة</button>
-              <button class="btn btn-g bsm" id="free-audio-remove-btn" style="display:none;padding:3px 10px;color:var(--danger)">🗑️ إزالة</button>
-            </div>
-
-            <!-- v0.8.9 — تنزيل yt-dlp مباشر (سطح المكتب فقط) -->
-            <details id="free-audio-dl-wrap" style="margin-top:6px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px">
-              <summary style="cursor:pointer;color:var(--t2);font-size:12px;font-weight:600">⬇️ تنزيل صوت من رابط (يوتيوب/فيديو → OGG)</summary>
-              <div style="padding:6px 0">
-                <div style="display:flex;gap:4px">
-                  <input type="text" class="fc" id="free-audio-dl-url" placeholder="https://youtube.com/watch?v=... أو رابط فيديو مباشر" style="flex:1">
-                  <button class="btn btn-g bsm" id="free-audio-dl-paste" type="button" title="لصق من الحافظة" style="padding:3px 8px">📋</button>
-                  <button class="btn btn-g bsm" id="free-audio-dl-clear" type="button" title="مسح" style="padding:3px 8px;color:var(--danger)">✕</button>
-                </div>
-                <div style="display:flex;gap:8px;margin-top:5px;font-size:11px">
-                  <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="temporary" checked> 📁 مؤقت (/tmp)</label>
-                  <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="permanent"> 💾 دائم</label>
-                </div>
-                <div id="free-audio-dl-path-row" style="display:none;gap:5px;margin-top:5px">
-                  <input type="text" class="fc" id="free-audio-dl-path" placeholder="مسار الحفظ" style="flex:1">
-                  <button class="btn btn-g bsm" id="free-audio-dl-browse" style="padding:3px 10px">📁</button>
-                </div>
-                <div style="display:flex;gap:5px;margin-top:5px">
-                  <button class="btn btn-p bsm" id="free-audio-dl-btn" style="flex:1">⬇️ تنزيل و اعتماد كصوت</button>
-                  <button class="btn btn-g bsm" id="free-audio-dl-cancel" style="display:none;padding:3px 10px;color:var(--danger)">✕</button>
-                </div>
-                <div id="free-audio-dl-log" style="font-size:10px;color:var(--t3);margin-top:5px;max-height:90px;overflow-y:auto;font-family:monospace;background:var(--bg2);padding:4px 6px;border-radius:var(--r);display:none"></div>
-              </div>
-            </details>
-
-            <!-- ✂️ تقطيع زمني للصوت المخصّص -->
-            <div class="tgg" style="margin-top:6px">
-              <span class="tgl">✂️ تحديد مدّة مخصّصة من الصوت</span>
-              <label class="tg"><input type="checkbox" id="free-audio-trim-on"><span class="tgs"></span></label>
-            </div>
-            <div id="free-audio-trim-ctrl" style="display:none;margin-top:4px">
-              <div class="grid2">
-                <div class="fg"><label class="fl">من (ثانية)</label><input type="number" class="fc" id="free-audio-trim-start" min="0" step="0.1" value="0"></div>
-                <div class="fg"><label class="fl">إلى (ثانية)</label>
-                  <div style="display:flex;gap:3px">
-                    <input type="number" class="fc" id="free-audio-trim-end" min="0.1" step="0.1" value="30" style="flex:1">
-                    <button class="btn btn-g bsm" id="free-audio-trim-end-max" type="button" title="استخدم المدّة الكاملة للمقطع" style="padding:3px 8px">📏</button>
-                  </div>
                 </div>
               </div>
               <div id="free-audio-trim-info" style="font-size:10px;color:var(--al);margin-top:4px"></div>
@@ -746,6 +689,69 @@ body.offline .offline-badge{display:block}
             <div id="hadith-prev-narrator" style="font-size:9px;color:var(--al);margin-top:6px;direction:rtl"></div>
             <div id="hadith-prev-source" style="font-size:9px;color:var(--t3);margin-top:2px;direction:rtl"></div>
           </div>
+
+        <!-- ═══ v0.8.14 — 🎤 صوت تلاوة مخصّص (قسم مستقلّ بعد الحديث) ═══ -->
+        <div class="sec">
+          <div class="sec-t">🎤 صوت تلاوة مخصّص <span class="badge-new">v0.8</span></div>
+          <div class="note">يستبدل صوت القارئ الافتراضيّ بصوت محلّيّ أو مُنزَّل — يعمل مع جميع المصادر (القرآن، الحديث، النصّ الحرّ، الوحدات المستقبليّة).</div>
+
+          <!-- ── Toggle B: صوت تلاوة مخصّص ── -->
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px;margin-top:10px">
+            <span class="tgl">🎤 استخدام صوت تلاوة مخصّص<br><small style="color:var(--t3)">يستبدل صوت القارئ الافتراضيّ بصوت محلّيّ — يعمل مع آيات القرآن أو النصّ الحرّ</small></span>
+            <label class="tg"><input type="checkbox" id="free-audio-on"><span class="tgs"></span></label>
+          </div>
+
+          <div id="free-audio-ctrl" style="display:none;margin-top:6px;padding:8px;background:var(--bg2);border:1px dashed var(--b1);border-radius:var(--r)">
+            <div class="fu-area" id="free-audio-drop">
+              <input type="file" id="free-audio-file" accept="audio/*,video/*">
+              <div class="fu-icon">🎵</div>
+              <div class="fu-txt">اسحب أو اختر ملفّ صوت/فيديو<br><small>MP3 · WAV · M4A · OGG · MP4 (يُستخرج الصوت)</small></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">
+              <div id="free-audio-info" style="font-size:10px;color:var(--t3);flex:1;min-width:60%"></div>
+              <button class="btn btn-g bsm" id="free-audio-restart-btn" style="display:none;padding:3px 10px">↺ إعادة</button>
+              <button class="btn btn-g bsm" id="free-audio-remove-btn" style="display:none;padding:3px 10px;color:var(--danger)">🗑️ إزالة</button>
+            </div>
+
+            <!-- v0.8.9 — تنزيل yt-dlp مباشر (سطح المكتب فقط) -->
+            <details id="free-audio-dl-wrap" style="margin-top:6px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px">
+              <summary style="cursor:pointer;color:var(--t2);font-size:12px;font-weight:600">⬇️ تنزيل صوت من رابط (يوتيوب/فيديو → OGG)</summary>
+              <div style="padding:6px 0">
+                <div style="display:flex;gap:4px">
+                  <input type="text" class="fc" id="free-audio-dl-url" placeholder="https://youtube.com/watch?v=... أو رابط فيديو مباشر" style="flex:1">
+                  <button class="btn btn-g bsm" id="free-audio-dl-paste" type="button" title="لصق من الحافظة" style="padding:3px 8px">📋</button>
+                  <button class="btn btn-g bsm" id="free-audio-dl-clear" type="button" title="مسح" style="padding:3px 8px;color:var(--danger)">✕</button>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:5px;font-size:11px">
+                  <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="temporary" checked> 📁 مؤقت (/tmp)</label>
+                  <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="permanent"> 💾 دائم</label>
+                </div>
+                <div id="free-audio-dl-path-row" style="display:none;gap:5px;margin-top:5px">
+                  <input type="text" class="fc" id="free-audio-dl-path" placeholder="مسار الحفظ" style="flex:1">
+                  <button class="btn btn-g bsm" id="free-audio-dl-browse" style="padding:3px 10px">📁</button>
+                </div>
+                <div style="display:flex;gap:5px;margin-top:5px">
+                  <button class="btn btn-p bsm" id="free-audio-dl-btn" style="flex:1">⬇️ تنزيل و اعتماد كصوت</button>
+                  <button class="btn btn-g bsm" id="free-audio-dl-cancel" style="display:none;padding:3px 10px;color:var(--danger)">✕</button>
+                </div>
+                <div id="free-audio-dl-log" style="font-size:10px;color:var(--t3);margin-top:5px;max-height:90px;overflow-y:auto;font-family:monospace;background:var(--bg2);padding:4px 6px;border-radius:var(--r);display:none"></div>
+              </div>
+            </details>
+
+            <!-- ✂️ تقطيع زمني للصوت المخصّص -->
+            <div class="tgg" style="margin-top:6px">
+              <span class="tgl">✂️ تحديد مدّة مخصّصة من الصوت</span>
+              <label class="tg"><input type="checkbox" id="free-audio-trim-on"><span class="tgs"></span></label>
+            </div>
+            <div id="free-audio-trim-ctrl" style="display:none;margin-top:4px">
+              <div class="grid2">
+                <div class="fg"><label class="fl">من (ثانية)</label><input type="number" class="fc" id="free-audio-trim-start" min="0" step="0.1" value="0"></div>
+                <div class="fg"><label class="fl">إلى (ثانية)</label>
+                  <div style="display:flex;gap:3px">
+                    <input type="number" class="fc" id="free-audio-trim-end" min="0.1" step="0.1" value="30" style="flex:1">
+                    <button class="btn btn-g bsm" id="free-audio-trim-end-max" type="button" title="استخدم المدّة الكاملة للمقطع" style="padding:3px 8px">📏</button>
+                  </div>
+        </div>
           <div class="tgg" style="margin-top:6px">
             <span class="tgl">🧹 تنظيف مقدّمة الإسناد عند التطبيق<br><small style="color:var(--t3)">يحذف "عن فلان قال سمعت رسول الله ﷺ" ليبدأ النصّ من المتن — مناسب عند رفع صوت يلقي نصّ الحديث مباشرةً</small></span>
             <label class="tg"><input type="checkbox" id="hadith-clean-isnad" checked><span class="tgs"></span></label>
@@ -1681,7 +1687,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.13</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.14</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
