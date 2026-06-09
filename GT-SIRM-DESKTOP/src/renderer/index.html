@@ -691,6 +691,36 @@ body.offline .offline-badge{display:block}
           <button class="btn btn-g bfw" id="open-per-slice-from-hadith" style="margin-top:5px;display:none;background:var(--bg2)">🎚️ ضبط توقيت كلّ شريحة ↓</button>
         </div>
 
+        <!-- ═══ v0.9.0 — وحدة الأذكار (مأخوذة من GT-HISNMUSLIM/حصن المسلم) ═══ -->
+        <div class="sec" data-module="azkar">
+          <div class="sec-t">🕊️ الأذكار <span class="badge-new">v0.9</span></div>
+          <div class="note">132 فئة · 267 ذكراً من حصن المسلم — مأخوذة من مشروع <a href="https://github.com/SalehGNUTUX/GT_HISNMUSLIM" target="_blank" style="color:var(--p)">GT-HISNMUSLIM</a> بإذن المؤلِّف.</div>
+
+          <div class="fg" style="margin-top:6px"><label class="fl">الفئة</label>
+            <select class="fc" id="azkar-category"></select>
+          </div>
+          <div class="fg" style="display:flex;gap:5px;align-items:center;margin-top:5px">
+            <input type="text" class="fc" id="azkar-search" placeholder="🔍 بحث في الأذكار (بدون تشكيل)" style="flex:1">
+            <button class="btn btn-g bsm" id="azkar-search-clear" title="مسح" style="display:none;padding:3px 10px">✕</button>
+          </div>
+          <select class="fc" id="azkar-select" size="6" style="margin-top:5px;font-family:inherit;direction:rtl"></select>
+
+          <div id="azkar-preview" style="display:none;margin-top:6px;padding:8px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r)">
+            <div id="azkar-prev-meta" style="font-size:10px;color:var(--al);margin-bottom:4px"></div>
+            <div id="azkar-prev-text" style="font-size:13px;line-height:1.8;direction:rtl"></div>
+            <div id="azkar-prev-count" style="font-size:11px;color:var(--t3);margin-top:4px;font-weight:600"></div>
+          </div>
+
+          <!-- توگل تكرار الذكر حسب count -->
+          <div class="tgg" style="margin-top:6px;background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px">
+            <span class="tgl">🔁 إنشاء شريحة لكلّ تكرار<br><small style="color:var(--t3)">إن كان الذكر "3 مرّات" يُولَّد 3 شرائح، أو شريحة واحدة بنصّ "× 3"</small></span>
+            <label class="tg"><input type="checkbox" id="azkar-repeat-slices" checked><span class="tgs"></span></label>
+          </div>
+
+          <button class="btn btn-a bfw" id="apply-azkar-btn" style="margin-top:6px;display:none">📥 تطبيق الذكر كنصّ المقطع</button>
+          <button class="btn btn-g bfw" id="open-per-slice-from-azkar" style="margin-top:5px;display:none;background:var(--bg2)">🎚️ ضبط توقيت كلّ شريحة ↓</button>
+        </div>
+
         <!-- ═══ v0.8.14 — 🎤 صوت تلاوة مخصّص (قسم مستقلّ بعد الحديث) ═══ -->
         <div class="sec">
           <div class="sec-t">🎤 صوت تلاوة مخصّص <span class="badge-new">v0.8</span></div>
@@ -1812,6 +1842,7 @@ body.offline .offline-badge{display:block}
   </div>
 </div>
 <script src="hadith-data.js"></script>
+<script src="azkar-data.js"></script>
 <script src="export-engine.js"></script>
 <script src="ytdlp-panel.js"></script>
 <script src="app.js"></script>

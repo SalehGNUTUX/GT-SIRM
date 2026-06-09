@@ -135,6 +135,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initModuleManager();   // v0.3.0 — يجب أن يأتي قبل restoreAllSettings
   initFreeTextEditor();  // v0.4.0 — محرّر النصّ الحرّ
   initHadithModule();    // v0.8.0 — وحدة الحديث الشريف
+  initAzkarModule();     // v0.9.0 — وحدة الأذكار (مأخوذة من GT-HISNMUSLIM)
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
 
   // ⚠️ الترتيب مهم: نستعيد الإعدادات بعد تسجيل المستمعين فقط
@@ -165,7 +166,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 const MODULES = {
   quran:  { default: true,  label: "القرآن الكريم",        impl: true  },
   hadith: { default: false, label: "الحديث الشريف",         impl: true  },
-  azkar:  { default: false, label: "الأذكار",               impl: false },
+  azkar:  { default: false, label: "الأذكار",               impl: true  },
   asma:   { default: false, label: "أسماء الله الحسنى",     impl: false },
   duas:   { default: false, label: "الأدعية المأثورة",      impl: false },
   hikam:  { default: false, label: "الحِكَم والمواعظ",       impl: false },
@@ -1282,6 +1283,176 @@ function cleanHadithIsnad(text) {
     }
   }
   return text;
+}
+
+// ══════════════════════════════════════════════════════
+//  وحدة الأذكار (v0.9.0)
+//  المصدر: GT-HISNMUSLIM (مأخوذة بإذن المؤلِّف نفسه)
+//  https://github.com/SalehGNUTUX/GT_HISNMUSLIM
+// ══════════════════════════════════════════════════════
+function initAzkarModule() {
+  const data = window.AZKAR_DATA;
+  if (!data || !Array.isArray(data.categories)) return;
+  const catSel = document.getElementById("azkar-category");
+  const searchInp = document.getElementById("azkar-search");
+  const azkarSel = document.getElementById("azkar-select");
+  const preview = document.getElementById("azkar-preview");
+  const applyBtn = document.getElementById("apply-azkar-btn");
+  const slicesBtn = document.getElementById("open-per-slice-from-azkar");
+  const searchClear = document.getElementById("azkar-search-clear");
+  if (!catSel || !searchInp || !azkarSel) return;
+
+  // املأ قائمة الفئات
+  catSel.innerHTML = "";
+  data.categories.forEach(cat => {
+    const o = document.createElement("option");
+    o.value = cat.id;
+    o.textContent = `${cat.icon || "🕊️"} ${cat.name} (${cat.items.length})`;
+    catSel.appendChild(o);
+  });
+
+  let currentCat = data.categories[0];
+  let currentZikr = null;
+
+  function renderAzkarList(filter) {
+    azkarSel.innerHTML = "";
+    const normFilter = filter ? normalizeArabic(filter.trim()) : "";
+    let items = currentCat.items;
+    if (normFilter) {
+      items = items.filter(it => normalizeArabic(it.text).includes(normFilter));
+    }
+    items.forEach((it) => {
+      const o = document.createElement("option");
+      o.value = it.n;
+      // أوّل 80 حرف من النصّ
+      const preview = it.text.length > 80 ? it.text.slice(0, 78) + "…" : it.text;
+      o.textContent = `${it.n}. ${preview}`;
+      azkarSel.appendChild(o);
+    });
+    if (!items.length) {
+      const o = document.createElement("option");
+      o.disabled = true;
+      o.textContent = "— لا نتائج —";
+      azkarSel.appendChild(o);
+    }
+  }
+
+  function selectZikr() {
+    const id = parseInt(azkarSel.value);
+    const it = currentCat.items.find(x => x.n === id);
+    if (!it) return;
+    currentZikr = it;
+    const metaEl = document.getElementById("azkar-prev-meta");
+    const textEl = document.getElementById("azkar-prev-text");
+    const countEl = document.getElementById("azkar-prev-count");
+    if (metaEl) metaEl.textContent = `${currentCat.icon || "🕊️"} ${currentCat.name} · ذكر رقم ${it.n}`;
+    if (textEl) textEl.textContent = it.text;
+    if (countEl) countEl.textContent = it.count > 1 ? `🔁 يُكرَّر ${it.count} مرّات` : "";
+    preview.style.display = "block";
+    applyBtn.style.display = "block";
+    slicesBtn.style.display = "none";
+  }
+
+  catSel.addEventListener("change", () => {
+    const id = parseInt(catSel.value);
+    currentCat = data.categories.find(c => c.id === id) || data.categories[0];
+    searchInp.value = "";
+    if (searchClear) searchClear.style.display = "none";
+    renderAzkarList("");
+    preview.style.display = "none";
+    applyBtn.style.display = "none";
+    slicesBtn.style.display = "none";
+  });
+
+  searchInp.addEventListener("input", () => {
+    renderAzkarList(searchInp.value);
+    if (searchClear) searchClear.style.display = searchInp.value ? "inline-block" : "none";
+  });
+  if (searchClear) searchClear.addEventListener("click", () => {
+    searchInp.value = "";
+    searchClear.style.display = "none";
+    renderAzkarList("");
+  });
+
+  azkarSel.addEventListener("change", selectZikr);
+  azkarSel.addEventListener("dblclick", () => {
+    selectZikr();
+    if (currentZikr) applyAzkar(currentZikr, currentCat);
+  });
+  applyBtn.addEventListener("click", () => {
+    if (currentZikr) applyAzkar(currentZikr, currentCat);
+  });
+  slicesBtn.addEventListener("click", openPerSliceSmart);
+
+  // ابدأ بالفئة الأولى
+  renderAzkarList("");
+}
+
+function applyAzkar(z, cat) {
+  // منع التداخل: ألغِ النصّ الحرّ وامسح بقايا الحديث
+  const freeTextOn = document.getElementById("free-text-on");
+  if (freeTextOn && freeTextOn.checked) {
+    freeTextOn.checked = false;
+    freeTextOn.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  const hadithPrev = document.getElementById("hadith-preview");
+  const hadithApply = document.getElementById("apply-hadith-btn");
+  const hadithSlices = document.getElementById("open-per-slice-from-hadith");
+  if (hadithPrev) hadithPrev.style.display = "none";
+  if (hadithApply) hadithApply.style.display = "none";
+  if (hadithSlices) hadithSlices.style.display = "none";
+
+  // قسّم الذكر إلى شرائح
+  const text = z.text.trim();
+  const repeatSlices = !!ge("azkar-repeat-slices");
+  const slices = [];
+  if (z.count > 1 && repeatSlices) {
+    // شريحة لكلّ تكرار
+    for (let i = 1; i <= z.count; i++) {
+      slices.push(text);
+    }
+  } else if (z.count > 1) {
+    // شريحة واحدة بعدد التكرار
+    slices.push(`${text}\n\n(${z.count}× مرّات)`);
+  } else {
+    // شريحة واحدة بدون تكرار
+    slices.push(text);
+  }
+
+  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  const effDur = calcEffectiveSliceDuration(slices.length, baseDur);
+
+  S.verses = slices.map((t, i) => ({
+    text: t,
+    numberInSurah: i + 1,
+    number: i + 1,
+    audio: null,
+    audioSecondary: [],
+    manualDuration: effDur,
+    free: true,
+    azkar: true,
+    enabled: true,
+    source: `حصن المسلم · ${cat.name} · رقم ${z.n}${z.count > 1 ? " (×" + z.count + ")" : ""}`,
+  }));
+  S.ayaDurations = S.verses.map(v => v.manualDuration);
+  S.currentAya = 0;
+  S.elapsed = 0;
+  S.useFreeAsSource = true;
+  S.translations = [];
+
+  S.freePerSlice = slices.map(t => ({ text: t, dur: effDur, enabled: true }));
+  if (typeof renderPerSliceList === "function") renderPerSliceList();
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+
+  const slicesBtn = document.getElementById("open-per-slice-from-azkar");
+  if (slicesBtn) slicesBtn.style.display = "block";
+
+  const audioActive = getActiveAudioDuration() != null;
+  const msg = audioActive
+    ? `🕊️ تمّ تطبيق الذكر (${slices.length} شريحة، ${effDur.toFixed(1)}s/شريحة 🔄 متزامن مع الصوت)`
+    : `🕊️ تمّ تطبيق الذكر (${slices.length} شريحة، ${effDur.toFixed(1)}s)`;
+  toast(msg, "success", 3000);
 }
 
 function applyHadith(h, coll) {

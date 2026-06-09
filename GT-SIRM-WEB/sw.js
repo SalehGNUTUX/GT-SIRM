@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v37 — إصدار v0.8.16 (النصّ الحرّ أداة دائمة)
+// GT-SIRM Service Worker v38 — إصدار v0.9.0 (وحدة الأذكار من GT-HISNMUSLIM)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v37";
+const CACHE_VER = "gt-sirm-v38";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل
@@ -24,6 +24,7 @@ const OPTIONAL = [
   // بيانات الخطوط المضمَّنة (تعمل تحت file:// و HTTP)
   "./fonts-data.js",
   "./hadith-data.js",
+  "./azkar-data.js",
   "./fonts/fonts.json",
   // Google Fonts CSS (احتياط للخطوط البعيدة)
   "https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Reem+Kufi:wght@400;700&family=Scheherazade+New:wght@400;700&family=Cairo:wght@300;400;600;700;900&family=Noto+Naskh+Arabic:wght@400;700&family=Lateef:wght@400;700&family=Harmattan:wght@400;700&family=Markazi+Text:ital,wght@0,400;0,700;1,400&family=Aref+Ruqaa&display=swap"
