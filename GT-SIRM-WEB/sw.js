@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v23 — release v0.8.2 (Riyad full + cross-source search + isnad cleaner)
+// GT-SIRM Service Worker v24 — release v0.8.3 (standalone per-slice + isnad + tashkeel)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v23";
+const CACHE_VER = "gt-sirm-v24";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

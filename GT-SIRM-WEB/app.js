@@ -340,16 +340,26 @@ function calcEffectiveSliceDuration(numSlices, baseDur) {
 }
 
 // ── v0.5.1 — التوقيت التفصيلي ──
+// v0.8.3 — يبني القائمة من المصدر النشط
 function buildPerSliceList() {
+  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  const old = Array.isArray(S.freePerSlice) ? S.freePerSlice : [];
+  if (Array.isArray(S.verses) && S.verses.length && S.verses.every(v => v && (v.free || v.hadith))) {
+    S.freePerSlice = S.verses.map((v, i) => ({
+      text: v.text || "",
+      dur: (old[i] && old[i].text === v.text) ? old[i].dur : (v.manualDuration || baseDur),
+      enabled: v.enabled !== false,
+    }));
+    return S.freePerSlice;
+  }
   const ta = document.getElementById("free-text-area");
   if (!ta) return [];
   const slices = parseFreeText(ta.value);
-  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
   const effDur = calcEffectiveSliceDuration(slices.length, baseDur);
-  const old = Array.isArray(S.freePerSlice) ? S.freePerSlice : [];
   S.freePerSlice = slices.map((text, i) => ({
     text,
     dur: (old[i] && old[i].text === text) ? old[i].dur : effDur,
+    enabled: true,
   }));
   return S.freePerSlice;
 }
@@ -512,6 +522,13 @@ function applyFreeText() {
     toast?.("⚠️ لا يوجد نصّ لتطبيقه", "warn", 2000);
     return;
   }
+  // v0.8.3
+  const hadithPrev = document.getElementById("hadith-preview");
+  const hadithApply = document.getElementById("apply-hadith-btn");
+  const hadithSlices = document.getElementById("open-per-slice-from-hadith");
+  if (hadithPrev) hadithPrev.style.display = "none";
+  if (hadithApply) hadithApply.style.display = "none";
+  if (hadithSlices) hadithSlices.style.display = "none";
   const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
   const source = document.getElementById("free-source")?.value?.trim() || "";
   const perSliceMode = !!ge("free-per-slice") && Array.isArray(S.freePerSlice) && S.freePerSlice.length === slices.length;
@@ -1052,6 +1069,12 @@ function cleanHadithIsnad(text) {
 }
 
 function applyHadith(h, coll) {
+  // v0.8.3 — منع التداخل
+  const freeTextOn = document.getElementById("free-text-on");
+  if (freeTextOn && freeTextOn.checked) {
+    freeTextOn.checked = false;
+    freeTextOn.dispatchEvent(new Event("change", { bubbles: true }));
+  }
   const cleanIsnad = ge("hadith-clean-isnad");
   let text = h.text.trim();
   if (cleanIsnad) text = cleanHadithIsnad(text);
