@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("SIRM", {
   extractBgFrames:  (opts)  => ipcRenderer.invoke("extract-bg-frames", opts),
   cleanupBgFrames:  (dir)   => ipcRenderer.invoke("cleanup-bg-frames", dir),
   readTmpFile:      (p)     => ipcRenderer.invoke("read-tmp-file", p),
+  readDownloadedFile: (p)   => ipcRenderer.invoke("read-downloaded-file", p),
 
   // ── yt-dlp ────────────────────────────────────────
   ytdlpDownload:    (opts)  => ipcRenderer.invoke("ytdlp-download", opts),

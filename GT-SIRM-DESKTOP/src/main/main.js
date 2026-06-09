@@ -623,6 +623,16 @@ ipcMain.handle("read-tmp-file", async (_e, filePath) => {
   return fs.readFileSync(resolved);
 });
 
+// v0.8.8 — قراءة ملف من أيّ مسار (للوسائط التي ينزّلها yt-dlp إلى مسار يختاره المستخدم)
+// يعيد {buffer, name, size} حتى يستطيع الـrenderer بناء File منه
+ipcMain.handle("read-downloaded-file", async (_e, filePath) => {
+  if (!filePath || typeof filePath !== "string") return null;
+  const resolved = path.resolve(filePath);
+  if (!fs.existsSync(resolved)) throw new Error("file does not exist: " + resolved);
+  const buf = fs.readFileSync(resolved);
+  return { buffer: buf, name: path.basename(resolved), size: buf.length };
+});
+
 ipcMain.handle("ffmpeg-encode", async (event, opts) => {
   const { inputPath, outputPath, codec, crf, preset, audioCodec, audioBitrate } = opts;
   const ffmpegPath = await getBinPath("ffmpeg");

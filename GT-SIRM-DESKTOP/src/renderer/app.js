@@ -6062,15 +6062,35 @@ async function runUnifiedDownload() {
 async function applyDownloadedMedia(filePath, type, srcUrl) {
   const fileUrl = "file://" + filePath;
   if (type === "video") {
-    if (S.bgVid) { try { S.bgVid.pause(); } catch(_){} S.bgVid = null; }
-    const vid = document.createElement("video");
-    vid.src = fileUrl; vid.loop = true; vid.muted = true; vid.playsInline = true;
-    vid.currentTime = 0;
-    // لا تشغيل تلقائي — يبدأ عند الضغط على تشغيل
-    S.bgVid = vid;
-    const vBtn = document.querySelector('input[name="bgt"][value="video"]');
-    if (vBtn) { vBtn.checked = true; onBgTypeChange(); }
-    toast("✅ الفيديو جاهز كخلفية — اضغط ▶️ للبدء", "success");
+    // v0.8.8 — اقرأ بايتات الملفّ المُنزَّل وأنشئ File حقيقيّاً ثم اذهب عبر addBgVidItem
+    // حتى تظهر بطاقة التحكّم (صوت/موضع/حذف) في القائمة بدلاً من ضبط S.bgVid فقط
+    try {
+      const meta = await window.SIRM.readDownloadedFile(filePath);
+      if (!meta || !meta.buffer) throw new Error("read-downloaded-file returned null");
+      // ابنِ File من البايتات
+      const ext = (filePath.split(".").pop() || "mp4").toLowerCase();
+      const mime = ext === "webm" ? "video/webm"
+                 : ext === "mkv"  ? "video/x-matroska"
+                 : ext === "mov"  ? "video/quicktime"
+                 : "video/mp4";
+      const file = new File([meta.buffer], meta.name || `downloaded.${ext}`, { type: mime });
+      // اختَر نوع الخلفيّة "فيديو" أوّلاً ثمّ أضف الملفّ للقائمة (يستدعي renderBgVidList)
+      const vBtn = document.querySelector('input[name="bgt"][value="video"]');
+      if (vBtn) { vBtn.checked = true; onBgTypeChange(); }
+      addBgVidItem(file);
+      toast("✅ الفيديو أُضيف للقائمة كخلفية", "success", 3000);
+    } catch (e) {
+      console.error("applyDownloadedMedia video:", e);
+      // fallback: السلوك القديم — يعمل دون بطاقة تحكّم
+      if (S.bgVid) { try { S.bgVid.pause(); } catch(_){} S.bgVid = null; }
+      const vid = document.createElement("video");
+      vid.src = fileUrl; vid.loop = true; vid.muted = true; vid.playsInline = true;
+      vid.currentTime = 0;
+      S.bgVid = vid;
+      const vBtn = document.querySelector('input[name="bgt"][value="video"]');
+      if (vBtn) { vBtn.checked = true; onBgTypeChange(); }
+      toast("⚠️ الفيديو جاهز لكن بطاقة التحكّم لم تظهر (" + e.message + ")", "warn", 4000);
+    }
   } else if (type === "audio") {
     if (S.bgAudioEl) { try { S.bgAudioEl.pause(); } catch(_){} }
     S.bgAudioEl = new Audio(fileUrl);
