@@ -36,3 +36,11 @@ npm-debug.log*
 tmp/
 .tmp/
 *.local
+
+# v0.8.12 — Android build artifacts
+GT-SIRM-WEB/www/
+GT-SIRM-WEB/android/
+GT-SIRM-WEB/dist-apk/
+GT-SIRM-WEB/node_modules/
+GT-SIRM-DESKTOP/dist/
+GT-SIRM-DESKTOP/node_modules/

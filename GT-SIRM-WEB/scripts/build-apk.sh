@@ -63,6 +63,16 @@ if [ ! -d node_modules ]; then
     npm install
 fi
 
+# ── تحضير مجلّد www/ (v0.8.12) ──────────────────────────────────
+# Capacitor الحديث يرفض webDir="." — يجب أن يكون مجلّد فرعيّ
+echo "📂 تحضير www/..."
+rm -rf www
+mkdir -p www
+for item in index.html app.js export-engine-web.js mp4-muxer.js webm-muxer.js fonts-data.js hadith-data.js manifest.json sw.js fonts GT-SIRM-icons; do
+    [ -e "$item" ] && cp -r "$item" www/
+done
+echo "   ✅ نُسخت أصول الويب إلى www/ ($(du -sh www/ | cut -f1))"
+
 # ── إنشاء مجلد android/ إن لم يوجد ──────────────────────────────
 if [ ! -d android ]; then
     echo "📱 إنشاء مشروع Android لأوّل مرّة..."

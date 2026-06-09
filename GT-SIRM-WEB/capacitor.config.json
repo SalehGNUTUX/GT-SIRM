@@ -1,8 +1,7 @@
 {
   "appId": "org.gnutux.gtsirm",
   "appName": "GT-SIRM",
-  "webDir": ".",
-  "bundledWebRuntime": false,
+  "webDir": "www",
   "server": {
     "androidScheme": "https",
     "cleartext": false
