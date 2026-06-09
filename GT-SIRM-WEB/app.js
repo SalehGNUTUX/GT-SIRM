@@ -197,7 +197,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 //  quran · hadith · azkar · asma · duas · hikam
 //  النصّ الحرّ (free) متاح دائماً ولا توگل له.
 // ══════════════════════════════════════════════════════
-// v0.8.14 — المنع المتبادل
+// v0.8.16 — النصّ الحرّ أداة دائمة لا وحدة
 const MODULES = {
   quran:  { default: true,  label: "القرآن الكريم",        impl: true  },
   hadith: { default: false, label: "الحديث الشريف",         impl: true  },
@@ -205,7 +205,6 @@ const MODULES = {
   asma:   { default: false, label: "أسماء الله الحسنى",     impl: false },
   duas:   { default: false, label: "الأدعية المأثورة",      impl: false },
   hikam:  { default: false, label: "الحِكَم والمواعظ",       impl: false },
-  free:   { default: false, label: "النصّ الحرّ",            impl: true  },
 };
 const MODULES_KEY = "gt_sirm_modules_v1";
 const FREE_TPL_KEY = "gt_sirm_free_templates_v1";
