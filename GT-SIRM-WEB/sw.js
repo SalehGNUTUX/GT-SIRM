@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v24 — release v0.8.3 (standalone per-slice + isnad + tashkeel)
+// GT-SIRM Service Worker v25 — release v0.8.4 (hadith structure + per-slice up)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v24";
+const CACHE_VER = "gt-sirm-v25";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

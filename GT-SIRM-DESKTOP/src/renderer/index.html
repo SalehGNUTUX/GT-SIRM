@@ -642,6 +642,28 @@ body.offline .offline-badge{display:block}
           <button class="btn btn-g bfw" id="open-per-slice-from-hadith" style="margin-top:5px;display:none;background:var(--bg2)">🎚️ ضبط توقيت كلّ شريحة ↓</button>
         </div>
 
+        <!-- ═══ v0.8.4 — قسم التوقيت التفصيلي (يأتي قبل النصّ الحرّ + صوت مخصّص) ═══ -->
+        <div class="sec">
+          <div class="sec-t">⏱️ توقيت تفصيليّ لكلّ شريحة <span class="badge-new">v0.8.4</span></div>
+          <div class="note">يعمل مع أيّ مصدر مفعَّل: النصّ الحرّ أو الحديث الشريف (لاحقاً: الأذكار والأدعية). يأخذ الشرائح تلقائياً من المصدر النشط بعد الضغط على "تطبيق".</div>
+          <div class="tgg" style="margin-top:6px;background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px">
+            <span class="tgl">⏱️ تفعيل التوقيت التفصيلي<br><small style="color:var(--t3)">عند التفعيل: اضبط مدّة كلّ شريحة على حدة لدقّة أعلى</small></span>
+            <label class="tg"><input type="checkbox" id="free-per-slice"><span class="tgs"></span></label>
+          </div>
+          <div id="free-per-slice-ctrl" style="display:none;margin-top:6px">
+            <div style="display:flex;gap:5px;margin-bottom:5px">
+              <button class="btn btn-g bsm" id="free-per-slice-rebuild" style="flex:1">🔄 توليد القائمة من المصدر النشط</button>
+              <button class="btn btn-g bsm" id="free-per-slice-distribute" title="توزيع متساوٍ على كامل مدّة الصوت">⚖️ توزيع</button>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2);cursor:pointer;margin-bottom:5px;padding:5px 8px;background:var(--bg1);border-radius:var(--r);border:1px solid var(--b1)">
+              <input type="checkbox" id="free-per-slice-lock" checked>
+              <span>🔒 ثبّت الإجمالي (إعادة توزيع تلقائيّ على باقي الشرائح)</span>
+            </label>
+            <div id="free-per-slice-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--b1);border-radius:var(--r);background:var(--bg1)"></div>
+            <div id="free-per-slice-stats" style="font-size:10px;color:var(--t3);margin-top:4px;text-align:center"></div>
+          </div>
+        </div>
+
         <!-- ═══ Free Text Editor + Custom Audio (v0.4.4) ═══ -->
         <div class="sec" data-module="free">
           <div class="sec-t">✍️ النصّ الحرّ &amp; 🎤 صوت مخصّص <span class="badge-new">v0.4</span></div>
@@ -717,28 +739,6 @@ body.offline .offline-badge{display:block}
               <div id="free-audio-trim-info" style="font-size:10px;color:var(--al);margin-top:4px"></div>
               <div class="note" style="margin-top:4px">📐 المدّة المختارة <strong>تُفرض على النصّ</strong> — تُمدَّد مدّة الشرائح تلقائياً ليُغطّي النصّ كامل الصوت.</div>
             </div>
-          </div>
-        </div>
-
-        <!-- ═══ v0.8.3 — قسم التوقيت التفصيلي المستقلّ (يخدم كلّ المصادر) ═══ -->
-        <div class="sec">
-          <div class="sec-t">⏱️ توقيت تفصيليّ لكلّ شريحة <span class="badge-new">v0.8.3</span></div>
-          <div class="note">يعمل مع أيّ مصدر مفعَّل: النصّ الحرّ أو الحديث الشريف (لاحقاً: الأذكار والأدعية). يأخذ الشرائح تلقائياً من المصدر النشط بعد الضغط على "تطبيق".</div>
-          <div class="tgg" style="margin-top:6px;background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px">
-            <span class="tgl">⏱️ تفعيل التوقيت التفصيلي<br><small style="color:var(--t3)">عند التفعيل: اضبط مدّة كلّ شريحة على حدة لدقّة أعلى</small></span>
-            <label class="tg"><input type="checkbox" id="free-per-slice"><span class="tgs"></span></label>
-          </div>
-          <div id="free-per-slice-ctrl" style="display:none;margin-top:6px">
-            <div style="display:flex;gap:5px;margin-bottom:5px">
-              <button class="btn btn-g bsm" id="free-per-slice-rebuild" style="flex:1">🔄 توليد القائمة من المصدر النشط</button>
-              <button class="btn btn-g bsm" id="free-per-slice-distribute" title="توزيع متساوٍ على كامل مدّة الصوت">⚖️ توزيع</button>
-            </div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2);cursor:pointer;margin-bottom:5px;padding:5px 8px;background:var(--bg1);border-radius:var(--r);border:1px solid var(--b1)">
-              <input type="checkbox" id="free-per-slice-lock" checked>
-              <span>🔒 ثبّت الإجمالي (إعادة توزيع تلقائيّ على باقي الشرائح)</span>
-            </label>
-            <div id="free-per-slice-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--b1);border-radius:var(--r);background:var(--bg1)"></div>
-            <div id="free-per-slice-stats" style="font-size:10px;color:var(--t3);margin-top:4px;text-align:center"></div>
           </div>
         </div>
 
@@ -1622,7 +1622,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.3</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.4</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

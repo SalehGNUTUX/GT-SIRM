@@ -1033,30 +1033,51 @@ function initHadithModule() {
     if (slicesBtn) slicesBtn.style.display = "block";
   });
 
+  // v0.8.4 — لا يُفعِّل النصّ الحرّ
   if (slicesBtn) slicesBtn.addEventListener("click", () => {
     const perSliceCb = document.getElementById("free-per-slice");
     if (perSliceCb && !perSliceCb.checked) {
       perSliceCb.checked = true;
       perSliceCb.dispatchEvent(new Event("change", { bubbles: true }));
     }
-    const freeTextOn = document.getElementById("free-text-on");
-    if (freeTextOn && !freeTextOn.checked) {
-      freeTextOn.checked = true;
-      freeTextOn.dispatchEvent(new Event("change", { bubbles: true }));
-    }
     setTimeout(() => {
-      const target = document.getElementById("free-per-slice-list");
+      const target = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list");
       if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 100);
   });
 }
 
+// v0.8.4 — تركيب الحديث: راوي + قال رسول الله + متن
+function parseHadithStructure(text) {
+  const propheticPatterns = [
+    /قَالَ\s+رَسُولُ\s+اللهِ\s+صَلَّى\s+اللَّهُ\s+عَلَيْهِ\s+وَسَلَّمَ/u,
+    /قَالَ\s+رَسُولُ\s+الله\s+صَلَّى\s+الله\s+عَلَيْهِ\s+و?سَلَّمَ/u,
+    /قَالَ\s+النَّبِيُّ\s+صَلَّى\s+اللَّهُ\s+عَلَيْهِ\s+وَسَلَّمَ/u,
+    /قَالَ\s+رَسُولُ\s+الله\s+ﷺ/u,
+    /قال\s+رسول\s+الله\s+صلى\s+الله\s+عليه\s+(?:و\s*)?سلم/u,
+    /قال\s+النبيّ?\s+صلى\s+الله\s+عليه\s+(?:و\s*)?سلم/u,
+  ];
+  for (const pat of propheticPatterns) {
+    const m = text.match(pat);
+    if (!m) continue;
+    const idx = m.index;
+    let narratorPart = text.slice(0, idx).trim();
+    const propheticPart = m[0].trim();
+    let body = text.slice(idx + m[0].length).trim();
+    body = body.replace(/^[\s:،]+/u, '').trim();
+    narratorPart = narratorPart.replace(/\s*(?:قَالَ|قال)\s*$/u, '').trim();
+    if (!narratorPart || !body) return null;
+    return { narrator: narratorPart, prophetic: propheticPart, body };
+  }
+  return null;
+}
+
 function cleanHadithIsnad(text) {
+  const struct = parseHadithStructure(text);
+  if (struct) return `${struct.prophetic}: ${struct.body}`;
   const patterns = [
-    /^.{0,250}?ﷺ\s*(?:يقول|قال|قالت|قائلاً|قائلًا)?\s*:\s*/u,
-    /^.{0,250}?صلّ?ى\s+الله\s+عليه\s+و\s*سلّ?م\s*(?:يقول|قال|قالت|قائلاً|قائلًا)?\s*:\s*/u,
-    /^.{0,200}?قال\s+رسول\s+الله\s+(?:ﷺ|صلّ?ى\s+الله\s+عليه\s+و\s*سلّ?م)\s*:\s*/u,
-    /^.{0,200}?قال\s+النّ?بيّ?\s+(?:ﷺ|صلّ?ى\s+الله\s+عليه\s+و\s*سلّ?م)\s*:\s*/u,
+    /^.{0,250}?صَلَّى\s+اللَّهُ\s+عَلَيْهِ\s+وَسَلَّمَ\s*:\s*/u,
+    /^.{0,250}?صلّ?ى\s+الله\s+عليه\s+و\s*سلّ?م\s*:\s*/u,
   ];
   for (const pat of patterns) {
     const m = text.match(pat);
@@ -1075,12 +1096,21 @@ function applyHadith(h, coll) {
     freeTextOn.checked = false;
     freeTextOn.dispatchEvent(new Event("change", { bubbles: true }));
   }
-  const cleanIsnad = ge("hadith-clean-isnad");
-  let text = h.text.trim();
-  if (cleanIsnad) text = cleanHadithIsnad(text);
 
-  const rawSlices = text.split(/[.،؛!؟]+\s*/u).map(s => s.trim()).filter(s => s.length > 1);
-  const slices = rawSlices.length ? rawSlices : [text];
+  // v0.8.4 — حلِّل لـ 3 أجزاء
+  const cleanIsnad = ge("hadith-clean-isnad");
+  const text = h.text.trim();
+  const struct = parseHadithStructure(text);
+  const slices = [];
+  if (struct) {
+    if (!cleanIsnad) slices.push(struct.narrator);
+    slices.push(struct.prophetic);
+    const bodySlices = struct.body.split(/[.،؛!؟]+\s*/u).map(s => s.trim()).filter(s => s.length > 1);
+    slices.push(...(bodySlices.length ? bodySlices : [struct.body]));
+  } else {
+    const rawSlices = text.split(/[.،؛!؟]+\s*/u).map(s => s.trim()).filter(s => s.length > 1);
+    slices.push(...(rawSlices.length ? rawSlices : [text]));
+  }
   const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
   S.verses = slices.map((t, i) => ({
     text: t, numberInSurah: i + 1, number: i + 1,
