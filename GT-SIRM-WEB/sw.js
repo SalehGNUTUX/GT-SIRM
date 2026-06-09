@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v35 — release v0.8.14 (custom audio below hadith + module mutex)
+// GT-SIRM Service Worker v36 — إصدار v0.8.15 (إصلاح بنية النقل من v0.8.14)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v35";
+const CACHE_VER = "gt-sirm-v36";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

@@ -589,12 +589,6 @@ body.offline .offline-badge{display:block}
               </div>
             </details>
           </div>
-                </div>
-              </div>
-              <div id="free-audio-trim-info" style="font-size:10px;color:var(--al);margin-top:4px"></div>
-              <div class="note" style="margin-top:4px">📐 المدّة المختارة <strong>تُفرض على النصّ</strong> — تُمدَّد مدّة الشرائح تلقائياً ليُغطّي النصّ كامل الصوت.</div>
-            </div>
-          </div>
         </div>
 
         <div class="sec" data-module="quran">
@@ -689,15 +683,21 @@ body.offline .offline-badge{display:block}
             <div id="hadith-prev-narrator" style="font-size:9px;color:var(--al);margin-top:6px;direction:rtl"></div>
             <div id="hadith-prev-source" style="font-size:9px;color:var(--t3);margin-top:2px;direction:rtl"></div>
           </div>
+          <div class="tgg" style="margin-top:6px">
+            <span class="tgl">🧹 تنظيف مقدّمة الإسناد عند التطبيق<br><small style="color:var(--t3)">يحذف "عن فلان قال سمعت رسول الله ﷺ" ليبدأ النصّ من المتن — مناسب عند رفع صوت يلقي نصّ الحديث مباشرةً</small></span>
+            <label class="tg"><input type="checkbox" id="hadith-clean-isnad" checked><span class="tgs"></span></label>
+          </div>
+          <button class="btn btn-a bfw" id="apply-hadith-btn" style="margin-top:6px;display:none">📥 تطبيق الحديث كنصّ المقطع</button>
+          <button class="btn btn-g bfw" id="open-per-slice-from-hadith" style="margin-top:5px;display:none;background:var(--bg2)">🎚️ ضبط توقيت كلّ شريحة ↓</button>
+        </div>
 
         <!-- ═══ v0.8.14 — 🎤 صوت تلاوة مخصّص (قسم مستقلّ بعد الحديث) ═══ -->
         <div class="sec">
           <div class="sec-t">🎤 صوت تلاوة مخصّص <span class="badge-new">v0.8</span></div>
           <div class="note">يستبدل صوت القارئ الافتراضيّ بصوت محلّيّ أو مُنزَّل — يعمل مع جميع المصادر (القرآن، الحديث، النصّ الحرّ، الوحدات المستقبليّة).</div>
 
-          <!-- ── Toggle B: صوت تلاوة مخصّص ── -->
           <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px;margin-top:10px">
-            <span class="tgl">🎤 استخدام صوت تلاوة مخصّص<br><small style="color:var(--t3)">يستبدل صوت القارئ الافتراضيّ بصوت محلّيّ — يعمل مع آيات القرآن أو النصّ الحرّ</small></span>
+            <span class="tgl">🎤 استخدام صوت تلاوة مخصّص<br><small style="color:var(--t3)">يستبدل صوت القارئ الافتراضيّ بصوت محلّيّ — يعمل مع جميع المصادر</small></span>
             <label class="tg"><input type="checkbox" id="free-audio-on"><span class="tgs"></span></label>
           </div>
 
@@ -751,16 +751,15 @@ body.offline .offline-badge{display:block}
                     <input type="number" class="fc" id="free-audio-trim-end" min="0.1" step="0.1" value="30" style="flex:1">
                     <button class="btn btn-g bsm" id="free-audio-trim-end-max" type="button" title="استخدم المدّة الكاملة للمقطع" style="padding:3px 8px">📏</button>
                   </div>
-        </div>
-          <div class="tgg" style="margin-top:6px">
-            <span class="tgl">🧹 تنظيف مقدّمة الإسناد عند التطبيق<br><small style="color:var(--t3)">يحذف "عن فلان قال سمعت رسول الله ﷺ" ليبدأ النصّ من المتن — مناسب عند رفع صوت يلقي نصّ الحديث مباشرةً</small></span>
-            <label class="tg"><input type="checkbox" id="hadith-clean-isnad" checked><span class="tgs"></span></label>
+                </div>
+              </div>
+              <div id="free-audio-trim-info" style="font-size:10px;color:var(--al);margin-top:4px"></div>
+              <div class="note" style="margin-top:4px">📐 المدّة المختارة <strong>تُفرض على النصّ</strong> — تُمدَّد مدّة الشرائح تلقائياً ليُغطّي النصّ كامل الصوت.</div>
+            </div>
           </div>
-          <button class="btn btn-a bfw" id="apply-hadith-btn" style="margin-top:6px;display:none">📥 تطبيق الحديث كنصّ المقطع</button>
-          <button class="btn btn-g bfw" id="open-per-slice-from-hadith" style="margin-top:5px;display:none;background:var(--bg2)">🎚️ ضبط توقيت كلّ شريحة ↓</button>
         </div>
 
-        <!-- ═══ v0.8.4 — قسم التوقيت التفصيلي (يأتي قبل النصّ الحرّ + صوت مخصّص) ═══ -->
+        <!-- ═══ v0.8.4 — قسم التوقيت التفصيلي -->
         <div class="sec">
           <div class="sec-t">⏱️ توقيت تفصيليّ لكلّ شريحة <span class="badge-new">v0.8.4</span></div>
           <div class="note">يعمل مع أيّ مصدر مفعَّل: النصّ الحرّ أو الحديث الشريف (لاحقاً: الأذكار والأدعية). يأخذ الشرائح تلقائياً من المصدر النشط بعد الضغط على "تطبيق".</div>
@@ -1687,7 +1686,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.14</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.13</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
