@@ -352,15 +352,19 @@ function renderPerSliceList() {
     if (stats) stats.textContent = "";
     return;
   }
-  list.innerHTML = items.map((it, i) => `
-    <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--b1)">
+  list.innerHTML = items.map((it, i) => {
+    const en = it.enabled !== false;
+    return `
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--b1);${en ? "" : "opacity:0.45"}">
+      <input type="checkbox" data-slice-enable="${i}" ${en ? "checked" : ""} title="تفعيل/إلغاء الشريحة" style="flex-shrink:0;cursor:pointer">
       <span style="color:var(--al);font-size:10px;font-weight:700;flex-shrink:0;width:24px;text-align:center">${i + 1}</span>
       <span style="flex:1;font-size:11px;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl" title="${escapeHtml(it.text)}">${escapeHtml(it.text)}</span>
-      <input type="number" min="0.5" max="60" step="0.1" value="${it.dur.toFixed(1)}" data-slice-idx="${i}" class="fc" style="width:64px;font-size:11px;padding:3px 5px">
+      <input type="number" min="0.5" max="60" step="0.1" value="${it.dur.toFixed(1)}" data-slice-idx="${i}" class="fc" style="width:64px;font-size:11px;padding:3px 5px" ${en ? "" : "disabled"}>
       <span style="font-size:9px;color:var(--t3)">ث</span>
     </div>
-  `).join("");
-  // ربط inputs — change بدل input حتى لا تُعاد التوزيع بعد كلّ ضغطة
+  `;
+  }).join("");
+  // ربط inputs المدّة
   list.querySelectorAll("input[data-slice-idx]").forEach(inp => {
     inp.addEventListener("change", () => {
       const idx = parseInt(inp.dataset.sliceIdx);
@@ -375,6 +379,18 @@ function renderPerSliceList() {
         updatePerSliceStats();
       }
       syncPerSliceToPlayback();
+    });
+  });
+  // v0.8.1 — ربط checkbox التفعيل/الإلغاء
+  list.querySelectorAll("input[data-slice-enable]").forEach(cb => {
+    cb.addEventListener("change", () => {
+      const idx = parseInt(cb.dataset.sliceEnable);
+      if (!S.freePerSlice[idx]) return;
+      S.freePerSlice[idx].enabled = cb.checked;
+      // نقل لـ verses[]
+      if (S.verses[idx]) S.verses[idx].enabled = cb.checked;
+      renderPerSliceList();
+      updatePerSliceStats();
     });
   });
   updatePerSliceStats();
@@ -1034,9 +1050,33 @@ function initHadithModule() {
   });
 }
 
+// v0.8.1 — تنظيف مقدّمة الإسناد (للحديث)
+function cleanHadithIsnad(text) {
+  // أنماط شائعة لمقدّمة الإسناد: "عن X رضي الله عنه قال (سمعت) رسول الله ﷺ يقول/قال:"
+  // نبحث عن الفعل الذي يفصل الإسناد عن المتن
+  const patterns = [
+    /^.*?(?:قال|قالت|سُئِل)\s*(?:رسول\s+الله|النّ?بيّ?|محمّ?د)?[^:]{0,80}?(?:يقول|قال|قالت)\s*:?\s*/u,
+    /^.*?(?:قال|قالت)\s*:\s*/u,
+    /^.*?(?:يقول|تقول)\s*:?\s*/u,
+  ];
+  let cleaned = text;
+  for (const pat of patterns) {
+    const m = cleaned.match(pat);
+    if (m && m[0].length < text.length * 0.7) {
+      cleaned = text.slice(m[0].length).trim();
+      if (cleaned.length > 10) return cleaned;
+    }
+  }
+  return text;
+}
+
 function applyHadith(h, coll) {
-  // قطّع الحديث على نقاط الترقيم (.‚،; أو نقطة فقط) → شرائح
-  const text = h.text.trim();
+  // v0.8.1 — تنظيف مقدّمة الإسناد إن طُلب
+  const cleanIsnad = ge("hadith-clean-isnad");
+  let text = h.text.trim();
+  if (cleanIsnad) text = cleanHadithIsnad(text);
+
+  // قطّع الحديث على نقاط الترقيم
   const rawSlices = text.split(/[.،؛!؟]+\s*/u).map(s => s.trim()).filter(s => s.length > 1);
   const slices = rawSlices.length ? rawSlices : [text];
   const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
@@ -1049,6 +1089,7 @@ function applyHadith(h, coll) {
     manualDuration: baseDur,
     free: true,
     hadith: true,
+    enabled: true,
     source: `${coll.name} · حديث ${h.n}${h.grade ? " (" + h.grade + ")" : ""}`,
   }));
   S.ayaDurations = S.verses.map(v => v.manualDuration);
@@ -1056,9 +1097,14 @@ function applyHadith(h, coll) {
   S.elapsed = 0;
   S.useFreeAsSource = true;
   S.translations = [];
+
+  // v0.8.1 — املأ S.freePerSlice ليُعرَض في قسم التوقيت التفصيلي
+  S.freePerSlice = slices.map(t => ({ text: t, dur: baseDur, enabled: true }));
+  if (typeof renderPerSliceList === "function") renderPerSliceList();
+
   if (typeof updateAyaInfo === "function") updateAyaInfo();
   if (typeof updateAyaUI === "function") updateAyaUI();
-  toast(`📜 تمّ تطبيق الحديث (${slices.length} شريحة)`, "success", 2200);
+  toast(`📜 تمّ تطبيق الحديث (${slices.length} شريحة) — يمكنك ضبط مدّة كلّ شريحة وتعطيل ما لا تريد من قسم "✍️ النصّ الحرّ"`, "success", 3000);
 }
 
 function initFreeTextEditor() {
@@ -1595,6 +1641,7 @@ function initEventListeners() {
     { id: "aya-gap", outId: "aya-gap-v", unit: "s" },
     { id: "wave-gain", outId: "wave-gain-v", unit: "%" },
     { id: "sname-y", outId: "sname-y-v", unit: "%" },
+    { id: "text-y-offset", outId: "text-y-offset-v", unit: "%" },
     { id: "sname-size", outId: "sname-size-v", unit: "%" },
     { id: "vtitle-y", outId: "vtitle-y-v", unit: "%" },
     { id: "vtitle-size", outId: "vtitle-size-v", unit: "%" },
@@ -3023,6 +3070,8 @@ function drawSurahName(ctx, W, H) {
 
 function drawVerse(ctx, W, H, ts) {
   const aya = S.verses[S.currentAya]; if (!aya) return;
+  // v0.8.1 — تجاهل الشرائح المعطّلة (تبقى في الزمن، لكن النصّ لا يُرسم)
+  if (aya.enabled === false) return;
   const font = fontVal();
   const txtCol = $("txt-col").value;
   const shdCol = $("shd-col").value;
@@ -3135,6 +3184,9 @@ function drawVerse(ctx, W, H, ts) {
   if (tpos === "top") startY = H * .1 + fsz;
   else if (tpos === "bottom") startY = H * .82 - totalH + fsz;
   else startY = H * .5 - totalH * (hasT ? .4 : .5) + fsz;
+  // v0.8.1 — ضبط ارتفاع النصّ يدوياً (إزاحة)
+  const yOffsetPct = parseFloat(gv("text-y-offset")) || 0;
+  startY += (yOffsetPct / 100) * H;
 
   if (animType === "word") {
     drawWordByWord(ctx, lines, W, startY, lineH, fsz, font, txtCol, dur, drawTxt);

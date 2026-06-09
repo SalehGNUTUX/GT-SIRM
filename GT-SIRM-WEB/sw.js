@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v21 — release v0.8.0 (Hadith module + Arba'in Nawawi)
+// GT-SIRM Service Worker v22 — release v0.8.1 (Riyad as-Salihin + per-slice enable + Y offset + clean isnad)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v21";
+const CACHE_VER = "gt-sirm-v22";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

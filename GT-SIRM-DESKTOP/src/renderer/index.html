@@ -634,6 +634,10 @@ body.offline .offline-badge{display:block}
             <div id="hadith-prev-narrator" style="font-size:9px;color:var(--al);margin-top:6px;direction:rtl"></div>
             <div id="hadith-prev-source" style="font-size:9px;color:var(--t3);margin-top:2px;direction:rtl"></div>
           </div>
+          <div class="tgg" style="margin-top:6px">
+            <span class="tgl">🧹 تنظيف مقدّمة الإسناد عند التطبيق<br><small style="color:var(--t3)">يحذف "عن فلان قال سمعت رسول الله ﷺ" ليبدأ النصّ من المتن — مناسب عند رفع صوت يلقي نصّ الحديث مباشرةً</small></span>
+            <label class="tg"><input type="checkbox" id="hadith-clean-isnad" checked><span class="tgs"></span></label>
+          </div>
           <button class="btn btn-a bfw" id="apply-hadith-btn" style="margin-top:6px;display:none">📥 تطبيق الحديث كنصّ المقطع</button>
         </div>
 
@@ -795,8 +799,9 @@ body.offline .offline-badge{display:block}
         </div>
 
         <div class="sec">
-          <div class="sec-t">⏱️ التوقيت</div>
-          <div class="tgg"><span class="tgl">🔛 تفعيل قسم التوقيت العامّ<br><small style="color:var(--t3)">عند الإلغاء: تُتجاهَل هذه الإعدادات كلّياً — مناسب عند استخدام التوقيت التفصيلي للنصّ الحرّ</small></span><label class="tg"><input type="checkbox" id="timing-master-on" checked><span class="tgs"></span></label></div>
+          <div class="sec-t">⏱️ التوقيت (لوحدة القرآن فقط)</div>
+          <div class="note">هذه الإعدادات تخصّ تشغيل القرآن مع صوت القارئ. عند تفعيل النصّ الحرّ أو الحديث أو فيديو التلاوة الجاهز → يُتجاهَل هذا القسم تماماً ويُستخدم التوقيت التفصيلي لكلّ شريحة.</div>
+          <div class="tgg"><span class="tgl">🔛 تفعيل قسم التوقيت العامّ<br><small style="color:var(--t3)">عند الإلغاء: لا يُطبَّق aya-gap حتى مع القرآن</small></span><label class="tg"><input type="checkbox" id="timing-master-on" checked><span class="tgs"></span></label></div>
           <div id="timing-master-ctrl">
             <div class="tgg"><span class="tgl">مدة تلقائية حسب الصوت</span><label class="tg"><input type="checkbox" id="auto-dur" checked><span class="tgs"></span></label></div>
             <div id="manual-dur" style="display:none;padding-top:5px">
@@ -1089,6 +1094,7 @@ body.offline .offline-badge{display:block}
           <div class="fg"><label class="fl">حجم الخط</label><div class="sg"><input type="range" min="40" max="200" value="100" id="fsize"><span class="sv" id="fsize-v">100%</span></div></div>
           <div class="fg"><label class="fl">ارتفاع السطر</label><div class="sg"><input type="range" min="1" max="3" step=".1" value="1.6" id="lh"><span class="sv" id="lh-v">1.6</span></div></div>
           <div class="fg"><label class="fl">موضع النص</label><div class="rg"><div class="rc"><input type="radio" name="tpos" id="tp1" value="top"><label for="tp1"><span class="ri">⬆</span><span>أعلى</span></label></div><div class="rc"><input type="radio" name="tpos" id="tp2" value="center" checked><label for="tp2"><span class="ri">⬛</span><span>وسط</span></label></div><div class="rc"><input type="radio" name="tpos" id="tp3" value="bottom"><label for="tp3"><span class="ri">⬇</span><span>أسفل</span></label></div></div></div>
+          <div class="fg"><label class="fl">ضبط ارتفاع النصّ يدوياً (-50% → +50%)</label><div class="sg"><input type="range" min="-50" max="50" step="1" value="0" id="text-y-offset"><span class="sv" id="text-y-offset-v">0%</span></div></div>
         </div>
         <div class="sec">
           <div class="sec-t">🖋️ الخط</div>
@@ -1611,7 +1617,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.0</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.1</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
