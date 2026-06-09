@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v32 — release v0.8.11 (ogg->vorbis mapping)
+// GT-SIRM Service Worker v33 — release v0.8.12 (paste + clear buttons)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v32";
+const CACHE_VER = "gt-sirm-v33";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

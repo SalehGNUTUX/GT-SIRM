@@ -612,7 +612,11 @@ body.offline .offline-badge{display:block}
             <details id="free-audio-dl-wrap" style="margin-top:6px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px">
               <summary style="cursor:pointer;color:var(--t2);font-size:12px;font-weight:600">⬇️ تنزيل صوت من رابط (يوتيوب/فيديو → OGG)</summary>
               <div style="padding:6px 0">
-                <input type="text" class="fc" id="free-audio-dl-url" placeholder="https://youtube.com/watch?v=... أو رابط فيديو مباشر">
+                <div style="display:flex;gap:4px">
+                  <input type="text" class="fc" id="free-audio-dl-url" placeholder="https://youtube.com/watch?v=... أو رابط فيديو مباشر" style="flex:1">
+                  <button class="btn btn-g bsm" id="free-audio-dl-paste" type="button" title="لصق من الحافظة" style="padding:3px 8px">📋</button>
+                  <button class="btn btn-g bsm" id="free-audio-dl-clear" type="button" title="مسح" style="padding:3px 8px;color:var(--danger)">✕</button>
+                </div>
                 <div style="display:flex;gap:8px;margin-top:5px;font-size:11px">
                   <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="temporary" checked> 📁 مؤقت (/tmp)</label>
                   <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="permanent"> 💾 دائم</label>
@@ -786,7 +790,11 @@ body.offline .offline-badge{display:block}
             <details id="recvid-dl-wrap" style="margin-bottom:6px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px">
               <summary style="cursor:pointer;color:var(--t2);font-size:12px;font-weight:600">⬇️ تنزيل فيديو تلاوة من رابط (يوتيوب/مباشر → MP4)</summary>
               <div style="padding:6px 0">
-                <input type="text" class="fc" id="recvid-dl-url" placeholder="https://youtube.com/watch?v=... أو رابط فيديو مباشر">
+                <div style="display:flex;gap:4px">
+                  <input type="text" class="fc" id="recvid-dl-url" placeholder="https://youtube.com/watch?v=... أو رابط فيديو مباشر" style="flex:1">
+                  <button class="btn btn-g bsm" id="recvid-dl-paste" type="button" title="لصق من الحافظة" style="padding:3px 8px">📋</button>
+                  <button class="btn btn-g bsm" id="recvid-dl-clear" type="button" title="مسح" style="padding:3px 8px;color:var(--danger)">✕</button>
+                </div>
                 <div style="display:flex;gap:8px;margin-top:5px;font-size:11px">
                   <label style="cursor:pointer"><input type="radio" name="recvid-dl-mode" value="temporary" checked> 📁 مؤقت (/tmp)</label>
                   <label style="cursor:pointer"><input type="radio" name="recvid-dl-mode" value="permanent"> 💾 دائم</label>
@@ -1668,7 +1676,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.11</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.12</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

@@ -1354,6 +1354,9 @@ function initFreeTextEditor() {
     document.getElementById("free-audio-dl-cancel")?.addEventListener("click", () => {
       try { window.SIRM.ytdlpCancel?.(); } catch (_) {}
     });
+    // v0.8.12 — أزرار اللصق والمسح
+    document.getElementById("free-audio-dl-paste")?.addEventListener("click", () => pasteToInput("free-audio-dl-url"));
+    document.getElementById("free-audio-dl-clear")?.addEventListener("click", () => clearInput("free-audio-dl-url"));
   } else {
     // أخفِ الواجهة على المنصّات بدون yt-dlp
     const wrap = document.getElementById("free-audio-dl-wrap");
@@ -1798,6 +1801,9 @@ function initEventListeners() {
     document.getElementById("recvid-dl-cancel")?.addEventListener("click", () => {
       try { window.SIRM.ytdlpCancel?.(); } catch (_) {}
     });
+    // v0.8.12 — أزرار اللصق والمسح
+    document.getElementById("recvid-dl-paste")?.addEventListener("click", () => pasteToInput("recvid-dl-url"));
+    document.getElementById("recvid-dl-clear")?.addEventListener("click", () => clearInput("recvid-dl-url"));
   } else {
     const wrap = document.getElementById("recvid-dl-wrap");
     if (wrap) wrap.style.display = "none";
@@ -6283,6 +6289,32 @@ function restoreDlSettings() {
   }
 }
 
+
+// v0.8.12 — مساعِدتان: لصق من الحافظة + مسح حقل
+async function pasteToInput(inputId) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      inp.value = text.trim();
+      inp.dispatchEvent(new Event("input", { bubbles: true }));
+      inp.focus();
+    } else {
+      toast?.("📋 الحافظة فارغة", "info", 1500);
+    }
+  } catch (e) {
+    toast?.("⚠️ تعذّر الوصول للحافظة — الصق يدويّاً (Ctrl+V)", "warn", 2500);
+  }
+}
+
+function clearInput(inputId) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  inp.value = "";
+  inp.dispatchEvent(new Event("input", { bubbles: true }));
+  inp.focus();
+}
 
 // v0.8.10 — تنزيل فيديو تلاوة مباشرة من قسم الـrecvid عبر yt-dlp
 // يُنزِّل MP4 ثمّ يبني File ويستدعي onRecVidFile كما لو رفعه المستخدم يدويّاً
