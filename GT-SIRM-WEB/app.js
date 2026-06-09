@@ -347,6 +347,25 @@ function getActiveAudioDuration() {
   return null;
 }
 
+// v0.8.6 — معالج موحَّد لزرّ "🎚️"
+function openPerSliceSmart() {
+  const perSliceCb = document.getElementById("free-per-slice");
+  if (perSliceCb && !perSliceCb.checked) {
+    perSliceCb.checked = true;
+    perSliceCb.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  S.freePerSlice = null;
+  if (typeof buildPerSliceList === "function") buildPerSliceList();
+  if (typeof syncVersesToActiveAudio === "function") syncVersesToActiveAudio();
+  if (typeof renderPerSliceList === "function") renderPerSliceList();
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+  setTimeout(() => {
+    const t = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list");
+    if (t) t.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, 120);
+}
+
 function syncVersesToActiveAudio() {
   if (!Array.isArray(S.verses) || !S.verses.length) return false;
   const isText = S.verses.every(v => v && (v.free || v.hadith) && !v.recvid);
@@ -860,6 +879,12 @@ function applyFreeAudioTrim() {
   }
   S.freeAudioTrim = { start, end };
   if (info) info.textContent = `📐 المدّة المختارة: ${(end - start).toFixed(1)}s`;
+  // v0.8.6 — أعِد التوزيع
+  if (typeof syncVersesToActiveAudio === "function" && syncVersesToActiveAudio()) {
+    if (typeof renderPerSliceList === "function") renderPerSliceList();
+    if (typeof updateAyaInfo === "function") updateAyaInfo();
+    if (typeof updateAyaUI === "function") updateAyaUI();
+  }
   if (S.bgAudioEl) {
     try { S.bgAudioEl.currentTime = start; } catch (_) {}
     if (!S.bgAudioEl._freeTrimHandler) {
@@ -1065,18 +1090,8 @@ function initHadithModule() {
     if (slicesBtn) slicesBtn.style.display = "block";
   });
 
-  // v0.8.4 — لا يُفعِّل النصّ الحرّ
-  if (slicesBtn) slicesBtn.addEventListener("click", () => {
-    const perSliceCb = document.getElementById("free-per-slice");
-    if (perSliceCb && !perSliceCb.checked) {
-      perSliceCb.checked = true;
-      perSliceCb.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    setTimeout(() => {
-      const target = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list");
-      if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
-  });
+  // v0.8.6 — زرّ "🎚️" من الحديث: ذكيّ
+  if (slicesBtn) slicesBtn.addEventListener("click", openPerSliceSmart);
 }
 
 // v0.8.4 — تركيب الحديث: راوي + قال رسول الله + متن
@@ -1186,18 +1201,8 @@ function initFreeTextEditor() {
   document.getElementById("free-clear-btn")?.addEventListener("click", clearFreeText);
   document.getElementById("free-tpl-save-btn")?.addEventListener("click", saveFreeTemplate);
 
-  // v0.8.5 — زرّ "🎚️" داخل النصّ الحرّ
-  document.getElementById("open-per-slice-from-free")?.addEventListener("click", () => {
-    const perSliceCb = document.getElementById("free-per-slice");
-    if (perSliceCb && !perSliceCb.checked) {
-      perSliceCb.checked = true;
-      perSliceCb.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    setTimeout(() => {
-      const t = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list");
-      if (t) t.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
-  });
+  // v0.8.6 — زرّ "🎚️" داخل النصّ الحرّ: ذكيّ
+  document.getElementById("open-per-slice-from-free")?.addEventListener("click", openPerSliceSmart);
 
   const textCb = document.getElementById("free-text-on");
   if (textCb) {

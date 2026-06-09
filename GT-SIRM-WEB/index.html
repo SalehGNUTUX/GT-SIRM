@@ -452,7 +452,72 @@ body.offline .offline-badge{display:block}
           <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px;margin-top:6px">
             <span class="tgl">🔗 تفعيل محرّر النصّ الحرّ<br><small style="color:var(--t3)">يحلّ النصّ المُدخَل محلّ آيات القرآن في المعاينة والتصدير</small></span>
             <label class="tg"><input type="checkbox" id="free-text-on"><span class="tgs"></span></label>
+          <
+          <div id="free-text-ctrl" style="display:none;margin-top:6px">
+            <textarea id="free-text-area" class="fc" rows="6" style="width:100%;font-family:inherit;line-height:1.8;font-size:13px;padding:8px;resize:vertical;direction:rtl"
+              placeholder="مثال:&#10;&#10;اللّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا&#10;&#10;وَبِكَ نَحْيَا وَبِكَ نَمُوتُ&#10;&#10;وَإِلَيْكَ النُّشُور"></textarea>
+            <div id="free-text-stats" style="font-size:10px;color:var(--t3);margin-top:4px">0 شريحة · 0 ثانية تقريباً</div>
+
+            <div class="tgg" style="margin-top:6px">
+              <span class="tgl">🔄 مزامنة المدّة تلقائياً مع الصوت<br><small style="color:var(--t3)">عند التفعيل: مدّة الشرائح = مدّة الصوت ÷ عدد الشرائح. عند الإلغاء: تحكّم يدويّ كامل</small></span>
+              <label class="tg"><input type="checkbox" id="free-auto-sync" checked><span class="tgs"></span></label>
+            </div>
+
+            <div class="grid2" style="margin-top:6px">
+              <div class="fg"><label class="fl">مدة كلّ شريحة</label><div class="sg"><input type="range" min="0.5" max="30" step=".1" value="4" id="free-slice-dur"><span class="sv" id="free-slice-dur-v">4s</span></div></div>
+              <div class="fg"><label class="fl">المصدر/المرجع (اختياريّ)</label><input type="text" class="fc" id="free-source" placeholder="مثلاً: صحيح مسلم"></div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:5px;margin-top:6px">
+              <button class="btn btn-p bsm" id="free-apply-btn">✅ تطبيق النصّ</button>
+              <button class="btn btn-g bsm" id="free-restart-btn">↺ إعادة من البداية</button>
+              <button class="btn btn-g bsm" id="free-clear-btn">🗑️ مسح</button>
+            </div>
+            <!-- v0.8.5 — زرّ ضبط توقيت كلّ شريحة -->
+            <button class="btn btn-g bsm" id="open-per-slice-from-free" style="display:none;width:100%;margin-top:6px;background:var(--bg2);border:1px dashed var(--p)">🎚️ ضبط توقيت كلّ شريحة ↓</button>
+            <details style="margin-top:8px">
+              <summary style="cursor:pointer;color:var(--t2);font-size:11px">📂 القوالب النصّيّة المحفوظة</summary>
+              <div style="padding:6px 0">
+                <div class="grid2">
+                  <input type="text" class="fc" id="free-tpl-name" placeholder="اسم القالب">
+                  <button class="btn btn-p bsm" id="free-tpl-save-btn">💾 حفظ كقالب</button>
+                </div>
+                <div id="free-tpl-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
+              </div>
+            </details>
           </div>
+
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px;margin-top:10px">
+            <span class="tgl">🎤 استخدام صوت تلاوة مخصّص<br><small style="color:var(--t3)">يستبدل صوت القارئ الافتراضيّ بصوت محلّيّ — يعمل مع آيات القرآن أو النصّ الحرّ</small></span>
+            <label class="tg"><input type="checkbox" id="free-audio-on"><span class="tgs"></span></label>
+          </div>
+
+          <div id="free-audio-ctrl" style="display:none;margin-top:6px;padding:8px;background:var(--bg2);border:1px dashed var(--b1);border-radius:var(--r)">
+            <div class="fu-area" id="free-audio-drop">
+              <input type="file" id="free-audio-file" accept="audio/*,video/*">
+              <div class="fu-icon">🎵</div>
+              <div class="fu-txt">اسحب أو اختر ملفّ صوت/فيديو<br><small>MP3 · WAV · M4A · OGG · MP4 (يُستخرج الصوت)</small></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">
+              <div id="free-audio-info" style="font-size:10px;color:var(--t3);flex:1;min-width:60%"></div>
+              <button class="btn btn-g bsm" id="free-audio-restart-btn" style="display:none;padding:3px 10px">↺ إعادة</button>
+              <button class="btn btn-g bsm" id="free-audio-remove-btn" style="display:none;padding:3px 10px;color:var(--danger)">🗑️ إزالة</button>
+            </div>
+
+            <div class="tgg" style="margin-top:6px">
+              <span class="tgl">✂️ تحديد مدّة مخصّصة من الصوت</span>
+              <label class="tg"><input type="checkbox" id="free-audio-trim-on"><span class="tgs"></span></label>
+            </div>
+            <div id="free-audio-trim-ctrl" style="display:none;margin-top:4px">
+              <div class="grid2">
+                <div class="fg"><label class="fl">من (ثانية)</label><input type="number" class="fc" id="free-audio-trim-start" min="0" step="0.1" value="0"></div>
+                <div class="fg"><label class="fl">إلى (ثانية)</label><input type="number" class="fc" id="free-audio-trim-end" min="0.1" step="0.1" value="30"></div>
+              </div>
+              <div id="free-audio-trim-info" style="font-size:10px;color:var(--al);margin-top:4px"></div>
+              <div class="note" style="margin-top:4px">📐 المدّة المختارة <strong>تُفرض على النصّ</strong> — تُمدَّد مدّة الشرائح تلقائياً ليُغطّي النصّ كامل الصوت.</div>
+            </div>
+          </div>
+        </div>
 
         <div class="sec" data-module="quran">
           <div class="sec-t">📖 السورة والآيات</div>
@@ -574,71 +639,6 @@ body.offline .offline-badge{display:block}
             <div id="free-per-slice-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--b1);border-radius:var(--r);background:var(--bg1)"></div>
             <div id="free-per-slice-stats" style="font-size:10px;color:var(--t3);margin-top:4px;text-align:center"></div>
           </div>
-        </div>          <div id="free-text-ctrl" style="display:none;margin-top:6px">
-            <textarea id="free-text-area" class="fc" rows="6" style="width:100%;font-family:inherit;line-height:1.8;font-size:13px;padding:8px;resize:vertical;direction:rtl"
-              placeholder="مثال:&#10;&#10;اللّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا&#10;&#10;وَبِكَ نَحْيَا وَبِكَ نَمُوتُ&#10;&#10;وَإِلَيْكَ النُّشُور"></textarea>
-            <div id="free-text-stats" style="font-size:10px;color:var(--t3);margin-top:4px">0 شريحة · 0 ثانية تقريباً</div>
-
-            <div class="tgg" style="margin-top:6px">
-              <span class="tgl">🔄 مزامنة المدّة تلقائياً مع الصوت<br><small style="color:var(--t3)">عند التفعيل: مدّة الشرائح = مدّة الصوت ÷ عدد الشرائح. عند الإلغاء: تحكّم يدويّ كامل</small></span>
-              <label class="tg"><input type="checkbox" id="free-auto-sync" checked><span class="tgs"></span></label>
-            </div>
-
-            <div class="grid2" style="margin-top:6px">
-              <div class="fg"><label class="fl">مدة كلّ شريحة</label><div class="sg"><input type="range" min="0.5" max="30" step=".1" value="4" id="free-slice-dur"><span class="sv" id="free-slice-dur-v">4s</span></div></div>
-              <div class="fg"><label class="fl">المصدر/المرجع (اختياريّ)</label><input type="text" class="fc" id="free-source" placeholder="مثلاً: صحيح مسلم"></div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:5px;margin-top:6px">
-              <button class="btn btn-p bsm" id="free-apply-btn">✅ تطبيق النصّ</button>
-              <button class="btn btn-g bsm" id="free-restart-btn">↺ إعادة من البداية</button>
-              <button class="btn btn-g bsm" id="free-clear-btn">🗑️ مسح</button>
-            </div>
-            <!-- v0.8.5 — زرّ ضبط توقيت كلّ شريحة -->
-            <button class="btn btn-g bsm" id="open-per-slice-from-free" style="display:none;width:100%;margin-top:6px;background:var(--bg2);border:1px dashed var(--p)">🎚️ ضبط توقيت كلّ شريحة ↓</button>
-            <details style="margin-top:8px">
-              <summary style="cursor:pointer;color:var(--t2);font-size:11px">📂 القوالب النصّيّة المحفوظة</summary>
-              <div style="padding:6px 0">
-                <div class="grid2">
-                  <input type="text" class="fc" id="free-tpl-name" placeholder="اسم القالب">
-                  <button class="btn btn-p bsm" id="free-tpl-save-btn">💾 حفظ كقالب</button>
-                </div>
-                <div id="free-tpl-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
-              </div>
-            </details>
-          </div>
-
-          <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px;margin-top:10px">
-            <span class="tgl">🎤 استخدام صوت تلاوة مخصّص<br><small style="color:var(--t3)">يستبدل صوت القارئ الافتراضيّ بصوت محلّيّ — يعمل مع آيات القرآن أو النصّ الحرّ</small></span>
-            <label class="tg"><input type="checkbox" id="free-audio-on"><span class="tgs"></span></label>
-          </div>
-
-          <div id="free-audio-ctrl" style="display:none;margin-top:6px;padding:8px;background:var(--bg2);border:1px dashed var(--b1);border-radius:var(--r)">
-            <div class="fu-area" id="free-audio-drop">
-              <input type="file" id="free-audio-file" accept="audio/*,video/*">
-              <div class="fu-icon">🎵</div>
-              <div class="fu-txt">اسحب أو اختر ملفّ صوت/فيديو<br><small>MP3 · WAV · M4A · OGG · MP4 (يُستخرج الصوت)</small></div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">
-              <div id="free-audio-info" style="font-size:10px;color:var(--t3);flex:1;min-width:60%"></div>
-              <button class="btn btn-g bsm" id="free-audio-restart-btn" style="display:none;padding:3px 10px">↺ إعادة</button>
-              <button class="btn btn-g bsm" id="free-audio-remove-btn" style="display:none;padding:3px 10px;color:var(--danger)">🗑️ إزالة</button>
-            </div>
-
-            <div class="tgg" style="margin-top:6px">
-              <span class="tgl">✂️ تحديد مدّة مخصّصة من الصوت</span>
-              <label class="tg"><input type="checkbox" id="free-audio-trim-on"><span class="tgs"></span></label>
-            </div>
-            <div id="free-audio-trim-ctrl" style="display:none;margin-top:4px">
-              <div class="grid2">
-                <div class="fg"><label class="fl">من (ثانية)</label><input type="number" class="fc" id="free-audio-trim-start" min="0" step="0.1" value="0"></div>
-                <div class="fg"><label class="fl">إلى (ثانية)</label><input type="number" class="fc" id="free-audio-trim-end" min="0.1" step="0.1" value="30"></div>
-              </div>
-              <div id="free-audio-trim-info" style="font-size:10px;color:var(--al);margin-top:4px"></div>
-              <div class="note" style="margin-top:4px">📐 المدّة المختارة <strong>تُفرض على النصّ</strong> — تُمدَّد مدّة الشرائح تلقائياً ليُغطّي النصّ كامل الصوت.</div>
-            </div>
-          </div>
-        </div>
 
         <!-- ═══ v0.7.0 — فيديو تلاوة جاهز ═══ -->
         <div class="sec">
@@ -1325,7 +1325,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.5</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.6</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>

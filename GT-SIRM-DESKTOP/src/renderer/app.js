@@ -335,6 +335,32 @@ function getActiveAudioDuration() {
 }
 
 // v0.8.5 — أعِد توزيع مدد الشرائح لتُساوي مجموعها مدّة الصوت النشط (يُستدعى بعد رفع صوت/فيديو جديد)
+// v0.8.6 — معالج موحَّد لزرّ "🎚️ ضبط توقيت كلّ شريحة" من أيّ وحدة
+// يُجبر إعادة بناء القائمة من S.verses الحاليّة + مزامنة مع الصوت + النقل السلِس
+function openPerSliceSmart() {
+  // 1) فعِّل توگل التوقيت التفصيلي
+  const perSliceCb = document.getElementById("free-per-slice");
+  if (perSliceCb && !perSliceCb.checked) {
+    perSliceCb.checked = true;
+    perSliceCb.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  // 2) امسح freePerSlice القديمة لإجبار إعادة البناء من S.verses
+  S.freePerSlice = null;
+  // 3) أعِد البناء من المصدر النصّيّ النشط (يقرأ S.verses تلقائياً)
+  if (typeof buildPerSliceList === "function") buildPerSliceList();
+  // 4) زامِن مع الصوت النشط (إن وُجد)
+  if (typeof syncVersesToActiveAudio === "function") syncVersesToActiveAudio();
+  // 5) ارسم القائمة + حدِّث الواجهة
+  if (typeof renderPerSliceList === "function") renderPerSliceList();
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+  // 6) انتقل سلِساً إلى القسم
+  setTimeout(() => {
+    const t = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list");
+    if (t) t.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, 120);
+}
+
 function syncVersesToActiveAudio() {
   if (!Array.isArray(S.verses) || !S.verses.length) return false;
   // طبَّقها فقط على مصادر نصّيّة (نصّ حرّ أو حديث) — لا تمسّ آيات القرآن أو recvid placeholder
@@ -920,6 +946,13 @@ function applyFreeAudioTrim() {
   const trimDur = end - start;
   if (info) info.textContent = `📐 المدّة المختارة: ${trimDur.toFixed(1)}s`;
 
+  // v0.8.6 — أعِد توزيع الشرائح لتطابق مدّة trim
+  if (typeof syncVersesToActiveAudio === "function" && syncVersesToActiveAudio()) {
+    if (typeof renderPerSliceList === "function") renderPerSliceList();
+    if (typeof updateAyaInfo === "function") updateAyaInfo();
+    if (typeof updateAyaUI === "function") updateAyaUI();
+  }
+
   // اضبط currentTime
   if (S.bgAudioEl) {
     try { S.bgAudioEl.currentTime = start; } catch (_) {}
@@ -1141,20 +1174,8 @@ function initHadithModule() {
     if (slicesBtn) slicesBtn.style.display = "block";
   });
 
-  // v0.8.4 — زرّ "ضبط توقيت كلّ شريحة" — لا يُفعِّل النصّ الحرّ
-  if (slicesBtn) slicesBtn.addEventListener("click", () => {
-    // فعّل توگل التوقيت التفصيلي فقط (القسم مستقلّ الآن)
-    const perSliceCb = document.getElementById("free-per-slice");
-    if (perSliceCb && !perSliceCb.checked) {
-      perSliceCb.checked = true;
-      perSliceCb.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    // اسحب الـviewport إلى قسم التوقيت التفصيلي
-    setTimeout(() => {
-      const target = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list");
-      if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
-  });
+  // v0.8.6 — زرّ "🎚️" من الحديث: ذكيّ أيضاً
+  if (slicesBtn) slicesBtn.addEventListener("click", openPerSliceSmart);
 }
 
 // v0.8.4 — تركيب الحديث: راوي + قال رسول الله + متن
@@ -1281,18 +1302,8 @@ function initFreeTextEditor() {
   document.getElementById("free-clear-btn")?.addEventListener("click", clearFreeText);
   document.getElementById("free-tpl-save-btn")?.addEventListener("click", saveFreeTemplate);
 
-  // v0.8.5 — زرّ "🎚️ ضبط توقيت كلّ شريحة" داخل قسم النصّ الحرّ
-  document.getElementById("open-per-slice-from-free")?.addEventListener("click", () => {
-    const perSliceCb = document.getElementById("free-per-slice");
-    if (perSliceCb && !perSliceCb.checked) {
-      perSliceCb.checked = true;
-      perSliceCb.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    setTimeout(() => {
-      const t = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list");
-      if (t) t.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
-  });
+  // v0.8.6 — زرّ "🎚️" داخل النصّ الحرّ: ذكيّ — يُعيد بناء القائمة من S.verses الحاليّة
+  document.getElementById("open-per-slice-from-free")?.addEventListener("click", openPerSliceSmart);
 
   // ── Toggle A: تفعيل محرّر النصّ ──
   const textCb = document.getElementById("free-text-on");
