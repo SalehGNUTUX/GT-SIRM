@@ -1282,6 +1282,43 @@ function initAzkarModule() {
   renderAzkarList("");
 }
 
+// v0.9.1 — تقسيم ذكيّ للنصّ العربيّ يَحفظ ترتيب الجُمل والآيات
+function splitArabicTextSmart(text, opts) {
+  const { minLen = 18 } = opts || {};
+  if (!text) return [];
+  let s = String(text);
+  const MARK = ' AYAH ';
+  const ayahs = [];
+  s = s.replace(/﴿([^﴾]+)﴾/gu, (_m, content) => {
+    ayahs.push(content.trim());
+    return ` ${MARK} `;
+  });
+  s = s.replace(/\(\(/g, ' ').replace(/\)\)/g, ' ');
+  s = s.replace(/\[\[/g, ' ').replace(/\]\]/g, ' ');
+  s = s.replace(/\(([^)]+)\)/g, ' $1 ');
+  s = s.replace(/\[([^\]]+)\]/g, ' $1 ');
+  s = s.replace(/\s+/g, ' ').trim();
+  const segments = s.split(MARK);
+  const all = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i].trim();
+    if (seg) {
+      const parts = seg.split(/[.،؛؟!]+\s*/u).map(p => p.trim()).filter(Boolean);
+      all.push(...parts);
+    }
+    if (i < ayahs.length) {
+      const subs = ayahs[i].split(/[*۝۞]+\s*/u).map(p => p.trim()).filter(Boolean);
+      all.push(...(subs.length ? subs : [ayahs[i]]));
+    }
+  }
+  const out = [];
+  for (const p of all) {
+    if (out.length && p.length < minLen) out[out.length - 1] += '، ' + p;
+    else out.push(p);
+  }
+  return out.length ? out : [s];
+}
+
 function applyAzkar(z, cat) {
   const freeTextOn = document.getElementById("free-text-on");
   if (freeTextOn && freeTextOn.checked) {
@@ -1297,13 +1334,15 @@ function applyAzkar(z, cat) {
 
   const text = z.text.trim();
   const repeatSlices = !!ge("azkar-repeat-slices");
+  const smartSplit = !!ge("azkar-smart-split");
+  const base = smartSplit ? splitArabicTextSmart(text) : [text];
   const slices = [];
   if (z.count > 1 && repeatSlices) {
-    for (let i = 1; i <= z.count; i++) slices.push(text);
+    for (let i = 1; i <= z.count; i++) slices.push(...base);
   } else if (z.count > 1) {
     slices.push(`${text}\n\n(${z.count}× مرّات)`);
   } else {
-    slices.push(text);
+    slices.push(...base);
   }
 
   const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);

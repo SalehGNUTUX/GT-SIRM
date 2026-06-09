@@ -1388,8 +1388,56 @@ function initAzkarModule() {
   renderAzkarList("");
 }
 
+// v0.9.1 — تقسيم ذكيّ للنصّ العربيّ إلى شرائح
+// يحترم آيات القرآن داخل ﴿...﴾، ينظّف الأقواس المضاعفة، يَفصِل عند الترقيم،
+// ويُحافِظ على ترتيب الجُمل والآيات معاً.
+function splitArabicTextSmart(text, opts) {
+  const { minLen = 18 } = opts || {};
+  if (!text) return [];
+  let s = String(text);
+  const MARK = ' AYAH ';
+
+  // 1) استخرج آيات القرآن واستبدلها بعلامة موضع لحفظ الترتيب
+  const ayahs = [];
+  s = s.replace(/﴿([^﴾]+)﴾/gu, (_m, content) => {
+    ayahs.push(content.trim());
+    return ` ${MARK} `;
+  });
+
+  // 2) نظِّف الأقواس المضاعفة والمعقوفات (إبقاء المحتوى)
+  s = s.replace(/\(\(/g, ' ').replace(/\)\)/g, ' ');
+  s = s.replace(/\[\[/g, ' ').replace(/\]\]/g, ' ');
+  s = s.replace(/\(([^)]+)\)/g, ' $1 ');
+  s = s.replace(/\[([^\]]+)\]/g, ' $1 ');
+  s = s.replace(/\s+/g, ' ').trim();
+
+  // 3) قسِّم النصّ حول علامات الآيات للحفاظ على الترتيب
+  const segments = s.split(MARK);
+  const all = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i].trim();
+    if (seg) {
+      const parts = seg.split(/[.،؛؟!]+\s*/u).map(p => p.trim()).filter(Boolean);
+      all.push(...parts);
+    }
+    if (i < ayahs.length) {
+      // قسّم الآيات الطويلة على * أو ۝ أو ۞
+      const subs = ayahs[i].split(/[*۝۞]+\s*/u).map(p => p.trim()).filter(Boolean);
+      all.push(...(subs.length ? subs : [ayahs[i]]));
+    }
+  }
+
+  // 4) دمج الشرائح القصيرة جدّاً مع سابقتها
+  const out = [];
+  for (const p of all) {
+    if (out.length && p.length < minLen) out[out.length - 1] += '، ' + p;
+    else out.push(p);
+  }
+  return out.length ? out : [s];
+}
+
 function applyAzkar(z, cat) {
-  // منع التداخل: ألغِ النصّ الحرّ وامسح بقايا الحديث
+  // منع التداخل
   const freeTextOn = document.getElementById("free-text-on");
   if (freeTextOn && freeTextOn.checked) {
     freeTextOn.checked = false;
@@ -1402,21 +1450,20 @@ function applyAzkar(z, cat) {
   if (hadithApply) hadithApply.style.display = "none";
   if (hadithSlices) hadithSlices.style.display = "none";
 
-  // قسّم الذكر إلى شرائح
   const text = z.text.trim();
   const repeatSlices = !!ge("azkar-repeat-slices");
+  const smartSplit = !!ge("azkar-smart-split");
+  // v0.9.1 — قسِّم النصّ ذكيّاً (إن طُلب) قبل التكرار
+  const base = smartSplit ? splitArabicTextSmart(text) : [text];
   const slices = [];
   if (z.count > 1 && repeatSlices) {
-    // شريحة لكلّ تكرار
-    for (let i = 1; i <= z.count; i++) {
-      slices.push(text);
-    }
+    // كرّر الشرائح المُقسَّمة z.count مرّة
+    for (let i = 1; i <= z.count; i++) slices.push(...base);
   } else if (z.count > 1) {
-    // شريحة واحدة بعدد التكرار
+    // شريحة واحدة بنصّ + بادئة التكرار
     slices.push(`${text}\n\n(${z.count}× مرّات)`);
   } else {
-    // شريحة واحدة بدون تكرار
-    slices.push(text);
+    slices.push(...base);
   }
 
   const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);

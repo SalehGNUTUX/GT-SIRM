@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v38 — إصدار v0.9.0 (وحدة الأذكار من GT-HISNMUSLIM)
+// GT-SIRM Service Worker v39 — إصدار v0.9.1 (تقسيم ذكيّ للأذكار)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v38";
+const CACHE_VER = "gt-sirm-v39";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل
