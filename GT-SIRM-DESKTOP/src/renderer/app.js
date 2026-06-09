@@ -982,31 +982,42 @@ function initHadithModule() {
   const hadithSel = document.getElementById("hadith-select");
   const preview = document.getElementById("hadith-preview");
   const applyBtn = document.getElementById("apply-hadith-btn");
+  const slicesBtn = document.getElementById("open-per-slice-from-hadith");
   if (!collSel || !searchInp || !hadithSel) return;
 
   // املأ المجموعات
-  collSel.innerHTML = '<option value="">— اختر مجموعة —</option>' +
+  collSel.innerHTML = '<option value="">🔍 جميع المصادر (للبحث الموحَّد)</option>' +
     data.collections.map(c => `<option value="${c.id}">📜 ${c.name} (${c.hadiths.length})</option>`).join("");
 
   let currentColl = null;
-  let currentHadiths = []; // ['filtered'] القائمة المعروضة حالياً
-  let selectedIdx = -1;
+  let currentHadiths = []; // قائمة معروضة (مع coll مرتبط بكلّ عنصر)
+  // نخزّن coll لكلّ نتيجة في "all-mode" لأنّ الحديث المختار قد يكون من أيّ مجموعة
+  let selectedKey = null; // `${coll.id}#${h.n}` لتعريف ثابت
 
   const renderList = (list) => {
     if (!list.length) {
       hadithSel.innerHTML = '<option disabled>(لا نتائج)</option>';
       return;
     }
-    hadithSel.innerHTML = list.map(h => {
-      const preview = h.text.slice(0, 60).replace(/\s+/g, " ");
-      return `<option value="${h.n}">${h.n}. ${preview}…</option>`;
+    hadithSel.innerHTML = list.map((entry, i) => {
+      const h = entry.h || entry;
+      const coll = entry.coll;
+      const collTag = coll ? `[${coll.name.slice(0, 12)}] ` : "";
+      const p = h.text.slice(0, 50).replace(/\s+/g, " ");
+      const key = `${coll ? coll.id : currentColl?.id}#${h.n}`;
+      return `<option value="${key}">${collTag}${h.n}. ${p}…</option>`;
     }).join("");
   };
 
-  const showPreview = (h) => {
-    if (!h || !preview) { if (preview) preview.style.display = "none"; if (applyBtn) applyBtn.style.display = "none"; return; }
+  const showPreview = (h, coll) => {
+    if (!h || !preview) {
+      if (preview) preview.style.display = "none";
+      if (applyBtn) applyBtn.style.display = "none";
+      if (slicesBtn) slicesBtn.style.display = "none";
+      return;
+    }
     document.getElementById("hadith-prev-meta").innerHTML =
-      `<span style="background:var(--bg2);padding:2px 6px;border-radius:3px">حديث ${h.n}</span>` +
+      `<span style="background:var(--bg2);padding:2px 6px;border-radius:3px">${coll ? coll.name + " · " : ""}حديث ${h.n}</span>` +
       `<span style="background:#1f4d2b;color:#bff5cf;padding:2px 6px;border-radius:3px">${h.grade || "صحيح"}</span>` +
       `<span style="color:var(--t2)">${h.chapter || ""}</span>`;
     document.getElementById("hadith-prev-text").textContent = h.text;
@@ -1016,54 +1027,101 @@ function initHadithModule() {
     if (applyBtn) applyBtn.style.display = "block";
   };
 
-  collSel.addEventListener("change", () => {
-    const id = collSel.value;
-    currentColl = data.collections.find(c => c.id === id) || null;
-    currentHadiths = currentColl ? currentColl.hadiths.slice() : [];
-    searchInp.value = "";
+  // v0.8.2 — البحث عبر جميع المصادر حين لا تكون مجموعة محدّدة
+  const performSearch = () => {
+    const q = normalizeArabic(searchInp.value.trim());
+    if (currentColl) {
+      // داخل مجموعة واحدة
+      if (!q) currentHadiths = currentColl.hadiths.map(h => ({ h, coll: currentColl }));
+      else currentHadiths = currentColl.hadiths.filter(h => {
+        const t = normalizeArabic(h.text + " " + (h.chapter || "") + " " + (h.narrator || ""));
+        return t.includes(q);
+      }).map(h => ({ h, coll: currentColl }));
+    } else {
+      // جميع المصادر
+      const all = [];
+      for (const coll of data.collections) {
+        for (const h of coll.hadiths) {
+          if (!q) { all.push({ h, coll }); continue; }
+          const t = normalizeArabic(h.text + " " + (h.chapter || "") + " " + (h.narrator || ""));
+          if (t.includes(q)) all.push({ h, coll });
+        }
+      }
+      currentHadiths = all;
+    }
     renderList(currentHadiths);
     showPreview(null);
+  };
+
+  collSel.addEventListener("change", () => {
+    const id = collSel.value;
+    currentColl = id ? (data.collections.find(c => c.id === id) || null) : null;
+    searchInp.value = "";
+    performSearch();
   });
 
-  searchInp.addEventListener("input", () => {
-    if (!currentColl) return;
-    const q = normalizeArabic(searchInp.value.trim());
-    if (!q) { currentHadiths = currentColl.hadiths.slice(); renderList(currentHadiths); return; }
-    currentHadiths = currentColl.hadiths.filter(h => {
-      const t = normalizeArabic(h.text + " " + (h.chapter || "") + " " + (h.narrator || ""));
-      return t.includes(q);
-    });
-    renderList(currentHadiths);
-  });
+  searchInp.addEventListener("input", performSearch);
+
+  // اعرض كلّ شيء افتراضياً (وضع البحث الموحَّد)
+  performSearch();
 
   hadithSel.addEventListener("change", () => {
-    const n = parseInt(hadithSel.value);
-    const h = currentHadiths.find(x => x.n === n);
-    if (h) { selectedIdx = h.n; showPreview(h); }
+    const key = hadithSel.value;
+    if (!key) return;
+    selectedKey = key;
+    const [collId, nStr] = key.split("#");
+    const n = parseInt(nStr);
+    const coll = data.collections.find(c => c.id === collId);
+    const h = coll ? coll.hadiths.find(x => x.n === n) : null;
+    if (h) showPreview(h, coll);
   });
 
   if (applyBtn) applyBtn.addEventListener("click", () => {
-    if (!currentColl) { toast("⚠️ اختر مجموعة أوّلاً", "warn", 1500); return; }
-    const h = currentColl.hadiths.find(x => x.n === selectedIdx);
-    if (!h) { toast("⚠️ اختر حديثاً أوّلاً", "warn", 1500); return; }
-    applyHadith(h, currentColl);
+    if (!selectedKey) { toast("⚠️ اختر حديثاً أوّلاً", "warn", 1500); return; }
+    const [collId, nStr] = selectedKey.split("#");
+    const n = parseInt(nStr);
+    const coll = data.collections.find(c => c.id === collId);
+    const h = coll ? coll.hadiths.find(x => x.n === n) : null;
+    if (!h || !coll) { toast("⚠️ تعذّر إيجاد الحديث", "warn", 1500); return; }
+    applyHadith(h, coll);
+    if (slicesBtn) slicesBtn.style.display = "block";
+  });
+
+  // v0.8.2 — زرّ "ضبط توقيت كلّ شريحة"
+  if (slicesBtn) slicesBtn.addEventListener("click", () => {
+    // فعّل توگل التوقيت التفصيلي تحت محرّر النصّ الحرّ
+    const perSliceCb = document.getElementById("free-per-slice");
+    if (perSliceCb && !perSliceCb.checked) {
+      perSliceCb.checked = true;
+      perSliceCb.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    // فعّل قسم محرّر النصّ إن كان مخفياً
+    const freeTextOn = document.getElementById("free-text-on");
+    if (freeTextOn && !freeTextOn.checked) {
+      freeTextOn.checked = true;
+      freeTextOn.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    // اسحب الـviewport إلى قسم القائمة
+    setTimeout(() => {
+      const target = document.getElementById("free-per-slice-list");
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
   });
 }
 
-// v0.8.1 — تنظيف مقدّمة الإسناد (للحديث)
+// v0.8.2 — تنظيف مقدّمة الإسناد بأنماط دقيقة تستهدف "ﷺ" أو "صلى الله عليه وسلم"
 function cleanHadithIsnad(text) {
-  // أنماط شائعة لمقدّمة الإسناد: "عن X رضي الله عنه قال (سمعت) رسول الله ﷺ يقول/قال:"
-  // نبحث عن الفعل الذي يفصل الإسناد عن المتن
+  // الأنماط الأكثر دقّة: نقطع كلّ شيء حتى رمز النبيّ ﷺ + فعل اختياريّ + ":"
   const patterns = [
-    /^.*?(?:قال|قالت|سُئِل)\s*(?:رسول\s+الله|النّ?بيّ?|محمّ?د)?[^:]{0,80}?(?:يقول|قال|قالت)\s*:?\s*/u,
-    /^.*?(?:قال|قالت)\s*:\s*/u,
-    /^.*?(?:يقول|تقول)\s*:?\s*/u,
+    /^.{0,250}?ﷺ\s*(?:يقول|قال|قالت|قائلاً|قائلًا)?\s*:\s*/u,
+    /^.{0,250}?صلّ?ى\s+الله\s+عليه\s+و\s*سلّ?م\s*(?:يقول|قال|قالت|قائلاً|قائلًا)?\s*:\s*/u,
+    /^.{0,200}?قال\s+رسول\s+الله\s+(?:ﷺ|صلّ?ى\s+الله\s+عليه\s+و\s*سلّ?م)\s*:\s*/u,
+    /^.{0,200}?قال\s+النّ?بيّ?\s+(?:ﷺ|صلّ?ى\s+الله\s+عليه\s+و\s*سلّ?م)\s*:\s*/u,
   ];
-  let cleaned = text;
   for (const pat of patterns) {
-    const m = cleaned.match(pat);
-    if (m && m[0].length < text.length * 0.7) {
-      cleaned = text.slice(m[0].length).trim();
+    const m = text.match(pat);
+    if (m && m[0].length > 5 && m[0].length < text.length * 0.7) {
+      const cleaned = text.slice(m[0].length).trim();
       if (cleaned.length > 10) return cleaned;
     }
   }
