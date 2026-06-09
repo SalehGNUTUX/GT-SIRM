@@ -2,19 +2,32 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project state (2026-06-09)
+## Project state (2026-06-09 — نهاية اليوم)
 
-**GT-SIRM (GnuTux Short Islamic Reels Maker)** — at **v0.8.7** (hotfix awaiting user verification). Twin-version Electron+PWA Islamic reels maker, forked from GT-SQRM/GT-SQR v3.0 and extensively extended.
+**GT-SIRM (GnuTux Short Islamic Reels Maker)** — at **v0.10.0** (six content modules complete). Twin-version Electron+PWA Islamic reels maker forked from GT-SQRM/GT-SQR v3.0.
 
-### Current status: AWAITING USER TESTING
-v0.8.7 just pushed (commit `51fdea6`). It is a **hotfix for HTML structure damage introduced by v0.8.5's Python move script** — the script left stray `<` characters and missed `</div>` tags, causing `#preview` to render INSIDE a section instead of in its own column. User saw "المعاينة داخل الأقسام" (preview inside sections). Local diff verifies the fix (624/624 div balance desktop, 551/551 web) but real browser/Electron testing not yet confirmed by user. **Do not push more changes to this branch until user confirms layout is restored.**
+### الحال: v0.10.0 منشور على main، يَنتظر بناء الحزم وإصدار release غداً
+- آخر commit: `6ca5b7d` — v0.10.0 (الوحدات الثلاث الجديدة).
+- آخر release منشور: **v0.9.1 Beta** (التقسيم الذكيّ للأذكار).
+- لم يُبنى/يُنشَر بعد: v0.10.0 release (AppImage+DEB+RPM+APK).
+- v0.10.0 لم يُختبَر بعد بصرياً — يحتاج تأكيداً من المستخدم قبل إصدار release.
 
 ### Latest published versions
 | Repo | Version | Latest commit | Release status |
 |---|---|---|---|
-| **GT-SIRM** | 0.8.7 | `51fdea6` | v0.7.5 Beta + v0.8.7 main; **no v0.8.x release yet** |
-| **GT-SQRM** | 3.3.6 | `643996b` | v3.3.6 is published as **Stable** (current latest) |
-| **GT-SQR** | 3.3.6 | `c5908ed` | Web (GitHub Pages — no binary release) |
+| **GT-SIRM** | 0.10.0 | `6ca5b7d` | آخر release منشور: v0.9.1 Beta |
+| **GT-SQRM** | 3.3.6 | `643996b` | Stable |
+| **GT-SQR** | 3.3.6 | `c5908ed` | Web (GitHub Pages) |
+
+### الوحدات المُكتمَلة (impl: true)
+| الوحدة | الإصدار | الحالة | المصدر |
+|---|---|---|---|
+| 📖 القرآن | v0.2 | ✅ موروثة من GT-SQRM | api.alquran.cloud |
+| 📜 الحديث الشريف | v0.8.0→v0.8.4 | ✅ 90 حديثاً | الأربعون النووية + رياض الصالحين |
+| 🕊️ الأذكار | v0.9.0 | ✅ 267 ذكراً | **GT-HISNMUSLIM** (بإذن المؤلِّف نفسه) |
+| ✨ أسماء الله الحسنى | v0.10.0 | ✅ 100 اسماً | حديث الترمذي + ابن القيّم/ابن عثيمين |
+| 🤲 الأدعية المأثورة | v0.10.0 | ✅ 32 دعاءً (5 فئات) | القرآن + الصحيحان والسنن |
+| 🌟 الحِكَم والمواعظ | v0.10.0 | ✅ 32 قولاً (4 فئات) | الصحابة → ابن تيمية، بإسناد لكلّ قول |
 
 ### Sibling repos (kept in sync for portable features)
 GT-SIRM features that are portable (chromakey, vtitle, project save, recvid, restart-all-btn) get backported to GT-SQRM/GT-SQR. Features tied to GT-SIRM's architecture (Module Manager, free text, per-slice timing, timing master toggle, Hadith module) are NOT ported.
@@ -189,9 +202,26 @@ The export length mismatch ("sometimes audio repeats, sometimes truncated") was 
 
 | Repo | Latest version | Latest commit | URL |
 |---|---|---|---|
-| GT-SIRM | 0.8.7 | `51fdea6` | github.com/SalehGNUTUX/GT-SIRM |
+| GT-SIRM | 0.10.0 | `6ca5b7d` | github.com/SalehGNUTUX/GT-SIRM |
 | GT-SQRM | 3.3.6 | `643996b` | github.com/SalehGNUTUX/GT-SQRM |
 | GT-SQR | 3.3.6 | `c5908ed` | github.com/SalehGNUTUX/GT-SQR |
+
+### تاريخ سلسلة v0.9.x → v0.10.0
+- **v0.9.0** (`01bbbf7`) — وحدة الأذكار: استيراد كامل من GT-HISNMUSLIM (132 فئة، 267 ذكراً).
+- **v0.9.1** (`90b2a4f`) — التقسيم الذكيّ `splitArabicTextSmart`: يَفهم آيات `﴿﴾`، أقواس `((...))` و `[[...]]`، الترقيم العربيّ، الجُمل القصيرة تُدمَج، الترتيب مَحفوظ بـ `MARK` placeholder. **هذا الإصدار منشور release Beta.**
+- **v0.10.0** (`6ca5b7d`) — ثلاث وحدات: أسماء الله الحسنى (100 اسم) + الأدعية المأثورة (32 دعاءً في 5 فئات) + الحِكَم والمواعظ (32 قولاً في 4 فئات). جميعها تَستعمل `splitArabicTextSmart` + المساعد الجديد `clearOtherSourcesUI()`. غداً: بناء+release.
+
+### مهامّ مفتوحة لجلسة الغد
+1. **بناء v0.10.0 packages** — AppImage + DEB + RPM + APK Debug، ثمّ `gh release create v0.10.0 --prerelease`.
+2. **اختبار بصريّ v0.10.0** — التأكّد أنّ الوحدات الجديدة الثلاث تَظهر صحيحاً في تبويب التلاوة، توگلاتها في الإعدادات تَعمل، المنع المتبادل بينها يَعمل.
+3. **(اختياري)** — v0.11.0 ميكروفون + TTS حسب الـROADMAP.
+4. **(اختياري)** — تحديث صفحة الموقع (`index.html` في الجذر) لذكر الوحدات الجديدة الثلاث.
+
+### ملاحظات للجلسة القادمة
+- `splitArabicTextSmart` (في `app.js`) دالّة موحَّدة تَستعملها 3 وحدات (azkar/duas/hikam). أيّ إصلاح فيها يَفيد الجميع.
+- `clearOtherSourcesUI()` (v0.10.0) يَجب استدعاؤها في بداية أيّ `applyX` جديدة لمنع التداخل البصريّ.
+- `openPerSliceSmart` (في v0.8.6) هو معالج موحَّد لأزرار 🎚️ من كلّ الوحدات.
+- التوگل `mod-azkar` و `mod-asma` و `mod-duas` و `mod-hikam` لا يَحتاج خصائص `checked disabled` بعد الآن — أُزيلت في v0.9.0 و v0.10.0 على التوالي.
 
 GT-SIRM version history (chronological since this session started):
 - 0.5.0 — Smart drag-drop + Ctrl+V + video mute + restart button
@@ -354,6 +384,23 @@ Use a Python script that:
 
 ### Inherited gotchas from GT-SQRM
 All gotchas in `../CLAUDE.md` apply: surah name prefix handling, CSP blocks `fetch("blob:")`, fonts must `FontFace.load()`, ffmpeg progress IPC throttling, render loop must yield during V2 export, getImageData buffer no slice, bg playlist reorder reset to 0, web AAC codec fallback chain, web works under file://, electron-builder cache corruption, RPM via alien fallback, electron icon naming.
+
+### إضافة وحدة محتوى جديدة (v0.10.0 pattern)
+نمط موحَّد لإضافة أيّ وحدة جديدة (مستقبلاً مثلاً وحدة قصص الأنبياء):
+1. **ملفّ بيانات** `X-data.js` (classic script) يَضَع `window.X_DATA = { categories: [{id, name, icon, items: [{n, text, source, ...}]}] }`.
+2. **`<script src="X-data.js">`** في `index.html` بعد `hadith-data.js` (سطح المكتب + ويب).
+3. **قسم HTML** `<div class="sec" data-module="X">` في `tab-rec` بعد قسم `azkar` بنمط مكرَّر (category select + search + select size=6 + preview + apply button + per-slice button).
+4. **توگل في الإعدادات** `<input id="mod-X">` بدون `disabled` ولا `checked` (التوگل في تبويب الإعدادات + entry في `MODULES` بـ `impl: true`).
+5. **دوالّ JS**: `initXModule()` يَملأ القائمة ويَربط الـlisteners + `applyX(item, cat)` يَستدعي `clearOtherSourcesUI()` ثمّ `splitArabicTextSmart` ثمّ `calcEffectiveSliceDuration` ثمّ يَملأ `S.verses` و `S.freePerSlice`. زرّ التوقيت يُربَط بـ `openPerSliceSmart`.
+6. **نداء `initXModule()`** في تسلسل `DOMContentLoaded` بعد `initAzkarModule()`.
+7. **Service Worker** يُضاف `./X-data.js` إلى مصفوفة `OPTIONAL` + cache version bump.
+8. **`build-apk.sh`** يَنسخ `X-data.js` إلى `www/`.
+9. **توثيق**: README + ROADMAP + CHANGELOG + (اختياري) صفحة الموقع.
+
+### المنع المتبادل بين الوحدات (v0.8.14 + v0.10.0)
+- `MODULES` مع `enforceSingleModuleActive(state)` يَضمن وحدة محتوى واحدة فقط مفعَّلة.
+- في تطبيق وحدة محتوى (`applyHadith` / `applyAzkar` / `applyAsmaOne` / `applyDua` / `applyHikma`): استدعِ `clearOtherSourcesUI()` كأوّل خطوة. هذا يُخفي معاينات + أزرار الوحدات الأخرى تلقائياً، فلا تَظهر بقايا مُربكة بصرياً.
+- النصّ الحرّ (`free-text-on`) ليس وحدة في MODULES بعد v0.8.16 — إنّه أداة دائمة. لكنّه يُلغى تلقائياً عند تطبيق وحدة محتوى (في `clearOtherSourcesUI`).
 
 ### Never move large HTML sections with regex (v0.8.5 → 0.8.7 lesson)
 v0.8.5 used a Python regex to "cut and paste" the `<div class="sec" data-module="free">` block from the middle of `tab-rec` to the top. The regex matched the FIRST `</div>` it found inside the section, which closed only the toggle's `.tgg` — leaving textarea + apply + custom audio + trim orphaned in the middle of the file, plus a stray `<` character (corrupted `</div>` → `<` after sed substitutions). The user's bug report ("preview is inside the sections") came from the cascading malformation: `#tab-rec` never closed before `#tab-scene`, so the layout collapsed.
