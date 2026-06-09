@@ -310,18 +310,51 @@ function updateFreeTextStats() {
 // عند الإلغاء: يُعاد baseDur (قيمة المنزلق) دون تعديل.
 function calcEffectiveSliceDuration(numSlices, baseDur) {
   if (numSlices <= 0) return baseDur;
-  // إذا أُلغي توگل المزامنة التلقائيّة → استخدم القيمة كما هي
   const autoSync = !!ge("free-auto-sync");
   if (!autoSync) return baseDur;
-  let targetTotal = null;
-  if (S.freeAudioTrim && ge("free-audio-trim-on")) {
-    targetTotal = Math.max(0.5, S.freeAudioTrim.end - S.freeAudioTrim.start);
-  } else if (S.bgAudioEl && isFinite(S.bgAudioEl.duration) && S.bgAudioEl.duration > 0.5
-             && ge("free-audio-on")) {
-    targetTotal = S.bgAudioEl.duration;
-  }
+  const targetTotal = getActiveAudioDuration();
   if (targetTotal == null) return baseDur;
   return Math.max(0.5, targetTotal / numSlices);
+}
+
+// v0.8.5 — مصدر صوتيّ نشط مُوحَّد (recvid أو bgAudio أو trim)
+function getActiveAudioDuration() {
+  // 1) recvid (الأولويّة العليا)
+  if (ge("recvid-on") && S.recVidEl && isFinite(S.recVidEl.duration) && S.recVidEl.duration > 0.5) {
+    return S.recVidEl.duration;
+  }
+  // 2) trim للنصّ الحرّ
+  if (S.freeAudioTrim && ge("free-audio-trim-on")) {
+    return Math.max(0.5, S.freeAudioTrim.end - S.freeAudioTrim.start);
+  }
+  // 3) صوت مخصّص في النصّ الحرّ
+  if (S.bgAudioEl && isFinite(S.bgAudioEl.duration) && S.bgAudioEl.duration > 0.5 && ge("free-audio-on")) {
+    return S.bgAudioEl.duration;
+  }
+  return null;
+}
+
+// v0.8.5 — أعِد توزيع مدد الشرائح لتُساوي مجموعها مدّة الصوت النشط (يُستدعى بعد رفع صوت/فيديو جديد)
+function syncVersesToActiveAudio() {
+  if (!Array.isArray(S.verses) || !S.verses.length) return false;
+  // طبَّقها فقط على مصادر نصّيّة (نصّ حرّ أو حديث) — لا تمسّ آيات القرآن أو recvid placeholder
+  const isText = S.verses.every(v => v && (v.free || v.hadith) && !v.recvid);
+  if (!isText) return false;
+  const audioDur = getActiveAudioDuration();
+  if (audioDur == null) return false;
+  const enabled = S.verses.map((v, i) => v.enabled !== false ? i : -1).filter(i => i >= 0);
+  if (!enabled.length) return false;
+  const per = audioDur / enabled.length;
+  if (!Array.isArray(S.ayaDurations)) S.ayaDurations = [];
+  S.verses.forEach((v, i) => {
+    if (v.enabled === false) { v.manualDuration = 0.001; S.ayaDurations[i] = 0.001; }
+    else { v.manualDuration = per; S.ayaDurations[i] = per; }
+  });
+  // حدِّث أيضاً freePerSlice إن وُجد
+  if (Array.isArray(S.freePerSlice) && S.freePerSlice.length === S.verses.length) {
+    S.freePerSlice.forEach((s, i) => { if (s.enabled !== false) s.dur = per; });
+  }
+  return true;
 }
 
 // ── v0.5.1 — التوقيت التفصيلي لكلّ شريحة ──────────────────────
@@ -585,7 +618,10 @@ function applyFreeText() {
   if (S.playing) { try { togglePlay(); } catch (_) {} }
   if (typeof updateAyaInfo === "function") updateAyaInfo();
 
-  // v0.5.1 — الإجمالي يحسب من المدّد الفرديّة عند per-slice mode
+  // v0.8.5 — أظهر زرّ "🎚️ ضبط توقيت كلّ شريحة"
+  const freeSlicesBtn = document.getElementById("open-per-slice-from-free");
+  if (freeSlicesBtn) freeSlicesBtn.style.display = "block";
+
   const totalSec = perSliceMode
     ? S.verses.reduce((sum, v) => sum + (v.manualDuration || 0), 0).toFixed(1)
     : (slices.length * dur).toFixed(1);
@@ -1187,26 +1223,25 @@ function applyHadith(h, coll) {
 
   const slices = [];
   if (struct) {
-    // الراوي (شريحة مستقلّة قابلة للإلغاء بـ تنظيف الإسناد)
     if (!cleanIsnad) slices.push(struct.narrator);
-    // قال رسول الله ﷺ — تبقى دائماً (حتى مع التنظيف)
     slices.push(struct.prophetic);
-    // المتن مقسّم على الترقيم
     const bodySlices = struct.body.split(/[.،؛!؟]+\s*/u).map(s => s.trim()).filter(s => s.length > 1);
     slices.push(...(bodySlices.length ? bodySlices : [struct.body]));
   } else {
-    // فشل التحليل: قسّم على الترقيم فقط
     const rawSlices = text.split(/[.،؛!؟]+\s*/u).map(s => s.trim()).filter(s => s.length > 1);
     slices.push(...(rawSlices.length ? rawSlices : [text]));
   }
+
+  // v0.8.5 — اضبط مدّة كلّ شريحة لتساوي مجموعها مدّة الصوت النشط
   const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  const effDur = calcEffectiveSliceDuration(slices.length, baseDur);
   S.verses = slices.map((t, i) => ({
     text: t,
     numberInSurah: i + 1,
     number: i + 1,
     audio: null,
     audioSecondary: [],
-    manualDuration: baseDur,
+    manualDuration: effDur,
     free: true,
     hadith: true,
     enabled: true,
@@ -1218,13 +1253,21 @@ function applyHadith(h, coll) {
   S.useFreeAsSource = true;
   S.translations = [];
 
-  // v0.8.1 — املأ S.freePerSlice ليُعرَض في قسم التوقيت التفصيلي
-  S.freePerSlice = slices.map(t => ({ text: t, dur: baseDur, enabled: true }));
+  S.freePerSlice = slices.map(t => ({ text: t, dur: effDur, enabled: true }));
   if (typeof renderPerSliceList === "function") renderPerSliceList();
 
   if (typeof updateAyaInfo === "function") updateAyaInfo();
   if (typeof updateAyaUI === "function") updateAyaUI();
-  toast(`📜 تمّ تطبيق الحديث (${slices.length} شريحة) — يمكنك ضبط مدّة كلّ شريحة وتعطيل ما لا تريد من قسم "✍️ النصّ الحرّ"`, "success", 3000);
+
+  // أظهر زرّ "🎚️ ضبط توقيت كلّ شريحة"
+  const hadSlicesBtn = document.getElementById("open-per-slice-from-hadith");
+  if (hadSlicesBtn) hadSlicesBtn.style.display = "block";
+
+  const audioActive = getActiveAudioDuration() != null;
+  const msg = audioActive
+    ? `📜 تمّ تطبيق الحديث (${slices.length} شريحة، ${effDur.toFixed(1)}s/شريحة 🔄 متزامن مع الصوت)`
+    : `📜 تمّ تطبيق الحديث (${slices.length} شريحة، ${effDur.toFixed(1)}s)`;
+  toast(msg, "success", 3000);
 }
 
 function initFreeTextEditor() {
@@ -1238,10 +1281,24 @@ function initFreeTextEditor() {
   document.getElementById("free-clear-btn")?.addEventListener("click", clearFreeText);
   document.getElementById("free-tpl-save-btn")?.addEventListener("click", saveFreeTemplate);
 
+  // v0.8.5 — زرّ "🎚️ ضبط توقيت كلّ شريحة" داخل قسم النصّ الحرّ
+  document.getElementById("open-per-slice-from-free")?.addEventListener("click", () => {
+    const perSliceCb = document.getElementById("free-per-slice");
+    if (perSliceCb && !perSliceCb.checked) {
+      perSliceCb.checked = true;
+      perSliceCb.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    setTimeout(() => {
+      const t = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list");
+      if (t) t.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+  });
+
   // ── Toggle A: تفعيل محرّر النصّ ──
   const textCb = document.getElementById("free-text-on");
   if (textCb) {
-    try { textCb.checked = localStorage.getItem("gt_sirm_free_text_on") === "1"; } catch (_) {}
+    // v0.8.5 — دائماً غير مفعّل افتراضياً (لا يُستعاد من localStorage)
+    textCb.checked = false;
     textCb.addEventListener("change", toggleFreeTextVisibility);
     toggleFreeTextVisibility();
   }
@@ -4047,6 +4104,19 @@ function onBgAudio(input) {
   }).catch(console.warn);
   $("bg-audio-info").textContent = `✅ ${file.name} (${(file.size / 1e6).toFixed(1)}MB)`;
   toast("🎵 تم تحميل صوت الخلفية", "success");
+
+  // v0.8.5 — أعِد توزيع مدد الشرائح لتُطابق مدّة الصوت الجديد
+  const tryResync = () => {
+    if (!isFinite(a.duration) || a.duration <= 0.5) return;
+    if (syncVersesToActiveAudio()) {
+      if (typeof renderPerSliceList === "function") renderPerSliceList();
+      if (typeof updateAyaInfo === "function") updateAyaInfo();
+      if (typeof updateAyaUI === "function") updateAyaUI();
+      toast(`🔄 أُعيد توزيع الشرائح لتُطابق مدّة الصوت (${a.duration.toFixed(1)}s)`, "info", 2500);
+    }
+  };
+  if (isFinite(a.duration) && a.duration > 0.5) tryResync();
+  else a.addEventListener("loadedmetadata", tryResync, { once: true });
 }
 
 function updateVolumes() {

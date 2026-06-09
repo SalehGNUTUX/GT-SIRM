@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v25 — release v0.8.4 (hadith structure + per-slice up)
+// GT-SIRM Service Worker v26 — release v0.8.5 (free text top + audio sync)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v25";
+const CACHE_VER = "gt-sirm-v26";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل
