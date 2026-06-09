@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v27 — release v0.8.6 (smart slice button + reconstructed free text)
+// GT-SIRM Service Worker v28 — release v0.8.7 (hotfix HTML balance)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v27";
+const CACHE_VER = "gt-sirm-v28";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل
