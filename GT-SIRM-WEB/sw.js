@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v29 — release v0.8.8 (yt-dlp video appears in bg playlist card)
+// GT-SIRM Service Worker v30 — release v0.8.9 (yt-dlp inside custom audio section)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v29";
+const CACHE_VER = "gt-sirm-v30";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

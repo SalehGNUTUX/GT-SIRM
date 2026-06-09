@@ -1333,6 +1333,33 @@ function initFreeTextEditor() {
   document.getElementById("free-audio-remove-btn")?.addEventListener("click", removeFreeAudio);
   document.getElementById("free-audio-restart-btn")?.addEventListener("click", restartFreeAudio);
 
+  // v0.8.9 — تنزيل yt-dlp مدمج داخل قسم الصوت المخصّص (سطح المكتب فقط)
+  if (typeof IS_DESKTOP !== "undefined" && IS_DESKTOP) {
+    document.querySelectorAll('input[name="free-audio-dl-mode"]').forEach(r => {
+      r.addEventListener("change", () => {
+        const row = document.getElementById("free-audio-dl-path-row");
+        if (row) row.style.display = r.value === "permanent" && r.checked ? "flex" : "none";
+      });
+    });
+    document.getElementById("free-audio-dl-browse")?.addEventListener("click", async () => {
+      try {
+        const res = await window.SIRM.dialogOpen({
+          title: "اختر مجلد حفظ الصوت المُنزَّل",
+          properties: ["openDirectory", "createDirectory"],
+        });
+        if (res && res[0]) document.getElementById("free-audio-dl-path").value = res[0];
+      } catch (e) { console.warn("dialogOpen:", e); }
+    });
+    document.getElementById("free-audio-dl-btn")?.addEventListener("click", runFreeAudioYtdlpDownload);
+    document.getElementById("free-audio-dl-cancel")?.addEventListener("click", () => {
+      try { window.SIRM.ytdlpCancel?.(); } catch (_) {}
+    });
+  } else {
+    // أخفِ الواجهة على المنصّات بدون yt-dlp
+    const wrap = document.getElementById("free-audio-dl-wrap");
+    if (wrap) wrap.style.display = "none";
+  }
+
   // ── تقطيع زمني للصوت ──
   const trimCb = document.getElementById("free-audio-trim-on");
   if (trimCb) {
@@ -6230,6 +6257,72 @@ function restoreDlSettings() {
   }
 }
 
+
+// v0.8.9 — تنزيل صوت مخصّص عبر yt-dlp مباشرة من قسم الصوت في النصّ الحرّ
+// يستخرج OGG من أيّ رابط (فيديو يوتيوب/مباشر) ثم يعتمده تلقائياً كصوت
+async function runFreeAudioYtdlpDownload() {
+  if (!IS_DESKTOP) { toast?.("⚠️ التنزيل متاح في إصدار سطح المكتب فقط", "warn"); return; }
+  if (S.ytdlpBusy) { toast?.("⚠️ تنزيل جارٍ بالفعل", "info"); return; }
+
+  const urlInp = $("free-audio-dl-url");
+  const url = (urlInp?.value || "").trim();
+  if (!url || !url.startsWith("http")) {
+    toast?.("⚠️ أدخل رابطاً صالحاً (http/https)", "error"); return;
+  }
+  const mode = radioVal("free-audio-dl-mode") || "temporary";
+  const savePath = $("free-audio-dl-path")?.value?.trim() || "";
+
+  const log = $("free-audio-dl-log");
+  const btn = $("free-audio-dl-btn");
+  const cancelBtn = $("free-audio-dl-cancel");
+  if (log) { log.style.display = "block"; log.innerHTML = ""; }
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ التنزيل..."; }
+  if (cancelBtn) cancelBtn.style.display = "inline-block";
+
+  const appendLog = (line) => {
+    if (!log) return;
+    const div = document.createElement("div");
+    div.textContent = line;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  };
+
+  const onProgress = (data) => { if (data?.line) appendLog(data.line); };
+  try { window.SIRM.onYtdlpProgress?.(onProgress); } catch (_) {}
+
+  S.ytdlpBusy = true;
+  try {
+    const result = await window.SIRM.ytdlpDownload({
+      url,
+      type: "audio",
+      audioFormat: "ogg",
+      dlSaveMode: mode,
+      dlSavePath: savePath,
+    });
+    if (!result?.ok || !result.filePath) throw new Error("yt-dlp returned no file");
+    appendLog(`✅ تمّ التنزيل: ${result.filePath}`);
+
+    // اقرأ بايتات الملفّ المُنزَّل و ابنِ File ثمّ مرّره عبر handleFreeAudioFile
+    const meta = await window.SIRM.readDownloadedFile(result.filePath);
+    if (!meta || !meta.buffer) throw new Error("read-downloaded-file failed");
+    const file = new File([meta.buffer], meta.name || "downloaded.ogg", { type: "audio/ogg" });
+    if (typeof handleFreeAudioFile === "function") {
+      handleFreeAudioFile(file);
+    } else {
+      throw new Error("handleFreeAudioFile not available");
+    }
+    toast?.("✅ تمّ تنزيل الصوت و اعتماده", "success", 2500);
+  } catch (e) {
+    console.error("free-audio yt-dlp:", e);
+    appendLog(`❌ خطأ: ${e.message}`);
+    toast?.(`❌ فشل التنزيل: ${e.message}`, "error", 3500);
+  } finally {
+    S.ytdlpBusy = false;
+    try { window.SIRM.offYtdlpProgress?.(); } catch (_) {}
+    if (btn) { btn.disabled = false; btn.textContent = "⬇️ تنزيل و اعتماد كصوت"; }
+    if (cancelBtn) cancelBtn.style.display = "none";
+  }
+}
 
 async function runYtdlpDownload() {
   if (!IS_DESKTOP) return;

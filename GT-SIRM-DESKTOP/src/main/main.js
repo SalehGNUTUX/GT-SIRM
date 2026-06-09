@@ -675,7 +675,7 @@ ipcMain.handle("ffmpeg-encode", async (event, opts) => {
 });
 
 ipcMain.handle("ytdlp-download", async (event, opts) => {
-  const { url, type, quality, startTime, endTime, dlSaveMode, dlSavePath } = opts;
+  const { url, type, quality, startTime, endTime, dlSaveMode, dlSavePath, audioFormat } = opts;
   const ytdlpPath = await getBinPath("yt-dlp");
   if (!ytdlpPath) throw new Error("yt-dlp not found");
 
@@ -703,7 +703,9 @@ ipcMain.handle("ytdlp-download", async (event, opts) => {
 
   let args;
   if (type === "audio") {
-    args = ["-x", "--audio-format", "mp3", "--audio-quality", "0", "-o", outTmpl, url];
+    // v0.8.9 — اسمح بتحديد صيغة الصوت (افتراضياً mp3؛ ogg مطلوب من قسم الصوت المخصّص في النصّ الحرّ)
+    const af = (audioFormat || "mp3").toLowerCase();
+    args = ["-x", "--audio-format", af, "--audio-quality", "0", "-o", outTmpl, url];
   } else {
     args = [
       "-f", quality || "bestvideo[height<=1080]+bestaudio/best[height<=1080]",

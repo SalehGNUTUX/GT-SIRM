@@ -608,6 +608,27 @@ body.offline .offline-badge{display:block}
               <button class="btn btn-g bsm" id="free-audio-remove-btn" style="display:none;padding:3px 10px;color:var(--danger)">🗑️ إزالة</button>
             </div>
 
+            <!-- v0.8.9 — تنزيل yt-dlp مباشر (سطح المكتب فقط) -->
+            <details id="free-audio-dl-wrap" style="margin-top:6px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px">
+              <summary style="cursor:pointer;color:var(--t2);font-size:12px;font-weight:600">⬇️ تنزيل صوت من رابط (يوتيوب/فيديو → OGG)</summary>
+              <div style="padding:6px 0">
+                <input type="text" class="fc" id="free-audio-dl-url" placeholder="https://youtube.com/watch?v=... أو رابط فيديو مباشر">
+                <div style="display:flex;gap:8px;margin-top:5px;font-size:11px">
+                  <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="temporary" checked> 📁 مؤقت (/tmp)</label>
+                  <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="permanent"> 💾 دائم</label>
+                </div>
+                <div id="free-audio-dl-path-row" style="display:none;gap:5px;margin-top:5px">
+                  <input type="text" class="fc" id="free-audio-dl-path" placeholder="مسار الحفظ" style="flex:1">
+                  <button class="btn btn-g bsm" id="free-audio-dl-browse" style="padding:3px 10px">📁</button>
+                </div>
+                <div style="display:flex;gap:5px;margin-top:5px">
+                  <button class="btn btn-p bsm" id="free-audio-dl-btn" style="flex:1">⬇️ تنزيل و اعتماد كصوت</button>
+                  <button class="btn btn-g bsm" id="free-audio-dl-cancel" style="display:none;padding:3px 10px;color:var(--danger)">✕</button>
+                </div>
+                <div id="free-audio-dl-log" style="font-size:10px;color:var(--t3);margin-top:5px;max-height:90px;overflow-y:auto;font-family:monospace;background:var(--bg2);padding:4px 6px;border-radius:var(--r);display:none"></div>
+              </div>
+            </details>
+
             <!-- ✂️ تقطيع زمني للصوت المخصّص -->
             <div class="tgg" style="margin-top:6px">
               <span class="tgl">✂️ تحديد مدّة مخصّصة من الصوت</span>
@@ -1626,7 +1647,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.8</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.8.9</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
