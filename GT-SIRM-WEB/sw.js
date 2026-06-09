@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v30 — release v0.8.9 (yt-dlp inside custom audio section)
+// GT-SIRM Service Worker v31 — release v0.8.10 (yt-dlp inside recvid section)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v30";
+const CACHE_VER = "gt-sirm-v31";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

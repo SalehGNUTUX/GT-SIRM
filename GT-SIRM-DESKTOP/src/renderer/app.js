@@ -1776,6 +1776,32 @@ function initEventListeners() {
     removeRecVid();
     toast("🗑️ تمّت إزالة الفيديو", "info", 1500);
   });
+
+  // v0.8.10 — تنزيل yt-dlp مدمج داخل قسم فيديو التلاوة (سطح المكتب فقط)
+  if (typeof IS_DESKTOP !== "undefined" && IS_DESKTOP) {
+    document.querySelectorAll('input[name="recvid-dl-mode"]').forEach(r => {
+      r.addEventListener("change", () => {
+        const row = document.getElementById("recvid-dl-path-row");
+        if (row) row.style.display = r.value === "permanent" && r.checked ? "flex" : "none";
+      });
+    });
+    document.getElementById("recvid-dl-browse")?.addEventListener("click", async () => {
+      try {
+        const res = await window.SIRM.dialogOpen({
+          title: "اختر مجلد حفظ فيديو التلاوة",
+          properties: ["openDirectory", "createDirectory"],
+        });
+        if (res && res[0]) document.getElementById("recvid-dl-path").value = res[0];
+      } catch (e) { console.warn("dialogOpen:", e); }
+    });
+    document.getElementById("recvid-dl-btn")?.addEventListener("click", runRecvidYtdlpDownload);
+    document.getElementById("recvid-dl-cancel")?.addEventListener("click", () => {
+      try { window.SIRM.ytdlpCancel?.(); } catch (_) {}
+    });
+  } else {
+    const wrap = document.getElementById("recvid-dl-wrap");
+    if (wrap) wrap.style.display = "none";
+  }
   // v0.7.1 — presets ألوان خلفيّة الفيديو
   const setRecvidBg = (hex) => {
     const inp = $("recvid-bgcolor"); if (inp) { inp.value = hex; inp.dispatchEvent(new Event("change")); }
@@ -6257,6 +6283,78 @@ function restoreDlSettings() {
   }
 }
 
+
+// v0.8.10 — تنزيل فيديو تلاوة مباشرة من قسم الـrecvid عبر yt-dlp
+// يُنزِّل MP4 ثمّ يبني File ويستدعي onRecVidFile كما لو رفعه المستخدم يدويّاً
+async function runRecvidYtdlpDownload() {
+  if (!IS_DESKTOP) { toast?.("⚠️ التنزيل متاح في إصدار سطح المكتب فقط", "warn"); return; }
+  if (S.ytdlpBusy) { toast?.("⚠️ تنزيل جارٍ بالفعل", "info"); return; }
+
+  const url = ($("recvid-dl-url")?.value || "").trim();
+  if (!url || !url.startsWith("http")) {
+    toast?.("⚠️ أدخل رابطاً صالحاً (http/https)", "error"); return;
+  }
+  const mode = radioVal("recvid-dl-mode") || "temporary";
+  const savePath = $("recvid-dl-path")?.value?.trim() || "";
+
+  const log = $("recvid-dl-log");
+  const btn = $("recvid-dl-btn");
+  const cancelBtn = $("recvid-dl-cancel");
+  if (log) { log.style.display = "block"; log.innerHTML = ""; }
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ التنزيل..."; }
+  if (cancelBtn) cancelBtn.style.display = "inline-block";
+
+  const appendLog = (line) => {
+    if (!log) return;
+    const div = document.createElement("div");
+    div.textContent = line;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  };
+
+  const onProgress = (data) => { if (data?.line) appendLog(data.line); };
+  try { window.SIRM.onYtdlpProgress?.(onProgress); } catch (_) {}
+
+  S.ytdlpBusy = true;
+  try {
+    const result = await window.SIRM.ytdlpDownload({
+      url,
+      type: "video",
+      quality: "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
+      dlSaveMode: mode,
+      dlSavePath: savePath,
+    });
+    if (!result?.ok || !result.filePath) throw new Error("yt-dlp returned no file");
+    appendLog(`✅ تمّ التنزيل: ${result.filePath}`);
+
+    // اقرأ بايتات الملفّ وأنشئ File ثمّ مرّره عبر onRecVidFile
+    const meta = await window.SIRM.readDownloadedFile(result.filePath);
+    if (!meta || !meta.buffer) throw new Error("read-downloaded-file failed");
+    const ext = (result.filePath.split(".").pop() || "mp4").toLowerCase();
+    const mime = ext === "webm" ? "video/webm"
+               : ext === "mkv"  ? "video/x-matroska"
+               : ext === "mov"  ? "video/quicktime"
+               : "video/mp4";
+    const file = new File([meta.buffer], meta.name || `recvid.${ext}`, { type: mime });
+
+    // محاكاة input.files مع value=""
+    if (typeof onRecVidFile === "function") {
+      onRecVidFile({ files: [file], value: "" });
+    } else {
+      throw new Error("onRecVidFile not available");
+    }
+    toast?.("✅ تمّ تنزيل فيديو التلاوة و اعتماده", "success", 2500);
+  } catch (e) {
+    console.error("recvid yt-dlp:", e);
+    appendLog(`❌ خطأ: ${e.message}`);
+    toast?.(`❌ فشل التنزيل: ${e.message}`, "error", 3500);
+  } finally {
+    S.ytdlpBusy = false;
+    try { window.SIRM.offYtdlpProgress?.(); } catch (_) {}
+    if (btn) { btn.disabled = false; btn.textContent = "⬇️ تنزيل و اعتماد كفيديو تلاوة"; }
+    if (cancelBtn) cancelBtn.style.display = "none";
+  }
+}
 
 // v0.8.9 — تنزيل صوت مخصّص عبر yt-dlp مباشرة من قسم الصوت في النصّ الحرّ
 // يستخرج OGG من أيّ رابط (فيديو يوتيوب/مباشر) ثم يعتمده تلقائياً كصوت
