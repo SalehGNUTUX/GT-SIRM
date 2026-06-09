@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v39 — إصدار v0.9.1 (تقسيم ذكيّ للأذكار)
+// GT-SIRM Service Worker v40 — إصدار v0.10.0 (أسماء الله الحسنى + الأدعية + الحِكَم)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v39";
+const CACHE_VER = "gt-sirm-v40";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل
@@ -25,6 +25,9 @@ const OPTIONAL = [
   "./fonts-data.js",
   "./hadith-data.js",
   "./azkar-data.js",
+  "./asma-data.js",
+  "./duas-data.js",
+  "./hikam-data.js",
   "./fonts/fonts.json",
   // Google Fonts CSS (احتياط للخطوط البعيدة)
   "https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Reem+Kufi:wght@400;700&family=Scheherazade+New:wght@400;700&family=Cairo:wght@300;400;600;700;900&family=Noto+Naskh+Arabic:wght@400;700&family=Lateef:wght@400;700&family=Harmattan:wght@400;700&family=Markazi+Text:ital,wght@0,400;0,700;1,400&family=Aref+Ruqaa&display=swap"

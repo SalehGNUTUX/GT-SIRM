@@ -136,6 +136,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   initFreeTextEditor();  // v0.4.0 — محرّر النصّ الحرّ
   initHadithModule();    // v0.8.0 — وحدة الحديث الشريف
   initAzkarModule();     // v0.9.0 — وحدة الأذكار (مأخوذة من GT-HISNMUSLIM)
+  initAsmaModule();      // v0.10.0 — وحدة أسماء الله الحسنى
+  initDuasModule();      // v0.10.0 — وحدة الأدعية المأثورة
+  initHikamModule();     // v0.10.0 — وحدة الحِكَم والمواعظ
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
 
   // ⚠️ الترتيب مهم: نستعيد الإعدادات بعد تسجيل المستمعين فقط
@@ -167,9 +170,9 @@ const MODULES = {
   quran:  { default: true,  label: "القرآن الكريم",        impl: true  },
   hadith: { default: false, label: "الحديث الشريف",         impl: true  },
   azkar:  { default: false, label: "الأذكار",               impl: true  },
-  asma:   { default: false, label: "أسماء الله الحسنى",     impl: false },
-  duas:   { default: false, label: "الأدعية المأثورة",      impl: false },
-  hikam:  { default: false, label: "الحِكَم والمواعظ",       impl: false },
+  asma:   { default: false, label: "أسماء الله الحسنى",     impl: true  },
+  duas:   { default: false, label: "الأدعية المأثورة",      impl: true  },
+  hikam:  { default: false, label: "الحِكَم والمواعظ",       impl: true  },
 };
 const MODULES_KEY = "gt_sirm_modules_v1";
 const FREE_TPL_KEY = "gt_sirm_free_templates_v1";
@@ -1500,6 +1503,367 @@ function applyAzkar(z, cat) {
     ? `🕊️ تمّ تطبيق الذكر (${slices.length} شريحة، ${effDur.toFixed(1)}s/شريحة 🔄 متزامن مع الصوت)`
     : `🕊️ تمّ تطبيق الذكر (${slices.length} شريحة، ${effDur.toFixed(1)}s)`;
   toast(msg, "success", 3000);
+}
+
+// ══════════════════════════════════════════════════════
+//  مساعد موحَّد لتنظيف بقايا الوحدات الأخرى عند تطبيق وحدة جديدة
+// ══════════════════════════════════════════════════════
+function clearOtherSourcesUI() {
+  const freeTextOn = document.getElementById("free-text-on");
+  if (freeTextOn && freeTextOn.checked) {
+    freeTextOn.checked = false;
+    freeTextOn.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  // أخفِ معاينات + أزرار التطبيق + أزرار التوقيت للوحدات الأخرى
+  ["hadith", "azkar", "asma", "duas", "hikam"].forEach(key => {
+    const prev = document.getElementById(`${key}-preview`);
+    const applyB = document.getElementById(`apply-${key}-btn`);
+    const slicesB = document.getElementById(`open-per-slice-from-${key}`);
+    if (prev) prev.style.display = "none";
+    if (applyB) applyB.style.display = "none";
+    if (slicesB) slicesB.style.display = "none";
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  وحدة أسماء الله الحسنى (v0.10.0)
+// ══════════════════════════════════════════════════════
+function initAsmaModule() {
+  const data = window.ASMA_DATA;
+  if (!data || !Array.isArray(data.items)) return;
+  const searchInp = document.getElementById("asma-search");
+  const asmaSel = document.getElementById("asma-select");
+  const preview = document.getElementById("asma-preview");
+  const applyBtn = document.getElementById("apply-asma-btn");
+  const applyAllBtn = document.getElementById("apply-asma-all-btn");
+  const slicesBtn = document.getElementById("open-per-slice-from-asma");
+  const searchClear = document.getElementById("asma-search-clear");
+  if (!searchInp || !asmaSel) return;
+
+  let currentName = null;
+
+  function renderList(filter) {
+    asmaSel.innerHTML = "";
+    const normFilter = filter ? normalizeArabic(filter.trim()) : "";
+    let items = data.items;
+    if (normFilter) {
+      items = items.filter(it =>
+        normalizeArabic(it.name).includes(normFilter) ||
+        normalizeArabic(it.meaning).includes(normFilter)
+      );
+    }
+    items.forEach(it => {
+      const o = document.createElement("option");
+      o.value = it.n;
+      o.textContent = `${it.n}. ${it.name}`;
+      asmaSel.appendChild(o);
+    });
+    if (!items.length) {
+      const o = document.createElement("option");
+      o.disabled = true;
+      o.textContent = "— لا نتائج —";
+      asmaSel.appendChild(o);
+    }
+  }
+
+  function selectName() {
+    const id = parseInt(asmaSel.value);
+    const it = data.items.find(x => x.n === id);
+    if (!it) return;
+    currentName = it;
+    const n = document.getElementById("asma-prev-name");
+    const m = document.getElementById("asma-prev-meaning");
+    const r = document.getElementById("asma-prev-ref");
+    if (n) n.textContent = it.name;
+    if (m) m.textContent = it.meaning;
+    if (r) r.textContent = it.ref || "";
+    preview.style.display = "block";
+    applyBtn.style.display = "block";
+    slicesBtn.style.display = "none";
+  }
+
+  searchInp.addEventListener("input", () => {
+    renderList(searchInp.value);
+    if (searchClear) searchClear.style.display = searchInp.value ? "inline-block" : "none";
+  });
+  if (searchClear) searchClear.addEventListener("click", () => {
+    searchInp.value = "";
+    searchClear.style.display = "none";
+    renderList("");
+  });
+  asmaSel.addEventListener("change", selectName);
+  asmaSel.addEventListener("dblclick", () => { selectName(); if (currentName) applyAsmaOne(currentName); });
+  applyBtn.addEventListener("click", () => { if (currentName) applyAsmaOne(currentName); });
+  applyAllBtn.addEventListener("click", () => applyAsmaAll(data.items));
+  slicesBtn.addEventListener("click", openPerSliceSmart);
+
+  renderList("");
+}
+
+function applyAsmaOne(item) {
+  clearOtherSourcesUI();
+  // كل اسم = شريحة واحدة بنصّ "الاسم — المعنى — الشاهد"
+  const text = `${item.name}\n\n${item.meaning}${item.ref ? "\n\n" + item.ref : ""}`;
+  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 6);
+  const effDur = calcEffectiveSliceDuration(1, baseDur);
+  S.verses = [{
+    text, numberInSurah: 1, number: 1, audio: null, audioSecondary: [],
+    manualDuration: effDur, free: true, asma: true, enabled: true,
+    source: `أسماء الله الحسنى · ${item.name}`,
+  }];
+  S.ayaDurations = [effDur]; S.currentAya = 0; S.elapsed = 0;
+  S.useFreeAsSource = true; S.translations = [];
+  S.freePerSlice = [{ text, dur: effDur, enabled: true }];
+  if (typeof renderPerSliceList === "function") renderPerSliceList();
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+  const sBtn = document.getElementById("open-per-slice-from-asma");
+  if (sBtn) sBtn.style.display = "block";
+  toast(`✨ تمّ تطبيق "${item.name}"`, "success", 2500);
+}
+
+function applyAsmaAll(items) {
+  clearOtherSourcesUI();
+  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 5);
+  const effDur = calcEffectiveSliceDuration(items.length, baseDur);
+  S.verses = items.map((it, i) => ({
+    text: `${it.name}\n\n${it.meaning}`,
+    numberInSurah: i + 1, number: i + 1, audio: null, audioSecondary: [],
+    manualDuration: effDur, free: true, asma: true, enabled: true,
+    source: `أسماء الله الحسنى · ${it.name}`,
+  }));
+  S.ayaDurations = S.verses.map(v => v.manualDuration);
+  S.currentAya = 0; S.elapsed = 0; S.useFreeAsSource = true; S.translations = [];
+  S.freePerSlice = S.verses.map(v => ({ text: v.text, dur: effDur, enabled: true }));
+  if (typeof renderPerSliceList === "function") renderPerSliceList();
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+  const sBtn = document.getElementById("open-per-slice-from-asma");
+  if (sBtn) sBtn.style.display = "block";
+  toast(`✨ تمّ تطبيق كلّ الأسماء (${items.length} شريحة)`, "success", 3000);
+}
+
+// ══════════════════════════════════════════════════════
+//  وحدة الأدعية المأثورة (v0.10.0)
+// ══════════════════════════════════════════════════════
+function initDuasModule() {
+  const data = window.DUAS_DATA;
+  if (!data || !Array.isArray(data.categories)) return;
+  const catSel = document.getElementById("duas-category");
+  const searchInp = document.getElementById("duas-search");
+  const duasSel = document.getElementById("duas-select");
+  const preview = document.getElementById("duas-preview");
+  const applyBtn = document.getElementById("apply-duas-btn");
+  const slicesBtn = document.getElementById("open-per-slice-from-duas");
+  const searchClear = document.getElementById("duas-search-clear");
+  if (!catSel || !searchInp || !duasSel) return;
+
+  catSel.innerHTML = "";
+  data.categories.forEach(cat => {
+    const o = document.createElement("option");
+    o.value = cat.id;
+    o.textContent = `${cat.icon || "🤲"} ${cat.name} (${cat.items.length})`;
+    catSel.appendChild(o);
+  });
+
+  let currentCat = data.categories[0];
+  let currentDua = null;
+
+  function renderDuasList(filter) {
+    duasSel.innerHTML = "";
+    const normFilter = filter ? normalizeArabic(filter.trim()) : "";
+    let items = currentCat.items;
+    if (normFilter) items = items.filter(it => normalizeArabic(it.text).includes(normFilter));
+    items.forEach(it => {
+      const o = document.createElement("option");
+      o.value = it.n;
+      const prev = it.text.length > 80 ? it.text.slice(0, 78) + "…" : it.text;
+      o.textContent = `${it.n}. ${prev}`;
+      duasSel.appendChild(o);
+    });
+    if (!items.length) {
+      const o = document.createElement("option");
+      o.disabled = true; o.textContent = "— لا نتائج —"; duasSel.appendChild(o);
+    }
+  }
+
+  function selectDua() {
+    const id = parseInt(duasSel.value);
+    const it = currentCat.items.find(x => x.n === id);
+    if (!it) return;
+    currentDua = it;
+    const m = document.getElementById("duas-prev-meta");
+    const t = document.getElementById("duas-prev-text");
+    const s = document.getElementById("duas-prev-source");
+    const c = document.getElementById("duas-prev-context");
+    if (m) m.textContent = `${currentCat.icon || "🤲"} ${currentCat.name} · رقم ${it.n}`;
+    if (t) t.textContent = it.text;
+    if (s) s.textContent = `📖 ${it.source}`;
+    if (c) c.textContent = it.context ? `💡 ${it.context}` : "";
+    preview.style.display = "block";
+    applyBtn.style.display = "block";
+    slicesBtn.style.display = "none";
+  }
+
+  catSel.addEventListener("change", () => {
+    const id = parseInt(catSel.value);
+    currentCat = data.categories.find(c => c.id === id) || data.categories[0];
+    searchInp.value = "";
+    if (searchClear) searchClear.style.display = "none";
+    renderDuasList("");
+    preview.style.display = "none";
+    applyBtn.style.display = "none";
+    slicesBtn.style.display = "none";
+  });
+  searchInp.addEventListener("input", () => {
+    renderDuasList(searchInp.value);
+    if (searchClear) searchClear.style.display = searchInp.value ? "inline-block" : "none";
+  });
+  if (searchClear) searchClear.addEventListener("click", () => {
+    searchInp.value = ""; searchClear.style.display = "none"; renderDuasList("");
+  });
+  duasSel.addEventListener("change", selectDua);
+  duasSel.addEventListener("dblclick", () => { selectDua(); if (currentDua) applyDua(currentDua, currentCat); });
+  applyBtn.addEventListener("click", () => { if (currentDua) applyDua(currentDua, currentCat); });
+  slicesBtn.addEventListener("click", openPerSliceSmart);
+
+  renderDuasList("");
+}
+
+function applyDua(d, cat) {
+  clearOtherSourcesUI();
+  const text = d.text.trim();
+  const smartSplit = !!ge("duas-smart-split");
+  const slices = smartSplit ? splitArabicTextSmart(text) : [text];
+  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  const effDur = calcEffectiveSliceDuration(slices.length, baseDur);
+  S.verses = slices.map((t, i) => ({
+    text: t, numberInSurah: i + 1, number: i + 1, audio: null, audioSecondary: [],
+    manualDuration: effDur, free: true, dua: true, enabled: true,
+    source: `${cat.name} · ${d.source}`,
+  }));
+  S.ayaDurations = S.verses.map(v => v.manualDuration);
+  S.currentAya = 0; S.elapsed = 0; S.useFreeAsSource = true; S.translations = [];
+  S.freePerSlice = slices.map(t => ({ text: t, dur: effDur, enabled: true }));
+  if (typeof renderPerSliceList === "function") renderPerSliceList();
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+  const sBtn = document.getElementById("open-per-slice-from-duas");
+  if (sBtn) sBtn.style.display = "block";
+  toast(`🤲 تمّ تطبيق الدعاء (${slices.length} شريحة)`, "success", 2500);
+}
+
+// ══════════════════════════════════════════════════════
+//  وحدة الحِكَم والمواعظ (v0.10.0)
+// ══════════════════════════════════════════════════════
+function initHikamModule() {
+  const data = window.HIKAM_DATA;
+  if (!data || !Array.isArray(data.categories)) return;
+  const catSel = document.getElementById("hikam-category");
+  const searchInp = document.getElementById("hikam-search");
+  const hikamSel = document.getElementById("hikam-select");
+  const preview = document.getElementById("hikam-preview");
+  const applyBtn = document.getElementById("apply-hikam-btn");
+  const slicesBtn = document.getElementById("open-per-slice-from-hikam");
+  const searchClear = document.getElementById("hikam-search-clear");
+  if (!catSel || !searchInp || !hikamSel) return;
+
+  catSel.innerHTML = "";
+  data.categories.forEach(cat => {
+    const o = document.createElement("option");
+    o.value = cat.id;
+    o.textContent = `${cat.icon || "🌟"} ${cat.name} (${cat.items.length})`;
+    catSel.appendChild(o);
+  });
+
+  let currentCat = data.categories[0];
+  let currentHikma = null;
+
+  function renderHikamList(filter) {
+    hikamSel.innerHTML = "";
+    const normFilter = filter ? normalizeArabic(filter.trim()) : "";
+    let items = currentCat.items;
+    if (normFilter) items = items.filter(it =>
+      normalizeArabic(it.text).includes(normFilter) || normalizeArabic(it.sayer || "").includes(normFilter)
+    );
+    items.forEach(it => {
+      const o = document.createElement("option");
+      o.value = it.n;
+      const prev = it.text.length > 70 ? it.text.slice(0, 68) + "…" : it.text;
+      o.textContent = `${it.n}. ${prev}`;
+      hikamSel.appendChild(o);
+    });
+    if (!items.length) {
+      const o = document.createElement("option");
+      o.disabled = true; o.textContent = "— لا نتائج —"; hikamSel.appendChild(o);
+    }
+  }
+
+  function selectHikma() {
+    const id = parseInt(hikamSel.value);
+    const it = currentCat.items.find(x => x.n === id);
+    if (!it) return;
+    currentHikma = it;
+    const t = document.getElementById("hikam-prev-text");
+    const sy = document.getElementById("hikam-prev-sayer");
+    const sr = document.getElementById("hikam-prev-source");
+    if (t) t.textContent = it.text;
+    if (sy) sy.textContent = it.sayer ? `— ${it.sayer}` : "";
+    if (sr) sr.textContent = it.source ? `📖 ${it.source}` : "";
+    preview.style.display = "block";
+    applyBtn.style.display = "block";
+    slicesBtn.style.display = "none";
+  }
+
+  catSel.addEventListener("change", () => {
+    const id = parseInt(catSel.value);
+    currentCat = data.categories.find(c => c.id === id) || data.categories[0];
+    searchInp.value = "";
+    if (searchClear) searchClear.style.display = "none";
+    renderHikamList("");
+    preview.style.display = "none";
+    applyBtn.style.display = "none";
+    slicesBtn.style.display = "none";
+  });
+  searchInp.addEventListener("input", () => {
+    renderHikamList(searchInp.value);
+    if (searchClear) searchClear.style.display = searchInp.value ? "inline-block" : "none";
+  });
+  if (searchClear) searchClear.addEventListener("click", () => {
+    searchInp.value = ""; searchClear.style.display = "none"; renderHikamList("");
+  });
+  hikamSel.addEventListener("change", selectHikma);
+  hikamSel.addEventListener("dblclick", () => { selectHikma(); if (currentHikma) applyHikma(currentHikma, currentCat); });
+  applyBtn.addEventListener("click", () => { if (currentHikma) applyHikma(currentHikma, currentCat); });
+  slicesBtn.addEventListener("click", openPerSliceSmart);
+
+  renderHikamList("");
+}
+
+function applyHikma(h, cat) {
+  clearOtherSourcesUI();
+  const text = h.text.trim();
+  const smartSplit = !!ge("hikam-smart-split");
+  const baseSlices = smartSplit ? splitArabicTextSmart(text) : [text];
+  // أضف القائل كشريحة أخيرة إن وُجد
+  const slices = [...baseSlices];
+  if (h.sayer) slices.push(`— ${h.sayer}`);
+  const baseDur = parseFloat(document.getElementById("free-slice-dur")?.value || 4);
+  const effDur = calcEffectiveSliceDuration(slices.length, baseDur);
+  S.verses = slices.map((t, i) => ({
+    text: t, numberInSurah: i + 1, number: i + 1, audio: null, audioSecondary: [],
+    manualDuration: effDur, free: true, hikma: true, enabled: true,
+    source: `${cat.name} · ${h.sayer || ""} · ${h.source || ""}`.trim(),
+  }));
+  S.ayaDurations = S.verses.map(v => v.manualDuration);
+  S.currentAya = 0; S.elapsed = 0; S.useFreeAsSource = true; S.translations = [];
+  S.freePerSlice = slices.map(t => ({ text: t, dur: effDur, enabled: true }));
+  if (typeof renderPerSliceList === "function") renderPerSliceList();
+  if (typeof updateAyaInfo === "function") updateAyaInfo();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+  const sBtn = document.getElementById("open-per-slice-from-hikam");
+  if (sBtn) sBtn.style.display = "block";
+  toast(`🌟 تمّ تطبيق الحكمة (${slices.length} شريحة)`, "success", 2500);
 }
 
 function applyHadith(h, coll) {

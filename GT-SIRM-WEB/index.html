@@ -624,6 +624,89 @@ body.offline .offline-badge{display:block}
           <button class="btn btn-g bfw" id="open-per-slice-from-azkar" style="margin-top:5px;display:none;background:var(--bg2)">🎚️ ضبط توقيت كلّ شريحة ↓</button>
         </div>
 
+        <!-- ═══ v0.10.0 — وحدة أسماء الله الحسنى ═══ -->
+        <div class="sec" data-module="asma">
+          <div class="sec-t">✨ أسماء الله الحسنى <span class="badge-new">v0.10</span></div>
+          <div class="note">99+1 اسماً مع المعاني والشواهد القرآنيّة — من حديث الترمذي وشروح ابن القيّم وابن عثيمين.</div>
+
+          <div class="fg" style="display:flex;gap:5px;align-items:center;margin-top:6px">
+            <input type="text" class="fc" id="asma-search" placeholder="🔍 بحث (بدون تشكيل)" style="flex:1">
+            <button class="btn btn-g bsm" id="asma-search-clear" title="مسح" style="display:none;padding:3px 10px">✕</button>
+          </div>
+          <select class="fc" id="asma-select" size="6" style="margin-top:5px;font-family:inherit;direction:rtl"></select>
+
+          <div id="asma-preview" style="display:none;margin-top:6px;padding:8px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r)">
+            <div id="asma-prev-name" style="font-size:18px;font-weight:700;color:var(--al);text-align:center;direction:rtl"></div>
+            <div id="asma-prev-meaning" style="font-size:13px;line-height:1.7;margin-top:5px;direction:rtl"></div>
+            <div id="asma-prev-ref" style="font-size:11px;color:var(--t3);margin-top:5px;direction:rtl;font-style:italic"></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px">
+            <button class="btn btn-a bsm" id="apply-asma-btn" style="display:none">📥 تطبيق الاسم الحاليّ</button>
+            <button class="btn btn-p bsm" id="apply-asma-all-btn">📥 تطبيق كلّ الأسماء</button>
+          </div>
+          <button class="btn btn-g bfw" id="open-per-slice-from-asma" style="margin-top:5px;display:none;background:var(--bg2)">🎚️ ضبط توقيت كلّ شريحة ↓</button>
+        </div>
+
+        <!-- ═══ v0.10.0 — وحدة الأدعية المأثورة ═══ -->
+        <div class="sec" data-module="duas">
+          <div class="sec-t">🤲 الأدعية المأثورة <span class="badge-new">v0.10</span></div>
+          <div class="note">32 دعاءً من القرآن الكريم والسنّة الصحيحة — مع المصدر والمناسبة.</div>
+
+          <div class="fg" style="margin-top:6px"><label class="fl">الفئة</label>
+            <select class="fc" id="duas-category"></select>
+          </div>
+          <div class="fg" style="display:flex;gap:5px;align-items:center;margin-top:5px">
+            <input type="text" class="fc" id="duas-search" placeholder="🔍 بحث (بدون تشكيل)" style="flex:1">
+            <button class="btn btn-g bsm" id="duas-search-clear" title="مسح" style="display:none;padding:3px 10px">✕</button>
+          </div>
+          <select class="fc" id="duas-select" size="6" style="margin-top:5px;font-family:inherit;direction:rtl"></select>
+
+          <div id="duas-preview" style="display:none;margin-top:6px;padding:8px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r)">
+            <div id="duas-prev-meta" style="font-size:10px;color:var(--al);margin-bottom:4px"></div>
+            <div id="duas-prev-text" style="font-size:13px;line-height:1.8;direction:rtl"></div>
+            <div id="duas-prev-source" style="font-size:11px;color:var(--t3);margin-top:5px;direction:rtl;font-style:italic"></div>
+            <div id="duas-prev-context" style="font-size:11px;color:var(--t2);margin-top:3px;direction:rtl"></div>
+          </div>
+
+          <div class="tgg" style="margin-top:6px;background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px">
+            <span class="tgl">✂️ تقسيم الدعاء تلقائياً إلى شرائح<br><small style="color:var(--t3)">يَفصل الجُمَل على الترقيم والآيات القرآنيّة</small></span>
+            <label class="tg"><input type="checkbox" id="duas-smart-split" checked><span class="tgs"></span></label>
+          </div>
+
+          <button class="btn btn-a bfw" id="apply-duas-btn" style="margin-top:6px;display:none">📥 تطبيق الدعاء كنصّ المقطع</button>
+          <button class="btn btn-g bfw" id="open-per-slice-from-duas" style="margin-top:5px;display:none;background:var(--bg2)">🎚️ ضبط توقيت كلّ شريحة ↓</button>
+        </div>
+
+        <!-- ═══ v0.10.0 — وحدة الحِكَم والمواعظ ═══ -->
+        <div class="sec" data-module="hikam">
+          <div class="sec-t">🌟 الحِكَم والمواعظ <span class="badge-new">v0.10</span></div>
+          <div class="note">32 قولاً للسلف من الصحابة والتابعين والأئمّة وابن القيّم وابن تيمية — بإسناد لقائله ومرجعه.</div>
+
+          <div class="fg" style="margin-top:6px"><label class="fl">الفئة</label>
+            <select class="fc" id="hikam-category"></select>
+          </div>
+          <div class="fg" style="display:flex;gap:5px;align-items:center;margin-top:5px">
+            <input type="text" class="fc" id="hikam-search" placeholder="🔍 بحث (بدون تشكيل)" style="flex:1">
+            <button class="btn btn-g bsm" id="hikam-search-clear" title="مسح" style="display:none;padding:3px 10px">✕</button>
+          </div>
+          <select class="fc" id="hikam-select" size="6" style="margin-top:5px;font-family:inherit;direction:rtl"></select>
+
+          <div id="hikam-preview" style="display:none;margin-top:6px;padding:8px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r)">
+            <div id="hikam-prev-text" style="font-size:13px;line-height:1.8;direction:rtl"></div>
+            <div id="hikam-prev-sayer" style="font-size:11px;color:var(--al);margin-top:5px;direction:rtl;font-weight:600"></div>
+            <div id="hikam-prev-source" style="font-size:10px;color:var(--t3);margin-top:3px;direction:rtl;font-style:italic"></div>
+          </div>
+
+          <div class="tgg" style="margin-top:6px;background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px">
+            <span class="tgl">✂️ تقسيم الحكمة تلقائياً إلى شرائح</span>
+            <label class="tg"><input type="checkbox" id="hikam-smart-split" checked><span class="tgs"></span></label>
+          </div>
+
+          <button class="btn btn-a bfw" id="apply-hikam-btn" style="margin-top:6px;display:none">📥 تطبيق الحكمة كنصّ المقطع</button>
+          <button class="btn btn-g bfw" id="open-per-slice-from-hikam" style="margin-top:5px;display:none;background:var(--bg2)">🎚️ ضبط توقيت كلّ شريحة ↓</button>
+        </div>
+
         <!-- ═══ v0.8.14 — 🎤 صوت تلاوة مخصّص (قسم مستقلّ بعد الحديث) ═══ -->
         <div class="sec">
           <div class="sec-t">🎤 صوت تلاوة مخصّص <span class="badge-new">v0.8</span></div>
@@ -1269,16 +1352,16 @@ body.offline .offline-badge{display:block}
             <label class="tg"><input type="checkbox" id="mod-azkar"><span class="tgs"></span></label>
           </div>
           <div class="tgg">
-            <span class="tgl">✨ وحدة أسماء الله الحسنى <span class="badge-new">قريباً</span><br><small style="color:var(--t3)">99 اسماً مع المعاني</small></span>
-            <label class="tg"><input type="checkbox" id="mod-asma" checked disabled><span class="tgs"></span></label>
+            <span class="tgl">✨ وحدة أسماء الله الحسنى <span class="badge-new">v0.10</span><br><small style="color:var(--t3)">99+1 اسماً مع المعاني والشواهد القرآنيّة</small></span>
+            <label class="tg"><input type="checkbox" id="mod-asma"><span class="tgs"></span></label>
           </div>
           <div class="tgg">
-            <span class="tgl">🤲 وحدة الأدعية المأثورة <span class="badge-new">قريباً</span><br><small style="color:var(--t3)">مصنّفة بالموضوع</small></span>
-            <label class="tg"><input type="checkbox" id="mod-duas" checked disabled><span class="tgs"></span></label>
+            <span class="tgl">🤲 وحدة الأدعية المأثورة <span class="badge-new">v0.10</span><br><small style="color:var(--t3)">32 دعاءً من القرآن والسنّة الصحيحة</small></span>
+            <label class="tg"><input type="checkbox" id="mod-duas"><span class="tgs"></span></label>
           </div>
           <div class="tgg">
-            <span class="tgl">🌟 وحدة الحِكَم والمواعظ <span class="badge-new">قريباً</span><br><small style="color:var(--t3)">أقوال السلف والأئمة</small></span>
-            <label class="tg"><input type="checkbox" id="mod-hikam" checked disabled><span class="tgs"></span></label>
+            <span class="tgl">🌟 وحدة الحِكَم والمواعظ <span class="badge-new">v0.10</span><br><small style="color:var(--t3)">32 قولاً للسلف بإسناد لقائله</small></span>
+            <label class="tg"><input type="checkbox" id="mod-hikam"><span class="tgs"></span></label>
           </div>
           <div class="note" style="margin-top:8px">✍️ <strong>محرّر النصّ الحرّ</strong> متاح دائماً — يظهر تلقائياً عند إلغاء وحدة القرآن.</div>
         </div>
@@ -1373,7 +1456,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.9.1</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.10.0</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>
@@ -1469,6 +1552,9 @@ body.offline .offline-badge{display:block}
 <script src="fonts-data.js"></script>
 <script src="hadith-data.js"></script>
 <script src="azkar-data.js"></script>
+<script src="asma-data.js"></script>
+<script src="duas-data.js"></script>
+<script src="hikam-data.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

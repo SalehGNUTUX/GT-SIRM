@@ -68,7 +68,7 @@ fi
 echo "📂 تحضير www/..."
 rm -rf www
 mkdir -p www
-for item in index.html app.js export-engine-web.js mp4-muxer.js webm-muxer.js fonts-data.js hadith-data.js azkar-data.js manifest.json sw.js fonts GT-SIRM-icons; do
+for item in index.html app.js export-engine-web.js mp4-muxer.js webm-muxer.js fonts-data.js hadith-data.js azkar-data.js asma-data.js duas-data.js hikam-data.js manifest.json sw.js fonts GT-SIRM-icons; do
     [ -e "$item" ] && cp -r "$item" www/
 done
 echo "   ✅ نُسخت أصول الويب إلى www/ ($(du -sh www/ | cut -f1))"
