@@ -140,6 +140,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDuasModule();      // v0.10.0 — وحدة الأدعية المأثورة
   initHikamModule();     // v0.10.0 — وحدة الحِكَم والمواعظ
   initAudioFXControls(); // v0.11.0 — محرّك المؤثّرات الصوتيّة
+  initWorkDir();         // v0.12.0 — مجلّد العمل الافتراضيّ
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
 
   // ⚠️ الترتيب مهم: نستعيد الإعدادات بعد تسجيل المستمعين فقط
@@ -4994,6 +4995,127 @@ function initAudioFXControls() {
   wireField("recvid-fx-eq-mid",     "dB", applyRecVidFXLive);
   wireField("recvid-fx-eq-high",    "dB", applyRecVidFXLive);
   document.getElementById("recvid-fx-reverb-type")?.addEventListener("change", applyRecVidFXLive);
+}
+
+// ══════════════════════════════════════════════════════
+//  v0.12.0 — مجلّد العمل الافتراضيّ (سطح المكتب)
+// ══════════════════════════════════════════════════════
+async function initWorkDir() {
+  if (!IS_DESKTOP) return;
+  try {
+    const result = await window.SIRM.workdirEnsure();
+    if (!result || !result.ok) {
+      console.warn("[workdir] فَشِل إنشاء البنية:", result?.error);
+      return;
+    }
+    S.workDirPath = result.path;
+    console.log("[workdir] جاهز:", result.path);
+
+    // اعرض المعلومات في الإعدادات
+    const info = await window.SIRM.workdirGet();
+    if (info) {
+      S.workDirPath = info.path;
+      S.workDirSubfolders = info.subfolders;
+      const pathInp = document.getElementById("workdir-path-display");
+      if (pathInp) pathInp.value = info.path;
+      const status = document.getElementById("workdir-status");
+      if (status) status.textContent = info.isDefault
+        ? "🟡 المسار الافتراضيّ — يُمكن تَخصيصه من زرّ نَقل المجلّد"
+        : "🟢 مَسار مُخصَّص";
+      const list = document.getElementById("workdir-subfolders-list");
+      if (list) {
+        list.innerHTML = (info.structure || []).map(f =>
+          `<div style="padding:2px 6px">${f.emoji} <strong>${f.name}</strong>/ — ${f.desc}</div>`
+        ).join("");
+      }
+    }
+  } catch (e) {
+    console.warn("[workdir] init error:", e);
+  }
+
+  // أزرار التَّحكّم
+  document.getElementById("workdir-open-btn")?.addEventListener("click", async () => {
+    const r = await window.SIRM.workdirOpen();
+    if (!r?.ok) toast(`❌ فَشِل الفتح: ${r?.error || "خطأ غير معروف"}`, "error", 2500);
+  });
+  document.getElementById("workdir-move-btn")?.addEventListener("click", async () => {
+    try {
+      const res = await window.SIRM.dialogOpen({
+        title: "اختر مَكاناً جديداً لمجلّد العمل",
+        properties: ["openDirectory", "createDirectory"],
+      });
+      if (!res || !res[0]) return;
+      const newPath = res[0];
+      // اسأل عن نَسخ المحتويات
+      const copyContents = confirm(
+        "هل تُريد نَسخ مُحتويات المجلّد الحاليّ إلى المَسار الجديد؟\n\n" +
+        "✓ نَعم: مُحتوياتك القديمة تَنتقل معك.\n" +
+        "✕ لا: يُنشَأ مجلّد جديد فارغ (الملفّات القديمة تَبقى في مَكانها)."
+      );
+      const mv = await window.SIRM.workdirMove({ newPath, copyContents });
+      if (mv?.ok) {
+        S.workDirPath = mv.path;
+        const inp = document.getElementById("workdir-path-display");
+        if (inp) inp.value = mv.path;
+        const status = document.getElementById("workdir-status");
+        if (status) status.textContent = "🟢 مَسار مُخصَّص جديد";
+        toast(`✅ مجلّد العمل في: ${mv.path}`, "success", 3000);
+      } else {
+        toast(`❌ فَشِل النَّقل: ${mv?.error || "خطأ غير معروف"}`, "error", 3000);
+      }
+    } catch (e) {
+      console.warn("workdir move error:", e);
+    }
+  });
+
+  // توگل "اقتراح نَسخ الملفّات"
+  const importToggle = document.getElementById("workdir-import-prompt");
+  if (importToggle) {
+    try {
+      const stored = localStorage.getItem("gt_sirm_workdir_import_prompt");
+      importToggle.checked = (stored === null) ? true : (stored === "1");
+    } catch (_) { importToggle.checked = true; }
+    importToggle.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_workdir_import_prompt", importToggle.checked ? "1" : "0"); } catch (_) {}
+    });
+  }
+}
+
+// اقترح نَسخ ملفّ خارجيّ إلى مجلّد العمل
+// يَعود إمّا بـpath الجديد (إذا نُسخ) أو null (إذا تَرَك المُستخدم المَسار الأصليّ)
+async function maybeImportToWorkDir(file, subfolderKey) {
+  if (!IS_DESKTOP || !S.workDirPath) return null;
+  const importPrompt = ge("workdir-import-prompt");
+  if (!importPrompt) return null;
+  // إن كان المَلفّ بالفعل داخل مجلّد العمل، لا تَسأل
+  if (file.path && file.path.startsWith(S.workDirPath)) return null;
+  // اسأل المُستخدم
+  const subfolder = (S.workDirSubfolders && S.workDirSubfolders[subfolderKey]) || subfolderKey;
+  const sizeMB = (file.size / 1e6).toFixed(1);
+  const choice = confirm(
+    `📥 نَسخ "${file.name}" (${sizeMB} MB)؟\n\n` +
+    `→ ${subfolder}\n\n` +
+    `✓ نَعم: انسخ إلى مجلّد العمل (مَنظَّم + قابل للنَقل).\n` +
+    `✕ لا: استَعمل المَسار الأصليّ.`
+  );
+  if (!choice) return null;
+  try {
+    const r = await window.SIRM.workdirImportFile({
+      sourcePath: file.path,
+      subfolderKey,
+      moveFile: false,
+    });
+    if (r?.ok) {
+      toast(`✅ نُسخ إلى مجلّد العمل: ${r.path.split("/").pop()}`, "success", 2200);
+      return r.path;
+    } else {
+      toast(`⚠️ فَشِل النَسخ: ${r?.error || "خطأ"}`, "warn", 2500);
+      return null;
+    }
+  } catch (e) {
+    console.warn("[workdir] import error:", e);
+    return null;
+  }
 }
 
 function onBgAudio(input) {

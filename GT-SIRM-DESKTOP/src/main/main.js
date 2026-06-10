@@ -224,6 +224,173 @@ ipcMain.handle("confirm-close", () => {
   }
 });
 
+// ══════════════════════════════════════════════════════
+//  v0.12.0 — إدارة مجلّد العمل (Work Directory)
+// ══════════════════════════════════════════════════════
+const WORK_DIR_CONFIG_FILE = path.join(app.getPath("userData"), "work-dir-config.json");
+const WORK_DIR_SUBFOLDERS = [
+  { key: "projects",     name: "projects",     emoji: "📁", desc: "ملفّات المشاريع .gtsirm" },
+  { key: "bgVideos",     name: "bg-videos",    emoji: "🎬", desc: "فيديوهات الخلفيّة (يدويّ + yt-dlp)" },
+  { key: "bgAudio",      name: "bg-audio",     emoji: "🎵", desc: "صوت الخلفيّة" },
+  { key: "recitations",  name: "recitations",  emoji: "🎥", desc: "فيديوهات التَلاوة الجاهزة" },
+  { key: "customAudio",  name: "custom-audio", emoji: "🎤", desc: "الصوت المخصّص المُنزَّل (OGG)" },
+  { key: "logos",        name: "logos",        emoji: "🖼️", desc: "الشعارات المخصّصة" },
+  { key: "exports",      name: "exports",      emoji: "📤", desc: "المقاطع المُصدَّرة" },
+  { key: "recordings",   name: "recordings",   emoji: "🎙️", desc: "تَسجيلات الميكروفون" },
+];
+
+function getDefaultWorkDir() {
+  // مَسار افتراضيّ: ~/Documents/مجلد عمل ريلز إسلامية/
+  const folderName = "مجلد عمل ريلز إسلامية";
+  try {
+    return path.join(app.getPath("documents"), folderName);
+  } catch (_) {
+    return path.join(os.homedir(), "Documents", folderName);
+  }
+}
+
+function loadWorkDirConfig() {
+  try {
+    if (fs.existsSync(WORK_DIR_CONFIG_FILE)) {
+      const raw = fs.readFileSync(WORK_DIR_CONFIG_FILE, "utf8");
+      return JSON.parse(raw);
+    }
+  } catch (_) {}
+  return null;
+}
+
+function saveWorkDirConfig(cfg) {
+  try {
+    fs.mkdirSync(path.dirname(WORK_DIR_CONFIG_FILE), { recursive: true });
+    fs.writeFileSync(WORK_DIR_CONFIG_FILE, JSON.stringify(cfg, null, 2), "utf8");
+    return true;
+  } catch (_) { return false; }
+}
+
+function ensureWorkDirStructure(rootPath) {
+  fs.mkdirSync(rootPath, { recursive: true });
+  for (const f of WORK_DIR_SUBFOLDERS) {
+    fs.mkdirSync(path.join(rootPath, f.name), { recursive: true });
+  }
+  // README مساعِد للمستخدم
+  const readmePath = path.join(rootPath, "اقرأني.md");
+  if (!fs.existsSync(readmePath)) {
+    const readme = "# مجلّد عمل ريلز إسلامية — GT-SIRM\n\n" +
+      "هذا المجلّد يَحوي كلّ مَصادر مَشاريعك الإسلاميّة في مَكان واحد:\n\n" +
+      WORK_DIR_SUBFOLDERS.map(f => `- ${f.emoji} **${f.name}/** — ${f.desc}`).join("\n") +
+      "\n\n## نقل المجلّد\n\nمن داخل البرنامج: **الإعدادات → مجلّد العمل → 🚚 نقل المجلّد**.\n\n" +
+      "بُنِيَ ابتغاءَ وجه الله الكريم — اللهمّ تَقبَّل من كلّ مُساهم.\n";
+    try { fs.writeFileSync(readmePath, readme, "utf8"); } catch (_) {}
+  }
+  return true;
+}
+
+// IPC: يَعود بمَسار مجلّد العمل الحاليّ (أو ينشئه على المسار الافتراضيّ)
+ipcMain.handle("workdir-get", () => {
+  const cfg = loadWorkDirConfig();
+  const dir = (cfg && cfg.path) ? cfg.path : getDefaultWorkDir();
+  const subfolders = {};
+  for (const f of WORK_DIR_SUBFOLDERS) subfolders[f.key] = path.join(dir, f.name);
+  return {
+    path: dir,
+    isDefault: !(cfg && cfg.path),
+    exists: fs.existsSync(dir),
+    subfolders,
+    structure: WORK_DIR_SUBFOLDERS,
+  };
+});
+
+// IPC: ينشئ بنية المجلّد على المَسار الحاليّ
+ipcMain.handle("workdir-ensure", async () => {
+  const cfg = loadWorkDirConfig();
+  const dir = (cfg && cfg.path) ? cfg.path : getDefaultWorkDir();
+  try {
+    ensureWorkDirStructure(dir);
+    if (!cfg) saveWorkDirConfig({ path: dir });
+    return { ok: true, path: dir };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+// IPC: نَقل المجلّد إلى مَسار جديد (مع نَسخ المحتويات إن طُلب)
+ipcMain.handle("workdir-move", async (_e, opts) => {
+  const { newPath, copyContents } = opts || {};
+  if (!newPath) return { ok: false, error: "newPath مَطلوب" };
+  const oldCfg = loadWorkDirConfig();
+  const oldPath = (oldCfg && oldCfg.path) ? oldCfg.path : getDefaultWorkDir();
+  try {
+    ensureWorkDirStructure(newPath);
+    if (copyContents && fs.existsSync(oldPath) && oldPath !== newPath) {
+      // نسخ المُحتوى من القديم للجديد (لا حذف)
+      for (const f of WORK_DIR_SUBFOLDERS) {
+        const src = path.join(oldPath, f.name);
+        const dst = path.join(newPath, f.name);
+        if (!fs.existsSync(src)) continue;
+        for (const item of fs.readdirSync(src)) {
+          const srcItem = path.join(src, item);
+          const dstItem = path.join(dst, item);
+          if (fs.existsSync(dstItem)) continue;
+          try { fs.copyFileSync(srcItem, dstItem); } catch (_) {}
+        }
+      }
+    }
+    saveWorkDirConfig({ path: newPath });
+    return { ok: true, path: newPath };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+// IPC: نَسخ ملفّ خارجيّ إلى المجلّد الفرعيّ المناسب من مجلّد العمل
+ipcMain.handle("workdir-import-file", async (_e, opts) => {
+  const { sourcePath, subfolderKey, moveFile } = opts || {};
+  if (!sourcePath || !subfolderKey) return { ok: false, error: "sourcePath و subfolderKey مَطلوبان" };
+  const cfg = loadWorkDirConfig();
+  const root = (cfg && cfg.path) ? cfg.path : getDefaultWorkDir();
+  const subfolder = WORK_DIR_SUBFOLDERS.find(f => f.key === subfolderKey);
+  if (!subfolder) return { ok: false, error: "subfolderKey غير معروف" };
+  const targetDir = path.join(root, subfolder.name);
+  try {
+    fs.mkdirSync(targetDir, { recursive: true });
+    const fileName = path.basename(sourcePath);
+    const targetPath = path.join(targetDir, fileName);
+    if (fs.existsSync(targetPath)) {
+      // اسم مكرَّر — أضِف رقم
+      const ext = path.extname(fileName);
+      const base = path.basename(fileName, ext);
+      let n = 1;
+      let candidate;
+      do {
+        candidate = path.join(targetDir, `${base}-${n}${ext}`);
+        n++;
+      } while (fs.existsSync(candidate) && n < 100);
+      if (moveFile) fs.renameSync(sourcePath, candidate);
+      else          fs.copyFileSync(sourcePath, candidate);
+      return { ok: true, path: candidate };
+    } else {
+      if (moveFile) fs.renameSync(sourcePath, targetPath);
+      else          fs.copyFileSync(sourcePath, targetPath);
+      return { ok: true, path: targetPath };
+    }
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+// IPC: فَتح المجلّد في file manager للنظام
+ipcMain.handle("workdir-open", async () => {
+  const cfg = loadWorkDirConfig();
+  const dir = (cfg && cfg.path) ? cfg.path : getDefaultWorkDir();
+  try {
+    const { shell } = require("electron");
+    await shell.openPath(dir);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
 // v0.5.7 — فتح ملفّ .gtsirm من سطر الأوامر (Linux/Windows) أو File Association
 let _pendingProjectFile = null;
 function extractProjectFileArg(argv) {

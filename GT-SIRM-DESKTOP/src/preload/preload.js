@@ -41,6 +41,13 @@ contextBridge.exposeInMainWorld("SIRM", {
   dialogSave: (opts) => ipcRenderer.invoke("dialog-save", opts),
   dialogOpen: (opts) => ipcRenderer.invoke("dialog-open", opts),
 
+  // ── v0.12.0 — مجلّد العمل ─────────────────────────
+  workdirGet:        ()      => ipcRenderer.invoke("workdir-get"),
+  workdirEnsure:     ()      => ipcRenderer.invoke("workdir-ensure"),
+  workdirMove:       (opts)  => ipcRenderer.invoke("workdir-move", opts),
+  workdirImportFile: (opts)  => ipcRenderer.invoke("workdir-import-file", opts),
+  workdirOpen:       ()      => ipcRenderer.invoke("workdir-open"),
+
   // ── تحميل مباشر (wget / aria2c) ─────────────────────
   directDownload: (opts) => ipcRenderer.invoke("direct-download", opts),
 

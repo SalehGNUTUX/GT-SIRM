@@ -1671,6 +1671,29 @@ body.offline .offline-badge{display:block}
 
       <!-- SETTINGS -->
       <div class="tp" id="tab-settings">
+
+        <!-- v0.12.0 — مجلّد العمل الافتراضيّ -->
+        <div class="sec desktop-only">
+          <div class="sec-t">📁 مجلّد العمل <span class="badge-new">v0.12</span></div>
+          <div class="note">مجلّد رَئيسيّ يَحوي كلّ مَصادر مَشاريعك (فيديوهات، صوت، شعارات، تَصدير) في مَكان واحد. عند رَفع مَلفّ خارجيّ يَسأل البرنامج إن كنت تُريد نَسخه إلى هذا المجلّد.</div>
+          <div class="fg" style="margin-top:6px"><label class="fl">المسار الحاليّ</label>
+            <input type="text" class="fc" id="workdir-path-display" readonly style="font-family:monospace;direction:ltr;font-size:11px">
+          </div>
+          <div id="workdir-status" style="font-size:10px;color:var(--al);margin-top:4px"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px">
+            <button class="btn btn-g bsm" id="workdir-open-btn">📂 فَتح المجلّد</button>
+            <button class="btn btn-p bsm" id="workdir-move-btn">🚚 نَقل المجلّد</button>
+          </div>
+          <div class="tgg" style="margin-top:8px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r);padding:5px 7px">
+            <span class="tgl">📥 اقتراح نَسخ الملفّات الخارجيّة<br><small style="color:var(--t3)">عند رفع مَلفّ من مَسار آخر، يَسأل إن كنت تُريد نَسخه إلى مجلّد العمل</small></span>
+            <label class="tg"><input type="checkbox" id="workdir-import-prompt" checked><span class="tgs"></span></label>
+          </div>
+          <details style="margin-top:8px">
+            <summary style="cursor:pointer;color:var(--t2);font-size:11px">📋 المجلّدات الفرعيّة</summary>
+            <div id="workdir-subfolders-list" style="font-size:11px;padding:6px 0;color:var(--t2);direction:rtl"></div>
+          </details>
+        </div>
+
         <div class="sec">
           <div class="sec-t">💾 الحفظ التلقائي <span class="badge-new">v0.5.7</span></div>
           <div class="note">يحفظ المشروع تلقائياً إلى آخر ملفّ .gtsirm حدّدته. يجب حفظ المشروع يدوياً أوّل مرة لتحديد المسار.</div>
@@ -1869,7 +1892,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.11.3</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.0</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
