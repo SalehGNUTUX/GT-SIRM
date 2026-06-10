@@ -6749,6 +6749,12 @@ function applyTheme(el, key) {
   setCol("txt-col", t.tc); setCol("orn-col", t.oc);
   if ($("gc1t")) $("gc1t").value = t.gc1;
   if ($("gc2t")) $("gc2t").value = t.gc2;
+  // v0.12.7 — اختيار سمة يَفترض خلفيّة "تَدرّج" (لأنّ السمة تُعرَّف بالألوان)
+  const gradRadio = document.getElementById("bgt1");
+  if (gradRadio && !gradRadio.checked) {
+    gradRadio.checked = true;
+    gradRadio.dispatchEvent(new Event("change", { bubbles: true }));
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -6791,21 +6797,29 @@ function applyState(st) {
   loadVerses(); onFmtChange();
 }
 
-// v0.12.6 — CSP يَمنع onclick inline → تَحويل لـdata-attributes + delegated listener
+// v0.12.7 — قوالب: تطبيق + حذف مع تَراجع + تَعديل خصائص inline
 function renderTemplates() {
   const grid = $("tpl-grid"), emp = $("tpl-empty");
   if (!S.templates.length) { grid.innerHTML = ""; emp.style.display = "block"; return; }
   emp.style.display = "none";
   grid.innerHTML = S.templates.map((t, i) => `
-  <div class="tpl-card">
-  <div class="tpl-name">📁 ${t.name}</div>
-  <div class="tpl-date">${t.date}</div>
-  <div class="tpl-actions">
-  <button class="btn btn-p bsm" data-tpl-apply="${i}">✅ تطبيق</button>
-  <button class="btn btn-d bsm" data-tpl-del="${i}">🗑️</button>
-  </div>
+  <div class="tpl-card" data-tpl-idx="${i}">
+    <div class="tpl-name">📁 ${escapeHtml(t.name)}</div>
+    <div class="tpl-date">${escapeHtml(t.date)}</div>
+    <div class="tpl-actions" data-actions>
+      <button class="btn btn-p bsm" data-tpl-apply="${i}">✅ تطبيق</button>
+      <button class="btn btn-g bsm" data-tpl-edit="${i}">✏️ تَعديل</button>
+      <button class="btn btn-d bsm" data-tpl-del="${i}">🗑️</button>
+    </div>
+    <div class="tpl-edit-form" data-edit-form style="display:none;margin-top:6px">
+      <input type="text" class="fc" data-edit-name placeholder="اسم القالب" style="font-size:12px;margin-bottom:5px">
+      <textarea class="fc" data-edit-json placeholder="JSON الحالة (متقدّم)" rows="4" style="font-size:10px;font-family:monospace;direction:ltr"></textarea>
+      <div style="display:flex;gap:5px;margin-top:5px">
+        <button class="btn btn-p bsm" data-edit-save="${i}" style="flex:1">💾 حفظ التَعديلات</button>
+        <button class="btn btn-g bsm" data-edit-cancel="${i}">إلغاء</button>
+      </div>
+    </div>
   </div>`).join("");
-  // ربط delegated مَرّة واحدة (يُعاد التهيئة عند كلّ rerender)
   grid.querySelectorAll("[data-tpl-apply]").forEach(b => {
     b.addEventListener("click", () => {
       const idx = parseInt(b.dataset.tplApply);
@@ -6821,9 +6835,117 @@ function renderTemplates() {
       if (Number.isFinite(idx)) delTemplate(idx);
     });
   });
+  // v0.12.7 — تَعديل القالب inline
+  grid.querySelectorAll("[data-tpl-edit]").forEach(b => {
+    b.addEventListener("click", () => {
+      const idx = parseInt(b.dataset.tplEdit);
+      const card = grid.querySelector(`.tpl-card[data-tpl-idx="${idx}"]`);
+      if (!card) return;
+      const t = S.templates[idx];
+      const actions = card.querySelector("[data-actions]");
+      const form = card.querySelector("[data-edit-form]");
+      const nameInp = card.querySelector("[data-edit-name]");
+      const jsonInp = card.querySelector("[data-edit-json]");
+      if (actions) actions.style.display = "none";
+      if (form) form.style.display = "block";
+      if (nameInp) nameInp.value = t.name;
+      if (jsonInp) jsonInp.value = JSON.stringify(t.state, null, 2);
+    });
+  });
+  grid.querySelectorAll("[data-edit-cancel]").forEach(b => {
+    b.addEventListener("click", () => {
+      const idx = parseInt(b.dataset.editCancel);
+      const card = grid.querySelector(`.tpl-card[data-tpl-idx="${idx}"]`);
+      if (!card) return;
+      const actions = card.querySelector("[data-actions]");
+      const form = card.querySelector("[data-edit-form]");
+      if (actions) actions.style.display = "";
+      if (form) form.style.display = "none";
+    });
+  });
+  grid.querySelectorAll("[data-edit-save]").forEach(b => {
+    b.addEventListener("click", () => {
+      const idx = parseInt(b.dataset.editSave);
+      const card = grid.querySelector(`.tpl-card[data-tpl-idx="${idx}"]`);
+      if (!card) return;
+      const nameInp = card.querySelector("[data-edit-name]");
+      const jsonInp = card.querySelector("[data-edit-json]");
+      const t = S.templates[idx];
+      if (!t) return;
+      const newName = (nameInp?.value || "").trim();
+      if (newName) t.name = newName;
+      try {
+        const parsed = JSON.parse(jsonInp.value);
+        t.state = parsed;
+      } catch (e) {
+        toast?.(`⚠️ JSON غير صالح: ${e.message.slice(0, 80)}`, "error", 3000);
+        return;
+      }
+      persistTemplates();
+      renderTemplates();
+      toast?.("✅ تمّ حفظ التَعديلات", "success", 2000);
+    });
+  });
 }
 
-function delTemplate(i) { S.templates.splice(i, 1); persistTemplates(); renderTemplates(); toast("🗑️ تم الحذف", "info"); }
+// v0.12.7 — حذف القالب مع مهلة تَراجع 5 ثوانٍ
+let _pendingDelTimer = null;
+let _pendingDelTemplate = null;
+function delTemplate(i) {
+  const t = S.templates[i];
+  if (!t) return;
+  // أَلغِ أيّ حذف مُعَلَّق سابق
+  if (_pendingDelTimer) { clearTimeout(_pendingDelTimer); _pendingDelTimer = null; }
+  _pendingDelTemplate = { template: t, index: i };
+  S.templates.splice(i, 1);
+  persistTemplates();
+  renderTemplates();
+  // toast تَراجع: 5 ثوانٍ
+  showUndoToast(`🗑️ حُذف "${t.name}"`, () => {
+    if (_pendingDelTemplate) {
+      const { template, index } = _pendingDelTemplate;
+      S.templates.splice(index, 0, template);
+      persistTemplates();
+      renderTemplates();
+      _pendingDelTemplate = null;
+      toast?.("↩️ تمّ التَراجع", "success", 1500);
+    }
+  });
+  _pendingDelTimer = setTimeout(() => {
+    _pendingDelTemplate = null;
+    _pendingDelTimer = null;
+  }, 5000);
+}
+
+// مساعِد: toast بزرّ تَراجع
+function showUndoToast(message, onUndo) {
+  let host = document.getElementById("undo-toast-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "undo-toast-host";
+    host.style.cssText = "position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;align-items:center;gap:10px;background:var(--bg3);border:1px solid var(--p);border-radius:var(--r);padding:10px 14px;font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.4)";
+    document.body.appendChild(host);
+  }
+  host.innerHTML = "";
+  const msgSpan = document.createElement("span");
+  msgSpan.textContent = message;
+  const undoBtn = document.createElement("button");
+  undoBtn.className = "btn btn-p bsm";
+  undoBtn.textContent = "↩️ تَراجع";
+  undoBtn.addEventListener("click", () => {
+    try { onUndo?.(); } catch (_) {}
+    host.remove();
+  });
+  host.appendChild(msgSpan);
+  host.appendChild(undoBtn);
+  // إخفاء تلقائيّ بَعد 5 ثوانٍ
+  setTimeout(() => { try { host.remove(); } catch (_) {} }, 5000);
+}
+
+// مساعِد: تَهرب HTML
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
 function loadTemplates() { try { S.templates = JSON.parse(localStorage.getItem("gt_sirm_tpls") || "[]"); } catch (e) { S.templates = []; } renderTemplates(); }
 function persistTemplates() { try { localStorage.setItem("gt_sirm_tpls", JSON.stringify(S.templates)); } catch (e) { } }
 

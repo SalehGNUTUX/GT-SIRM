@@ -1081,10 +1081,18 @@ ipcMain.handle("dialog-save", async (_e, opts) => {
 
 ipcMain.handle("dialog-open", async (_e, opts) => {
   const isDir = opts.properties?.includes("openDirectory");
+  // v0.12.7 — احترام defaultPath: تَأكَّد من وجوده على القرص قبل تَمريره
+  let defaultPath = opts.defaultPath;
+  try {
+    if (defaultPath && !fs.existsSync(defaultPath)) {
+      fs.mkdirSync(defaultPath, { recursive: true });
+    }
+  } catch (_) { defaultPath = undefined; }
   const result = await dialog.showOpenDialog(mainWindow, {
     title:      opts.title || (isDir ? "اختر مجلداً" : "اختر ملفاً"),
-                                             properties: opts.properties || (opts.multiple ? ["openFile", "multiSelections"] : ["openFile"]),
-                                             filters:    isDir ? undefined : (opts.filters || [{ name: "All Files", extensions: ["*"] }]),
+    defaultPath,
+    properties: opts.properties || (opts.multiple ? ["openFile", "multiSelections"] : ["openFile"]),
+    filters:    isDir ? undefined : (opts.filters || [{ name: "All Files", extensions: ["*"] }]),
   });
   return result.canceled ? null : result.filePaths;
 });

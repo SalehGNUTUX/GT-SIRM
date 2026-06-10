@@ -1049,14 +1049,13 @@ body.offline .offline-badge{display:block}
           </div>
         </div>
 
-        <div class="sec">
-          <div class="sec-t">📐 مقاس الفيديو</div>
-          <div class="rg">
-            <div class="rc"><input type="radio" name="fmt" id="f1" value="9:16" checked><label for="f1"><span class="ri">📱</span><span>ريلز 9:16</span></label></div>
-            <div class="rc"><input type="radio" name="fmt" id="f2" value="16:9"><label for="f2"><span class="ri">💻</span><span>يوتيوب 16:9</span></label></div>
-            <div class="rc"><input type="radio" name="fmt" id="f3" value="1:1"><label for="f3"><span class="ri">🟦</span><span>مربع 1:1</span></label></div>
-            <div class="rc"><input type="radio" name="fmt" id="f4" value="4:5"><label for="f4"><span class="ri">📸</span><span>عمودي 4:5</span></label></div>
-          </div>
+        <!-- v0.12.7 — مقاس الفيديو نُقل بالكامل للإعدادات (نسبة العرض).
+             radio name="fmt" يَبقى مَخفيّاً للتَوافق مع الكود القائم. -->
+        <div style="display:none">
+          <input type="radio" name="fmt" id="f1" value="9:16" checked>
+          <input type="radio" name="fmt" id="f2" value="16:9">
+          <input type="radio" name="fmt" id="f3" value="1:1">
+          <input type="radio" name="fmt" id="f4" value="4:5">
         </div>
 
         <div class="sec">
@@ -1080,7 +1079,7 @@ body.offline .offline-badge{display:block}
       <!-- SCENE -->
       <div class="tp" id="tab-scene">
         <div class="sec">
-          <div class="sec-t">🎨 ثيم جاهز</div>
+          <div class="sec-t">🎨 سمة جاهزة</div>
           <div class="themes" id="theme-chips"></div>
         </div>
         <div class="sec">
@@ -1940,7 +1939,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.6</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.7</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
