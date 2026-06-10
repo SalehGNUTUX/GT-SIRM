@@ -8135,31 +8135,42 @@ function startAutoSave() {
     try { localStorage.setItem("gt_sirm_autosave_on", "0"); } catch (_) {}
     return;
   }
-  if (!S.projectFilePath && IS_DESKTOP_BUILD) {
-    if (status) status.textContent = "⚠️ احفظ المشروع يدوياً أوّل مرة لتحديد المسار";
-    return;
-  }
+  // v0.11.3 — لو لم يَكن هناك مَسار لمشروع .gtsirm، اعتمد على localStorage كـfallback
+  // (سَيَكون مَخزَّن في الذاكرة المحلّيّة، يُستعاد عند الفتح التالي)
+  const useLocalStorageFallback = IS_DESKTOP_BUILD && !S.projectFilePath;
   try {
     localStorage.setItem("gt_sirm_autosave_on", "1");
     localStorage.setItem("gt_sirm_autosave_interval", String(intervalMin));
   } catch (_) {}
   const intervalMs = intervalMin * 60 * 1000;
-  if (status) status.textContent = `🟢 مُفعَّل — كلّ ${intervalMin} دقيقة`;
+  if (status) {
+    status.textContent = useLocalStorageFallback
+      ? `🟡 مُفعَّل — كلّ ${intervalMin} دقيقة (في الذاكرة المحلّيّة — احفظ يدوياً .gtsirm لمسار دائم)`
+      : `🟢 مُفعَّل — كلّ ${intervalMin} دقيقة`;
+  }
   _autoSaveTimer = setInterval(async () => {
     if (!S.projectDirty) return;
+    let ok = false;
     if (IS_DESKTOP_BUILD && S.projectFilePath) {
-      const ok = await saveProjectToPath(S.projectFilePath);
+      ok = await saveProjectToPath(S.projectFilePath);
       if (ok) toast(`💾 حفظ تلقائيّ — ${new Date().toLocaleTimeString("ar")}`, "info", 1500);
-    } else if (!IS_DESKTOP_BUILD) {
-      // ويب: حفظ في IndexedDB (مبسّط: localStorage مع حدّ أقصى)
+    } else {
+      // الويب أو سطح المكتب بدون مَسار → localStorage
       try {
         const proj = await serializeProject();
         const json = JSON.stringify(proj);
         if (json.length < 4_500_000) {
           localStorage.setItem("gt_sirm_autosave_blob", json);
-          toast(`💾 حفظ تلقائيّ في المتصفّح — ${new Date().toLocaleTimeString("ar")}`, "info", 1500);
+          clearProjectDirty();  // v0.11.3 — مسح dirty بعد الحفظ الناجح
+          ok = true;
+          const where = IS_DESKTOP_BUILD ? "في الذاكرة المحلّيّة" : "في المتصفّح";
+          toast(`💾 حفظ تلقائيّ ${where} — ${new Date().toLocaleTimeString("ar")}`, "info", 1500);
+        } else {
+          toast(`⚠️ المشروع كبير جدّاً للحفظ في الذاكرة المحلّيّة (${(json.length/1e6).toFixed(1)}MB) — احفظ يدوياً`, "warn", 3000);
         }
-      } catch (_) {}
+      } catch (e) {
+        console.warn("auto-save failed:", e);
+      }
     }
   }, intervalMs);
 }
@@ -8205,7 +8216,11 @@ function initProjectSystem() {
 
   const autosaveOn = document.getElementById("autosave-on");
   if (autosaveOn) {
-    try { autosaveOn.checked = localStorage.getItem("gt_sirm_autosave_on") === "1"; } catch (_) {}
+    // v0.11.3 — مُفعَّل افتراضياً (الافتراض true إن لم تكن قيمة محفوظة)
+    try {
+      const stored = localStorage.getItem("gt_sirm_autosave_on");
+      autosaveOn.checked = (stored === null) ? true : (stored === "1");
+    } catch (_) { autosaveOn.checked = true; }
     autosaveOn.addEventListener("change", () => {
       const ctrl = document.getElementById("autosave-ctrl");
       if (ctrl) ctrl.style.display = autosaveOn.checked ? "block" : "none";

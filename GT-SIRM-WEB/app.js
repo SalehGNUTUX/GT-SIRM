@@ -6316,6 +6316,8 @@ function startAutoSave() {
       const json = JSON.stringify(proj);
       if (json.length < 4_500_000) {
         localStorage.setItem("gt_sirm_autosave_blob", json);
+        // v0.11.3 — مسح dirty بعد الحفظ الناجح
+        if (typeof clearProjectDirty === "function") clearProjectDirty();
         toast(`💾 حفظ تلقائيّ في المتصفّح — ${new Date().toLocaleTimeString("ar")}`, "info", 1500);
       } else {
         toast("⚠️ المشروع كبير جداً للحفظ في المتصفّح — صدّر يدوياً", "warn", 2200);
@@ -6360,7 +6362,11 @@ function initProjectSystem() {
 
   const autosaveOn = document.getElementById("autosave-on");
   if (autosaveOn) {
-    try { autosaveOn.checked = localStorage.getItem("gt_sirm_autosave_on") === "1"; } catch (_) {}
+    // v0.11.3 — مُفعَّل افتراضياً
+    try {
+      const stored = localStorage.getItem("gt_sirm_autosave_on");
+      autosaveOn.checked = (stored === null) ? true : (stored === "1");
+    } catch (_) { autosaveOn.checked = true; }
     autosaveOn.addEventListener("change", () => {
       const ctrl = document.getElementById("autosave-ctrl");
       if (ctrl) ctrl.style.display = autosaveOn.checked ? "block" : "none";
