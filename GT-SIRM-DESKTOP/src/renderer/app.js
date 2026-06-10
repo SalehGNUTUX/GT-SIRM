@@ -5039,17 +5039,46 @@ const FILE_INPUT_WORKDIR_MAP = {
   "logo-input":       { key: "logos",       filters: [{ name: "صورة", extensions: ["png","jpg","jpeg","webp","svg"] }] },
 };
 
+// v0.12.8 — اعتراض على الـ.fu-area parent (لا على الـinput) لأنّ
+// الـ<input type="file"> غالباً مَخفيّ بـCSS، والمُستخدم يَنقر على الـfu-area
+// التي تَفتح dialog النَظام مباشرةً بدون مُرور بنا.
 function installWorkdirInputInterceptor() {
   if (!IS_DESKTOP) return;
   for (const id of Object.keys(FILE_INPUT_WORKDIR_MAP)) {
     const input = document.getElementById(id);
     if (!input) continue;
     const config = FILE_INPUT_WORKDIR_MAP[id];
-    input.addEventListener("click", async (e) => {
-      // اعترِض النَقر فقط إذا كان مجلّد العمل مُهيَّأ
-      const defaultPath = S.workDirSubfolders?.[config.key];
-      if (!defaultPath) return; // اترك السلوك الافتراضيّ
+    const fuArea = input.closest('.fu-area');
+    // إن وُجد parent fu-area، عَطِّل pointer-events على الـinput حتى لا يَتلقّى click
+    if (fuArea) {
+      input.style.pointerEvents = "none";
+    }
+    const target = fuArea || input;
+    target.addEventListener("click", async (e) => {
+      // اِسمح بـclicks على sub-buttons (مثل removeBg/restart)
+      if (e.target.tagName === "BUTTON" && e.target !== target) return;
       e.preventDefault();
+      e.stopPropagation();
+
+      // اِستَعلِم المَسار (مع cache في S.workDirSubfolders)
+      let defaultPath = S.workDirSubfolders?.[config.key];
+      if (!defaultPath) {
+        try {
+          const info = await window.SIRM.workdirGet();
+          if (info?.subfolders) {
+            S.workDirSubfolders = info.subfolders;
+            defaultPath = info.subfolders[config.key];
+          }
+        } catch (_) {}
+      }
+      if (!defaultPath) {
+        // fallback: افتح الـinput الطبيعيّ
+        input.style.pointerEvents = "";
+        input.click();
+        setTimeout(() => { input.style.pointerEvents = "none"; }, 100);
+        return;
+      }
+
       try {
         const props = config.multiple ? ["openFile", "multiSelections"] : ["openFile"];
         const res = await window.SIRM.dialogOpen({
@@ -5059,34 +5088,30 @@ function installWorkdirInputInterceptor() {
           filters: config.filters,
         });
         if (!res || !res.length) return;
-        // اقرأ المَلفّات وأنشئ File objects ثمّ سَلِّم للـhandler
         const files = [];
         for (const fp of res) {
           try {
             const meta = await window.SIRM.readDownloadedFile(fp);
-            if (meta && meta.buffer) {
+            if (meta?.buffer) {
               const file = new File([meta.buffer], meta.name || fp.split("/").pop(), {});
-              // أَضِف path للتَحكّم في التَنظيم لاحقاً
               try { Object.defineProperty(file, "path", { value: fp, writable: false }); } catch (_) {}
               files.push(file);
             }
-          } catch (err) { console.warn("workdir-input read failed:", err); }
+          } catch (err) { console.warn("workdir-input read:", err); }
         }
         if (!files.length) return;
-        // أَطلِق change event مع الملفّات (DataTransfer trick)
         try {
           const dt = new DataTransfer();
           for (const f of files) dt.items.add(f);
           input.files = dt.files;
           input.dispatchEvent(new Event("change", { bubbles: true }));
         } catch (err) {
-          // fallback: استَدعِ handlers مباشرةً
           input.dispatchEvent(new Event("change", { bubbles: true }));
         }
       } catch (err) {
-        console.warn("workdir input interceptor error:", err);
+        console.warn("interceptor error:", err);
       }
-    }, true /* capture */);
+    }, true);
   }
 }
 
@@ -6797,7 +6822,7 @@ function applyState(st) {
   loadVerses(); onFmtChange();
 }
 
-// v0.12.7 — قوالب: تطبيق + حذف مع تَراجع + تَعديل خصائص inline
+// v0.12.8 — قوالب: تطبيق + حذف مع تَراجع + تَعديل بنَهج "تَطبيق-وَتَعديل"
 function renderTemplates() {
   const grid = $("tpl-grid"), emp = $("tpl-empty");
   if (!S.templates.length) { grid.innerHTML = ""; emp.style.display = "block"; return; }
@@ -6806,18 +6831,10 @@ function renderTemplates() {
   <div class="tpl-card" data-tpl-idx="${i}">
     <div class="tpl-name">📁 ${escapeHtml(t.name)}</div>
     <div class="tpl-date">${escapeHtml(t.date)}</div>
-    <div class="tpl-actions" data-actions>
+    <div class="tpl-actions">
       <button class="btn btn-p bsm" data-tpl-apply="${i}">✅ تطبيق</button>
       <button class="btn btn-g bsm" data-tpl-edit="${i}">✏️ تَعديل</button>
       <button class="btn btn-d bsm" data-tpl-del="${i}">🗑️</button>
-    </div>
-    <div class="tpl-edit-form" data-edit-form style="display:none;margin-top:6px">
-      <input type="text" class="fc" data-edit-name placeholder="اسم القالب" style="font-size:12px;margin-bottom:5px">
-      <textarea class="fc" data-edit-json placeholder="JSON الحالة (متقدّم)" rows="4" style="font-size:10px;font-family:monospace;direction:ltr"></textarea>
-      <div style="display:flex;gap:5px;margin-top:5px">
-        <button class="btn btn-p bsm" data-edit-save="${i}" style="flex:1">💾 حفظ التَعديلات</button>
-        <button class="btn btn-g bsm" data-edit-cancel="${i}">إلغاء</button>
-      </div>
     </div>
   </div>`).join("");
   grid.querySelectorAll("[data-tpl-apply]").forEach(b => {
@@ -6835,57 +6852,71 @@ function renderTemplates() {
       if (Number.isFinite(idx)) delTemplate(idx);
     });
   });
-  // v0.12.7 — تَعديل القالب inline
+  // v0.12.8 — تَعديل: طَبِّق ثمّ افتح بانر يَنتقل لـtab-rec ليُحرّر يدويّاً
   grid.querySelectorAll("[data-tpl-edit]").forEach(b => {
     b.addEventListener("click", () => {
       const idx = parseInt(b.dataset.tplEdit);
-      const card = grid.querySelector(`.tpl-card[data-tpl-idx="${idx}"]`);
-      if (!card) return;
-      const t = S.templates[idx];
-      const actions = card.querySelector("[data-actions]");
-      const form = card.querySelector("[data-edit-form]");
-      const nameInp = card.querySelector("[data-edit-name]");
-      const jsonInp = card.querySelector("[data-edit-json]");
-      if (actions) actions.style.display = "none";
-      if (form) form.style.display = "block";
-      if (nameInp) nameInp.value = t.name;
-      if (jsonInp) jsonInp.value = JSON.stringify(t.state, null, 2);
-    });
-  });
-  grid.querySelectorAll("[data-edit-cancel]").forEach(b => {
-    b.addEventListener("click", () => {
-      const idx = parseInt(b.dataset.editCancel);
-      const card = grid.querySelector(`.tpl-card[data-tpl-idx="${idx}"]`);
-      if (!card) return;
-      const actions = card.querySelector("[data-actions]");
-      const form = card.querySelector("[data-edit-form]");
-      if (actions) actions.style.display = "";
-      if (form) form.style.display = "none";
-    });
-  });
-  grid.querySelectorAll("[data-edit-save]").forEach(b => {
-    b.addEventListener("click", () => {
-      const idx = parseInt(b.dataset.editSave);
-      const card = grid.querySelector(`.tpl-card[data-tpl-idx="${idx}"]`);
-      if (!card) return;
-      const nameInp = card.querySelector("[data-edit-name]");
-      const jsonInp = card.querySelector("[data-edit-json]");
       const t = S.templates[idx];
       if (!t) return;
-      const newName = (nameInp?.value || "").trim();
-      if (newName) t.name = newName;
-      try {
-        const parsed = JSON.parse(jsonInp.value);
-        t.state = parsed;
-      } catch (e) {
-        toast?.(`⚠️ JSON غير صالح: ${e.message.slice(0, 80)}`, "error", 3000);
-        return;
-      }
-      persistTemplates();
-      renderTemplates();
-      toast?.("✅ تمّ حفظ التَعديلات", "success", 2000);
+      startTemplateEdit(idx);
     });
   });
+}
+
+// v0.12.8 — وَضع تَعديل قالب: تَطبيق الحالة، انتقال لـtab-rec، عَرض بانر
+function startTemplateEdit(idx) {
+  const t = S.templates[idx];
+  if (!t) return;
+  applyState(t.state);
+  if (typeof goTab === "function") goTab("rec");
+  showTemplateEditBanner(idx);
+}
+
+function showTemplateEditBanner(idx) {
+  const t = S.templates[idx];
+  if (!t) return;
+  let host = document.getElementById("tpl-edit-banner");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "tpl-edit-banner";
+    host.style.cssText = "position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:9998;background:linear-gradient(135deg,var(--pd),var(--pl));color:#fff;padding:8px 14px;border-radius:var(--r);box-shadow:0 4px 16px rgba(0,0,0,.4);display:flex;align-items:center;gap:10px;font-size:13px;max-width:90%;flex-wrap:wrap";
+    document.body.appendChild(host);
+  }
+  host.innerHTML = "";
+  const msg = document.createElement("span");
+  msg.innerHTML = `🛠️ تُعدِّل قالب "<strong></strong>" — اضبط ما تُريد ثمّ احفظ`;
+  msg.querySelector("strong").textContent = t.name;
+  const nameInp = document.createElement("input");
+  nameInp.type = "text";
+  nameInp.value = t.name;
+  nameInp.placeholder = "اسم القالب";
+  nameInp.style.cssText = "padding:4px 8px;border-radius:4px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.2);color:#fff;font-size:12px";
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "btn btn-a bsm";
+  saveBtn.textContent = "💾 احفظ التَعديلات";
+  saveBtn.addEventListener("click", () => {
+    const newName = nameInp.value.trim();
+    if (newName) t.name = newName;
+    try {
+      t.state = captureState();
+      t.date = new Date().toLocaleDateString("ar-SA");
+      persistTemplates();
+      renderTemplates();
+      toast?.(`✅ تمّ تَحديث "${t.name}"`, "success", 2000);
+    } catch (e) {
+      toast?.(`❌ فَشل الحفظ: ${e.message}`, "error", 3000);
+      return;
+    }
+    host.remove();
+  });
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "btn btn-g bsm";
+  cancelBtn.textContent = "❌ إلغاء";
+  cancelBtn.addEventListener("click", () => { host.remove(); });
+  host.appendChild(msg);
+  host.appendChild(nameInp);
+  host.appendChild(saveBtn);
+  host.appendChild(cancelBtn);
 }
 
 // v0.12.7 — حذف القالب مع مهلة تَراجع 5 ثوانٍ
