@@ -181,6 +181,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initAsmaModule();      // v0.10.0 — وحدة أسماء الله الحسنى
   initDuasModule();      // v0.10.0 — وحدة الأدعية المأثورة
   initHikamModule();     // v0.10.0 — وحدة الحِكَم والمواعظ
+  initAudioFXControls(); // v0.11.0 — محرّك المؤثّرات الصوتيّة
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
   restoreAllSettings();
   restoreLogo();
@@ -3372,6 +3373,7 @@ function onRecVidFile(input) {
         src.connect(S.analyser);
         src.connect(S.exportDest);
         S.recVidAudioSource = src;
+        if (typeof applyRecVidFXLive === "function") applyRecVidFXLive();
       } catch (_) {}
     }).catch(console.warn);
     S.verses = [{ text: "", numberInSurah: 1, number: 1, audio: null, audioSecondary: [], manualDuration: sec, free: true, recvid: true }];
@@ -4261,6 +4263,155 @@ function applyBgAudioTrim() {
   }
 }
 
+// ══════════════════════════════════════════════════════
+//  محرّك المؤثّرات الصوتيّة (v0.11.0)
+// ══════════════════════════════════════════════════════
+const REVERB_PRESETS = {
+  "room":      { duration: 0.3, decay: 4   },
+  "studio":    { duration: 0.5, decay: 3   },
+  "masjid-sm": { duration: 1.5, decay: 2.5 },
+  "masjid-lg": { duration: 3.0, decay: 2   },
+  "hall":      { duration: 5.0, decay: 1.5 },
+};
+
+function createImpulseResponse(ctx, preset) {
+  const p = REVERB_PRESETS[preset] || REVERB_PRESETS["masjid-lg"];
+  const length = Math.max(1, Math.floor(ctx.sampleRate * p.duration));
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, p.decay);
+    }
+  }
+  return buffer;
+}
+
+function buildAudioFXChain(ctx, sourceNode, cfg) {
+  const inputGain = ctx.createGain();
+  inputGain.gain.value = cfg.volume;
+  sourceNode.connect(inputGain);
+
+  const eqLow = ctx.createBiquadFilter();
+  eqLow.type = "lowshelf"; eqLow.frequency.value = 200; eqLow.gain.value = cfg.eqLow;
+  const eqMid = ctx.createBiquadFilter();
+  eqMid.type = "peaking"; eqMid.frequency.value = 1000; eqMid.Q.value = 1; eqMid.gain.value = cfg.eqMid;
+  const eqHigh = ctx.createBiquadFilter();
+  eqHigh.type = "highshelf"; eqHigh.frequency.value = 5000; eqHigh.gain.value = cfg.eqHigh;
+  inputGain.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
+
+  const mixer = ctx.createGain(); mixer.gain.value = 1;
+  const dryGain = ctx.createGain();
+  const wetTotal = Math.min(1, (cfg.reverbAmt || 0) + (cfg.echoAmt || 0));
+  dryGain.gain.value = 1 - wetTotal * 0.4;
+  eqHigh.connect(dryGain); dryGain.connect(mixer);
+
+  if (cfg.reverbType && cfg.reverbType !== "none" && (cfg.reverbAmt || 0) > 0) {
+    const conv = ctx.createConvolver();
+    try { conv.buffer = createImpulseResponse(ctx, cfg.reverbType); } catch (_) {}
+    const wetGain = ctx.createGain(); wetGain.gain.value = cfg.reverbAmt;
+    eqHigh.connect(conv); conv.connect(wetGain); wetGain.connect(mixer);
+  }
+
+  if ((cfg.echoAmt || 0) > 0) {
+    const delay = ctx.createDelay(2.0);
+    delay.delayTime.value = Math.max(0.05, Math.min(2.0, cfg.echoTime || 0.25));
+    const feedback = ctx.createGain();
+    feedback.gain.value = Math.max(0, Math.min(0.85, cfg.echoFb || 0));
+    const echoWet = ctx.createGain(); echoWet.gain.value = cfg.echoAmt;
+    eqHigh.connect(delay); delay.connect(feedback); feedback.connect(delay);
+    delay.connect(echoWet); echoWet.connect(mixer);
+  }
+  return mixer;
+}
+
+function getFXConfig(prefix) {
+  return {
+    enabled: !!ge(`${prefix}-fx-on`),
+    volume: (parseFloat(gv(`${prefix}-fx-vol`)) || 100) / 100,
+    reverbType: document.getElementById(`${prefix}-fx-reverb-type`)?.value || "masjid-lg",
+    reverbAmt: (parseFloat(gv(`${prefix}-fx-reverb-amt`)) || 0) / 100,
+    echoAmt:   (parseFloat(gv(`${prefix}-fx-echo-amt`))   || 0) / 100,
+    echoTime:  (parseFloat(gv(`${prefix}-fx-echo-time`))  || 250) / 1000,
+    echoFb:    (parseFloat(gv(`${prefix}-fx-echo-fb`))    || 0) / 100,
+    eqLow:      parseFloat(gv(`${prefix}-fx-eq-low`))  || 0,
+    eqMid:      parseFloat(gv(`${prefix}-fx-eq-mid`))  || 0,
+    eqHigh:     parseFloat(gv(`${prefix}-fx-eq-high`)) || 0,
+  };
+}
+
+function applyBgAudioFXLive() {
+  if (!S.bgAudioSource) return;
+  const ctx = S.bgAudioSource.context;
+  const cfg = getFXConfig("free");
+  try { S.bgAudioSource.disconnect(); } catch (_) {}
+  if (S.bgFxChainOutput) { try { S.bgFxChainOutput.disconnect(); } catch (_) {} S.bgFxChainOutput = null; }
+  if (cfg.enabled) {
+    const fxOut = buildAudioFXChain(ctx, S.bgAudioSource, cfg);
+    fxOut.connect(ctx.destination);
+    if (S.analyser) fxOut.connect(S.analyser);
+    if (S.exportDest) fxOut.connect(S.exportDest);
+    S.bgFxChainOutput = fxOut;
+  } else {
+    S.bgAudioSource.connect(ctx.destination);
+    if (S.analyser) S.bgAudioSource.connect(S.analyser);
+    if (S.exportDest) S.bgAudioSource.connect(S.exportDest);
+  }
+}
+
+function applyRecVidFXLive() {
+  if (!S.recVidAudioSource) return;
+  const ctx = S.recVidAudioSource.context;
+  const cfg = getFXConfig("recvid");
+  try { S.recVidAudioSource.disconnect(); } catch (_) {}
+  if (S.recVidFxChainOutput) { try { S.recVidFxChainOutput.disconnect(); } catch (_) {} S.recVidFxChainOutput = null; }
+  if (cfg.enabled) {
+    const fxOut = buildAudioFXChain(ctx, S.recVidAudioSource, cfg);
+    fxOut.connect(ctx.destination);
+    if (S.analyser) fxOut.connect(S.analyser);
+    if (S.exportDest) fxOut.connect(S.exportDest);
+    S.recVidFxChainOutput = fxOut;
+  } else {
+    S.recVidAudioSource.connect(ctx.destination);
+    if (S.analyser) S.recVidAudioSource.connect(S.analyser);
+    if (S.exportDest) S.recVidAudioSource.connect(S.exportDest);
+  }
+}
+
+function initAudioFXControls() {
+  const wireToggle = (prefix, applyFn) => {
+    const cb = document.getElementById(`${prefix}-fx-on`);
+    const ctrl = document.getElementById(`${prefix}-fx-ctrl`);
+    if (!cb || !ctrl) return;
+    const sync = () => { ctrl.style.display = cb.checked ? "block" : "none"; applyFn(); };
+    cb.addEventListener("change", sync);
+    sync();
+  };
+  wireToggle("free", applyBgAudioFXLive);
+  wireToggle("recvid", applyRecVidFXLive);
+  const wireField = (id, suffix, applyFn) => {
+    const el = document.getElementById(id);
+    const out = document.getElementById(id + "-v");
+    if (!el) return;
+    const update = () => { if (out) out.textContent = el.value + suffix; applyFn(); };
+    el.addEventListener("input", update);
+    el.addEventListener("change", update);
+    update();
+  };
+  ["free", "recvid"].forEach(p => {
+    const apply = p === "free" ? applyBgAudioFXLive : applyRecVidFXLive;
+    wireField(`${p}-fx-vol`,        "%",  apply);
+    wireField(`${p}-fx-reverb-amt`, "%",  apply);
+    wireField(`${p}-fx-echo-amt`,   "%",  apply);
+    wireField(`${p}-fx-echo-time`,  "ms", apply);
+    wireField(`${p}-fx-echo-fb`,    "%",  apply);
+    wireField(`${p}-fx-eq-low`,     "dB", apply);
+    wireField(`${p}-fx-eq-mid`,     "dB", apply);
+    wireField(`${p}-fx-eq-high`,    "dB", apply);
+    document.getElementById(`${p}-fx-reverb-type`)?.addEventListener("change", apply);
+  });
+}
+
 function onBgAudio(input) {
   const file = input.files[0];
   if (!file) return;
@@ -4279,6 +4430,7 @@ function onBgAudio(input) {
       src.connect(S.analyser);
       src.connect(S.exportDest);
       S.bgAudioSource = src;
+      if (typeof applyBgAudioFXLive === "function") applyBgAudioFXLive();
     } catch (e) {
       console.warn("Could not connect background audio to context", e);
     }

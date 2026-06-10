@@ -746,6 +746,35 @@ body.offline .offline-badge{display:block}
               <div id="free-audio-trim-info" style="font-size:10px;color:var(--al);margin-top:4px"></div>
               <div class="note" style="margin-top:4px">📐 المدّة المختارة <strong>تُفرض على النصّ</strong> — تُمدَّد مدّة الشرائح تلقائياً ليُغطّي النصّ كامل الصوت.</div>
             </div>
+
+            <!-- v0.11.0 — مؤثّرات صوتيّة على الصوت المخصّص -->
+            <div class="tgg" style="margin-top:8px;background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px">
+              <span class="tgl">🎛️ مؤثّرات صوتيّة<br><small style="color:var(--t3)">صدى، إكو، تسوية صوتيّة (EQ) — تَعمل في المعاينة والتصدير</small></span>
+              <label class="tg"><input type="checkbox" id="free-fx-on"><span class="tgs"></span></label>
+            </div>
+            <div id="free-fx-ctrl" style="display:none;margin-top:6px;padding:8px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r)">
+              <div class="fg"><label class="fl">🔊 مستوى الصوت</label><div class="sg"><input type="range" min="0" max="200" step="1" value="100" id="free-fx-vol"><span class="sv" id="free-fx-vol-v">100%</span></div></div>
+              <div style="font-size:11px;color:var(--al);font-weight:700;margin:6px 0 4px 0">🌊 الصدى (Reverb)</div>
+              <div class="fg"><label class="fl">نوع البيئة</label>
+                <select class="fc" id="free-fx-reverb-type">
+                  <option value="none">بدون</option>
+                  <option value="room">غرفة صغيرة</option>
+                  <option value="studio">استوديو</option>
+                  <option value="masjid-sm">مسجد صغير</option>
+                  <option value="masjid-lg" selected>مسجد كبير</option>
+                  <option value="hall">قاعة كبيرة</option>
+                </select>
+              </div>
+              <div class="fg"><label class="fl">شدّة الصدى</label><div class="sg"><input type="range" min="0" max="100" step="1" value="30" id="free-fx-reverb-amt"><span class="sv" id="free-fx-reverb-amt-v">30%</span></div></div>
+              <div style="font-size:11px;color:var(--al);font-weight:700;margin:8px 0 4px 0">🔁 الإكو (Delay)</div>
+              <div class="fg"><label class="fl">شدّة الإكو</label><div class="sg"><input type="range" min="0" max="100" step="1" value="0" id="free-fx-echo-amt"><span class="sv" id="free-fx-echo-amt-v">0%</span></div></div>
+              <div class="fg"><label class="fl">وقت التأخير (ms)</label><div class="sg"><input type="range" min="50" max="800" step="10" value="250" id="free-fx-echo-time"><span class="sv" id="free-fx-echo-time-v">250ms</span></div></div>
+              <div class="fg"><label class="fl">التغذية الراجعة</label><div class="sg"><input type="range" min="0" max="80" step="1" value="30" id="free-fx-echo-fb"><span class="sv" id="free-fx-echo-fb-v">30%</span></div></div>
+              <div style="font-size:11px;color:var(--al);font-weight:700;margin:8px 0 4px 0">🎚️ التسوية الصوتيّة (EQ)</div>
+              <div class="fg"><label class="fl">الجِير (Bass)</label><div class="sg"><input type="range" min="-12" max="12" step="1" value="0" id="free-fx-eq-low"><span class="sv" id="free-fx-eq-low-v">0dB</span></div></div>
+              <div class="fg"><label class="fl">الوسط (Mid)</label><div class="sg"><input type="range" min="-12" max="12" step="1" value="0" id="free-fx-eq-mid"><span class="sv" id="free-fx-eq-mid-v">0dB</span></div></div>
+              <div class="fg"><label class="fl">الحادّ (Treble)</label><div class="sg"><input type="range" min="-12" max="12" step="1" value="0" id="free-fx-eq-high"><span class="sv" id="free-fx-eq-high-v">0dB</span></div></div>
+            </div>
           </div>
         </div>
 
@@ -816,6 +845,35 @@ body.offline .offline-badge{display:block}
               <div class="fg"><label class="fl">نعومة الحواف</label><div class="sg"><input type="range" min="0" max="50" step="1" value="10" id="recvid-softness"><span class="sv" id="recvid-softness-v">10</span></div></div>
             </div>
             <span class="note" style="display:block;margin-top:4px;font-size:9px">💡 الأسود والأبيض يستخدمان مقياس السطوع، الألوان الأخرى تستخدم YCbCr. زِد العتبة إذا بقي إطار.</span>
+
+            <!-- v0.11.0 — مؤثّرات صوتيّة على فيديو التلاوة -->
+            <div class="tgg" style="margin-top:8px;background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px">
+              <span class="tgl">🎛️ مؤثّرات صوتيّة<br><small style="color:var(--t3)">صدى، إكو، تسوية صوتيّة (EQ) — تَعمل في المعاينة والتصدير</small></span>
+              <label class="tg"><input type="checkbox" id="recvid-fx-on"><span class="tgs"></span></label>
+            </div>
+            <div id="recvid-fx-ctrl" style="display:none;margin-top:6px;padding:8px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r)">
+              <div class="fg"><label class="fl">🔊 مستوى الصوت</label><div class="sg"><input type="range" min="0" max="200" step="1" value="100" id="recvid-fx-vol"><span class="sv" id="recvid-fx-vol-v">100%</span></div></div>
+              <div style="font-size:11px;color:var(--al);font-weight:700;margin:6px 0 4px 0">🌊 الصدى (Reverb)</div>
+              <div class="fg"><label class="fl">نوع البيئة</label>
+                <select class="fc" id="recvid-fx-reverb-type">
+                  <option value="none">بدون</option>
+                  <option value="room">غرفة صغيرة</option>
+                  <option value="studio">استوديو</option>
+                  <option value="masjid-sm">مسجد صغير</option>
+                  <option value="masjid-lg" selected>مسجد كبير</option>
+                  <option value="hall">قاعة كبيرة</option>
+                </select>
+              </div>
+              <div class="fg"><label class="fl">شدّة الصدى</label><div class="sg"><input type="range" min="0" max="100" step="1" value="30" id="recvid-fx-reverb-amt"><span class="sv" id="recvid-fx-reverb-amt-v">30%</span></div></div>
+              <div style="font-size:11px;color:var(--al);font-weight:700;margin:8px 0 4px 0">🔁 الإكو (Delay)</div>
+              <div class="fg"><label class="fl">شدّة الإكو</label><div class="sg"><input type="range" min="0" max="100" step="1" value="0" id="recvid-fx-echo-amt"><span class="sv" id="recvid-fx-echo-amt-v">0%</span></div></div>
+              <div class="fg"><label class="fl">وقت التأخير (ms)</label><div class="sg"><input type="range" min="50" max="800" step="10" value="250" id="recvid-fx-echo-time"><span class="sv" id="recvid-fx-echo-time-v">250ms</span></div></div>
+              <div class="fg"><label class="fl">التغذية الراجعة</label><div class="sg"><input type="range" min="0" max="80" step="1" value="30" id="recvid-fx-echo-fb"><span class="sv" id="recvid-fx-echo-fb-v">30%</span></div></div>
+              <div style="font-size:11px;color:var(--al);font-weight:700;margin:8px 0 4px 0">🎚️ التسوية الصوتيّة (EQ)</div>
+              <div class="fg"><label class="fl">الجِير (Bass)</label><div class="sg"><input type="range" min="-12" max="12" step="1" value="0" id="recvid-fx-eq-low"><span class="sv" id="recvid-fx-eq-low-v">0dB</span></div></div>
+              <div class="fg"><label class="fl">الوسط (Mid)</label><div class="sg"><input type="range" min="-12" max="12" step="1" value="0" id="recvid-fx-eq-mid"><span class="sv" id="recvid-fx-eq-mid-v">0dB</span></div></div>
+              <div class="fg"><label class="fl">الحادّ (Treble)</label><div class="sg"><input type="range" min="-12" max="12" step="1" value="0" id="recvid-fx-eq-high"><span class="sv" id="recvid-fx-eq-high-v">0dB</span></div></div>
+            </div>
 
             <button class="btn btn-g bsm" id="recvid-remove" style="margin-top:6px;width:100%">🗑️ إزالة الفيديو</button>
           </div>
@@ -1456,7 +1514,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.10.0</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.11.0</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>
