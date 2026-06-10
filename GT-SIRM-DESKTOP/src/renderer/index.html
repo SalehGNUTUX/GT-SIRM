@@ -1794,25 +1794,32 @@ body.offline .offline-badge{display:block}
           </details>
         </details>
 
-        <!-- 6) مجلد حفظ الوسائط (yt-dlp) — مَكمِّل لمجلّد العمل -->
+        <!-- 6) تَنزيلات yt-dlp — تَوجيه ذكيّ حسب نوع المصدر -->
         <details class="sec desktop-only blk">
-          <summary class="sec-t">📁 مجلد حفظ الوسائط (yt-dlp) <span class="badge-new">Desktop</span></summary>
-          <div class="note">مَسار التَنزيلات الجديدة من yt-dlp. يُمكن تَركه على /tmp المؤقت أو تَوجيهه إلى مَسار دائم — يُنصَح بمجلّد العمل أعلاه.</div>
-          <div class="rg c2" style="margin-bottom:6px;margin-top:6px">
-            <div class="rc"><input type="radio" name="dl-save-mode" id="dls-tmp" value="tmp" checked>
-              <label for="dls-tmp"><span class="ri">🗑️</span><span>مؤقت (/tmp)</span></label></div>
-            <div class="rc"><input type="radio" name="dl-save-mode" id="dls-perm" value="permanent">
-              <label for="dls-perm"><span class="ri">💾</span><span>دائم</span></label></div>
+          <summary class="sec-t">⬇️ تَنزيلات yt-dlp <span class="badge-new">v0.12.2</span></summary>
+          <div class="note">عند اختيار 💾 <strong>دائم</strong> في أيّ قسم تَنزيل، يَذهب المَلفّ تلقائياً للمجلّد الفرعيّ المناسب داخل مجلّد العمل:</div>
+          <div style="font-size:11px;padding:8px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r);margin-top:6px;line-height:1.9">
+            <div>🎬 خلفيّة فيديو (من المشهد) ← <code style="color:var(--p)">bg-videos/</code></div>
+            <div>🎵 صوت خلفيّة (من المشهد) ← <code style="color:var(--p)">bg-audio/</code></div>
+            <div>🎤 صوت تلاوة مخصّص ← <code style="color:var(--p)">custom-audio/</code></div>
+            <div>🎥 فيديو تلاوة جاهز ← <code style="color:var(--p)">recitations/</code></div>
+            <div>🖼️ صورة خلفيّة ← <code style="color:var(--p)">logos/</code></div>
           </div>
-          <div id="dl-perm-row" style="display:none">
-            <div class="fg" style="display:flex;gap:5px;align-items:center">
-              <input type="text" class="fc" id="dl-save-path" placeholder="~/Downloads/GT-SIRM"
-                     style="flex:1;direction:ltr;font-size:11px" readonly>
-              <button class="btn btn-g bsm" id="dl-browse-btn" title="اختر مجلداً">📂</button>
-            </div>
-            <span class="note" id="dl-path-status">لم يُختر مجلد — سيُستخدم /tmp</span>
+          <div class="note" style="margin-top:8px;color:var(--t2)">
+            • <strong>📁 مؤقت (/tmp)</strong> — للتَجارب السَريعة، يُحذف عند إعادة التشغيل.<br>
+            • <strong>💾 دائم</strong> — يَنزل في المجلّد الفرعيّ المناسب من مجلّد العمل تلقائياً.<br>
+            • <strong>🗂️ مَسار يَدويّ</strong> (في كلّ قسم) — تَجاوز مجلّد العمل لمَسار خاصّ.
           </div>
-          <span class="note" id="dl-mode-note">⚠️ الملفات في /tmp قد تُحذف عند إعادة التشغيل</span>
+          <!-- إعدادات قَديمة (مَخفيّة، تَبقى لـbackward-compatibility) -->
+          <div style="display:none">
+            <input type="radio" name="dl-save-mode" id="dls-tmp" value="tmp" checked>
+            <input type="radio" name="dl-save-mode" id="dls-perm" value="permanent">
+            <input type="text" id="dl-save-path">
+            <button id="dl-browse-btn"></button>
+            <span id="dl-path-status"></span>
+            <span id="dl-mode-note"></span>
+            <div id="dl-perm-row"></div>
+          </div>
         </details>
 
         <!-- 7) الحفظ التلقائي -->
@@ -1918,7 +1925,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.1</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.2</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

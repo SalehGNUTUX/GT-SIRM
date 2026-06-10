@@ -7331,6 +7331,8 @@ async function runRecvidYtdlpDownload() {
       quality: "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
       dlSaveMode: mode,
       dlSavePath: savePath,
+      // v0.12.2 — تَوجيه ذكيّ لمجلّد العمل (recitations)
+      workdirSubfolderKey: (mode === "permanent" && !savePath) ? "recitations" : undefined,
     });
     if (!result?.ok || !result.filePath) throw new Error("yt-dlp returned no file");
     appendLog(`✅ تمّ التنزيل: ${result.filePath}`);
@@ -7404,6 +7406,8 @@ async function runFreeAudioYtdlpDownload() {
       audioFormat: "ogg",
       dlSaveMode: mode,
       dlSavePath: savePath,
+      // v0.12.2 — تَوجيه ذكيّ لمجلّد العمل (custom-audio)
+      workdirSubfolderKey: (mode === "permanent" && !savePath) ? "customAudio" : undefined,
     });
     if (!result?.ok || !result.filePath) throw new Error("yt-dlp returned no file");
     appendLog(`✅ تمّ التنزيل: ${result.filePath}`);
@@ -7450,9 +7454,15 @@ async function runYtdlpDownload() {
   });
 
   try {
+    // v0.12.2 — تَوجيه ذكيّ حسب النوع لمجلّد العمل الفرعيّ المناسب
+    const subfolderMap = { video: "bgVideos", audio: "bgAudio", image: "logos" };
+    const workdirSubfolderKey = (S.dlSaveMode === "permanent" && !S.dlSavePath)
+      ? subfolderMap[type]
+      : undefined;
     const result = await window.SIRM.ytdlpDownload({
       url, type, startTime, endTime,
-      dlSaveMode: S.dlSaveMode, dlSavePath: S.dlSavePath
+      dlSaveMode: S.dlSaveMode, dlSavePath: S.dlSavePath,
+      workdirSubfolderKey,
     });
     window.SIRM.offYtdlpProgress();
     await applyDownloadedMedia(result.filePath, type, url);

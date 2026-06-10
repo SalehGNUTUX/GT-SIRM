@@ -842,13 +842,31 @@ ipcMain.handle("ffmpeg-encode", async (event, opts) => {
 });
 
 ipcMain.handle("ytdlp-download", async (event, opts) => {
-  const { url, type, quality, startTime, endTime, dlSaveMode, dlSavePath, audioFormat } = opts;
+  const { url, type, quality, startTime, endTime, dlSaveMode, dlSavePath, audioFormat, workdirSubfolderKey } = opts;
   const ytdlpPath = await getBinPath("yt-dlp");
   if (!ytdlpPath) throw new Error("yt-dlp not found");
 
-  // تحديد مجلد الحفظ
+  // v0.12.2 — تَحديد مجلّد الحفظ
+  // الأولويّة: workdirSubfolderKey (تَوجيه ذكيّ تلقائيّ) → dlSavePath (يدويّ) → /tmp
   let saveDir = os.tmpdir();
-  if (dlSaveMode === "permanent") {
+  if (workdirSubfolderKey) {
+    // تَوجيه ذكيّ: استَخدم مجلّد العمل + المجلّد الفرعيّ المناسب
+    try {
+      const cfg = loadWorkDirConfig();
+      const root = (cfg && cfg.path) ? cfg.path : getDefaultWorkDir();
+      const subfolder = WORK_DIR_SUBFOLDERS.find(f => f.key === workdirSubfolderKey);
+      if (subfolder) {
+        const target = path.join(root, subfolder.name);
+        fs.mkdirSync(target, { recursive: true });
+        saveDir = target;
+        event.sender.send("ytdlp-progress", { line: `📁 ${subfolder.emoji} مجلّد العمل/${subfolder.name}: ${saveDir}` });
+      } else {
+        event.sender.send("ytdlp-progress", { line: `⚠️ subfolderKey غير معروف — استَخدم /tmp` });
+      }
+    } catch (err) {
+      event.sender.send("ytdlp-progress", { line: `⚠️ فَشِل تَوجيه مجلّد العمل: ${err.message} — استَخدم /tmp` });
+    }
+  } else if (dlSaveMode === "permanent") {
     if (dlSavePath) {
       try {
         if (!fs.existsSync(dlSavePath)) {
