@@ -847,12 +847,14 @@ body.offline .offline-badge{display:block}
                   <button class="btn btn-g bsm" id="free-audio-dl-paste" type="button" title="لصق من الحافظة" style="padding:3px 8px">📋</button>
                   <button class="btn btn-g bsm" id="free-audio-dl-clear" type="button" title="مسح" style="padding:3px 8px;color:var(--danger)">✕</button>
                 </div>
-                <div style="display:flex;gap:8px;margin-top:5px;font-size:11px">
-                  <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="temporary" checked> 📁 مؤقت (/tmp)</label>
-                  <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="permanent"> 💾 دائم</label>
+                <!-- v0.12.3 — 3 خِيارات صَريحة: مؤقت / مجلّد العمل / مَسار يَدويّ -->
+                <div style="display:flex;flex-direction:column;gap:4px;margin-top:5px;font-size:11px">
+                  <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="temporary"> 📁 مؤقت (/tmp) — يُحذف عند إعادة التشغيل</label>
+                  <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="workdir" checked> 💾 مجلّد العمل (افتراضيّ) → <code style="color:var(--p)">custom-audio/</code></label>
+                  <label style="cursor:pointer"><input type="radio" name="free-audio-dl-mode" value="manual"> 🗂️ مَسار يَدويّ مُخصَّص</label>
                 </div>
                 <div id="free-audio-dl-path-row" style="display:none;gap:5px;margin-top:5px">
-                  <input type="text" class="fc" id="free-audio-dl-path" placeholder="مسار الحفظ" style="flex:1">
+                  <input type="text" class="fc" id="free-audio-dl-path" placeholder="مسار الحفظ المُخصَّص" style="flex:1">
                   <button class="btn btn-g bsm" id="free-audio-dl-browse" style="padding:3px 10px">📁</button>
                 </div>
                 <div style="display:flex;gap:5px;margin-top:5px">
@@ -962,12 +964,14 @@ body.offline .offline-badge{display:block}
                   <button class="btn btn-g bsm" id="recvid-dl-paste" type="button" title="لصق من الحافظة" style="padding:3px 8px">📋</button>
                   <button class="btn btn-g bsm" id="recvid-dl-clear" type="button" title="مسح" style="padding:3px 8px;color:var(--danger)">✕</button>
                 </div>
-                <div style="display:flex;gap:8px;margin-top:5px;font-size:11px">
-                  <label style="cursor:pointer"><input type="radio" name="recvid-dl-mode" value="temporary" checked> 📁 مؤقت (/tmp)</label>
-                  <label style="cursor:pointer"><input type="radio" name="recvid-dl-mode" value="permanent"> 💾 دائم</label>
+                <!-- v0.12.3 — 3 خِيارات صَريحة -->
+                <div style="display:flex;flex-direction:column;gap:4px;margin-top:5px;font-size:11px">
+                  <label style="cursor:pointer"><input type="radio" name="recvid-dl-mode" value="temporary"> 📁 مؤقت (/tmp) — يُحذف عند إعادة التشغيل</label>
+                  <label style="cursor:pointer"><input type="radio" name="recvid-dl-mode" value="workdir" checked> 💾 مجلّد العمل (افتراضيّ) → <code style="color:var(--p)">recitations/</code></label>
+                  <label style="cursor:pointer"><input type="radio" name="recvid-dl-mode" value="manual"> 🗂️ مَسار يَدويّ مُخصَّص</label>
                 </div>
                 <div id="recvid-dl-path-row" style="display:none;gap:5px;margin-top:5px">
-                  <input type="text" class="fc" id="recvid-dl-path" placeholder="مسار الحفظ" style="flex:1">
+                  <input type="text" class="fc" id="recvid-dl-path" placeholder="مسار الحفظ المُخصَّص" style="flex:1">
                   <button class="btn btn-g bsm" id="recvid-dl-browse" style="padding:3px 10px">📁</button>
                 </div>
                 <div style="display:flex;gap:5px;margin-top:5px">
@@ -1925,7 +1929,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.2</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.3</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

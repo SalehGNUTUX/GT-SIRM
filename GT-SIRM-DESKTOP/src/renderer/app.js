@@ -1977,9 +1977,15 @@ function initFreeTextEditor() {
     document.querySelectorAll('input[name="free-audio-dl-mode"]').forEach(r => {
       r.addEventListener("change", () => {
         const row = document.getElementById("free-audio-dl-path-row");
-        if (row) row.style.display = r.value === "permanent" && r.checked ? "flex" : "none";
+        const checkedMode = radioVal("free-audio-dl-mode");
+        if (row) row.style.display = checkedMode === "manual" ? "flex" : "none";
       });
     });
+    setTimeout(() => {
+      const row = document.getElementById("free-audio-dl-path-row");
+      const m = radioVal("free-audio-dl-mode");
+      if (row) row.style.display = m === "manual" ? "flex" : "none";
+    }, 0);
     document.getElementById("free-audio-dl-browse")?.addEventListener("click", async () => {
       try {
         const res = await window.SIRM.dialogOpen({
@@ -2435,10 +2441,18 @@ function initEventListeners() {
   if (typeof IS_DESKTOP !== "undefined" && IS_DESKTOP) {
     document.querySelectorAll('input[name="recvid-dl-mode"]').forEach(r => {
       r.addEventListener("change", () => {
+        // v0.12.3 — أَظهِر حقل المَسار فقط عند "manual"
         const row = document.getElementById("recvid-dl-path-row");
-        if (row) row.style.display = r.value === "permanent" && r.checked ? "flex" : "none";
+        const checkedMode = radioVal("recvid-dl-mode");
+        if (row) row.style.display = checkedMode === "manual" ? "flex" : "none";
       });
     });
+    // أَطلِق change مرّة لتَسري الحالة الابتدائيّة (workdir checked → row مَخفيّ)
+    setTimeout(() => {
+      const row = document.getElementById("recvid-dl-path-row");
+      const m = radioVal("recvid-dl-mode");
+      if (row) row.style.display = m === "manual" ? "flex" : "none";
+    }, 0);
     document.getElementById("recvid-dl-browse")?.addEventListener("click", async () => {
       try {
         const res = await window.SIRM.dialogOpen({
@@ -7325,14 +7339,19 @@ async function runRecvidYtdlpDownload() {
 
   S.ytdlpBusy = true;
   try {
+    // v0.12.3 — 3 خِيارات صَريحة
+    // mode === "workdir" → استَخدم مجلّد العمل (recitations)
+    // mode === "manual"  → استَخدم savePath اليَدويّ
+    // mode === "temporary" → /tmp
+    const ipcMode = (mode === "manual" || mode === "workdir") ? "permanent" : "temporary";
+    const ipcPath = (mode === "manual") ? savePath : "";
     const result = await window.SIRM.ytdlpDownload({
       url,
       type: "video",
       quality: "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
-      dlSaveMode: mode,
-      dlSavePath: savePath,
-      // v0.12.2 — تَوجيه ذكيّ لمجلّد العمل (recitations)
-      workdirSubfolderKey: (mode === "permanent" && !savePath) ? "recitations" : undefined,
+      dlSaveMode: ipcMode,
+      dlSavePath: ipcPath,
+      workdirSubfolderKey: (mode === "workdir") ? "recitations" : undefined,
     });
     if (!result?.ok || !result.filePath) throw new Error("yt-dlp returned no file");
     appendLog(`✅ تمّ التنزيل: ${result.filePath}`);
@@ -7400,14 +7419,16 @@ async function runFreeAudioYtdlpDownload() {
 
   S.ytdlpBusy = true;
   try {
+    // v0.12.3 — 3 خِيارات صَريحة
+    const ipcMode = (mode === "manual" || mode === "workdir") ? "permanent" : "temporary";
+    const ipcPath = (mode === "manual") ? savePath : "";
     const result = await window.SIRM.ytdlpDownload({
       url,
       type: "audio",
       audioFormat: "ogg",
-      dlSaveMode: mode,
-      dlSavePath: savePath,
-      // v0.12.2 — تَوجيه ذكيّ لمجلّد العمل (custom-audio)
-      workdirSubfolderKey: (mode === "permanent" && !savePath) ? "customAudio" : undefined,
+      dlSaveMode: ipcMode,
+      dlSavePath: ipcPath,
+      workdirSubfolderKey: (mode === "workdir") ? "customAudio" : undefined,
     });
     if (!result?.ok || !result.filePath) throw new Error("yt-dlp returned no file");
     appendLog(`✅ تمّ التنزيل: ${result.filePath}`);
