@@ -7,6 +7,28 @@
 
 ---
 
+## [0.11.1] — 2026-06-10
+
+### 🎛️ المؤثّرات الصوتيّة الآن مَطبَّقة في التصدير V2 أيضاً
+
+#### العطل في v0.11.0
+المؤثّرات كانت تَعمل في المعاينة الحيّة فقط. الملفّ المُصدَّر (V2 deterministic عبر OfflineAudioContext + ffmpeg/WebCodecs) كان يَخرج **بدون مؤثّرات** — لأنّ V2 يَتجاوز `S.exportDest` المُتّصل بالمعاينة.
+
+#### الإصلاح
+- **`export-engine.js`** (سطح المكتب): دوالّ `_exportCreateIR` + `_exportBuildFXChain` مُكرَّرة من app.js لاستقلال المحرّك. `mixAudioToBuffer` تَقبل `bgFXConfig` وتُطبّقه على `bgBuffer` داخل `OfflineAudioContext`.
+- **`export-engine-web.js`** (الويب): نفس التَكرار بأسماء `_webExportCreateIR` + `_webExportBuildFXChain`. `mixAudioToBufferWeb` تَقبل `bgFXConfig`.
+- **`app.js`** في كلا النسختين: عند بدء التصدير V2، يَجمع `bgFXConfig` من DOM:
+  - إن كان recvid فاعِلاً + `recvid-fx-on` مفعَّل → `getFXConfig("recvid")`.
+  - وإلّا إن كان `free-fx-on` مفعَّل → `getFXConfig("free")`.
+  - وإلّا → `null` (يُتجاوز المحرّك تَطبيق المؤثّرات).
+
+#### النَتيجة
+الصدى، الإكو، EQ، ومستوى الصوت — كلّها مَكتوبة في الملفّ المُصدَّر بالـbit-exact مع ما يَسمعه المستخدم في المعاينة.
+
+📦 PWA cache → v42.
+
+---
+
 ## [0.11.0] — 2026-06-10
 
 ### 🎛️ المؤثّرات الصوتيّة (Audio FX) في المعاينة

@@ -131,6 +131,66 @@ function precomputeWaveDataForExport(mixed, totalFrames, FPS) {
   return out;
 }
 
+// ── v0.11.1 — محرّك المؤثّرات الصوتيّة (للتصدير V2 offline) ───────
+const EXPORT_REVERB_PRESETS = {
+  "room":      { duration: 0.3, decay: 4   },
+  "studio":    { duration: 0.5, decay: 3   },
+  "masjid-sm": { duration: 1.5, decay: 2.5 },
+  "masjid-lg": { duration: 3.0, decay: 2   },
+  "hall":      { duration: 5.0, decay: 1.5 },
+};
+
+function _exportCreateIR(ctx, preset) {
+  const p = EXPORT_REVERB_PRESETS[preset] || EXPORT_REVERB_PRESETS["masjid-lg"];
+  const length = Math.max(1, Math.floor(ctx.sampleRate * p.duration));
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, p.decay);
+    }
+  }
+  return buffer;
+}
+
+// نفس buildAudioFXChain لكن مع OfflineAudioContext (مُتطابق المنطق)
+function _exportBuildFXChain(ctx, sourceNode, cfg) {
+  const inputGain = ctx.createGain();
+  inputGain.gain.value = cfg.volume;
+  sourceNode.connect(inputGain);
+
+  const eqLow = ctx.createBiquadFilter();
+  eqLow.type = "lowshelf"; eqLow.frequency.value = 200; eqLow.gain.value = cfg.eqLow;
+  const eqMid = ctx.createBiquadFilter();
+  eqMid.type = "peaking"; eqMid.frequency.value = 1000; eqMid.Q.value = 1; eqMid.gain.value = cfg.eqMid;
+  const eqHigh = ctx.createBiquadFilter();
+  eqHigh.type = "highshelf"; eqHigh.frequency.value = 5000; eqHigh.gain.value = cfg.eqHigh;
+  inputGain.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
+
+  const mixer = ctx.createGain(); mixer.gain.value = 1;
+  const dryGain = ctx.createGain();
+  const wetTotal = Math.min(1, (cfg.reverbAmt || 0) + (cfg.echoAmt || 0));
+  dryGain.gain.value = 1 - wetTotal * 0.4;
+  eqHigh.connect(dryGain); dryGain.connect(mixer);
+
+  if (cfg.reverbType && cfg.reverbType !== "none" && (cfg.reverbAmt || 0) > 0) {
+    const conv = ctx.createConvolver();
+    try { conv.buffer = _exportCreateIR(ctx, cfg.reverbType); } catch (_) {}
+    const wetGain = ctx.createGain(); wetGain.gain.value = cfg.reverbAmt;
+    eqHigh.connect(conv); conv.connect(wetGain); wetGain.connect(mixer);
+  }
+  if ((cfg.echoAmt || 0) > 0) {
+    const delay = ctx.createDelay(2.0);
+    delay.delayTime.value = Math.max(0.05, Math.min(2.0, cfg.echoTime || 0.25));
+    const feedback = ctx.createGain();
+    feedback.gain.value = Math.max(0, Math.min(0.85, cfg.echoFb || 0));
+    const echoWet = ctx.createGain(); echoWet.gain.value = cfg.echoAmt;
+    eqHigh.connect(delay); delay.connect(feedback); feedback.connect(delay);
+    delay.connect(echoWet); echoWet.connect(mixer);
+  }
+  return mixer;
+}
+
 // ── خلط الصوت إلى AudioBuffer واحد ───────────────────
 async function mixAudioToBuffer({
   audioBuffers, ayaStarts,
@@ -138,6 +198,7 @@ async function mixAudioToBuffer({
   bgVidAudioItems,          // [{buffer, gain, dur}] لخلفيات الفيديو مع صوت
   bgVidCrossfadeSec,
   totalDuration, recGain, sampleRate = 44100,
+  bgFXConfig,               // v0.11.1 — المؤثّرات على الصوت المخصّص/recvid
 }) {
   const channels = 2;
   const length = Math.max(1, Math.ceil(totalDuration * sampleRate));
@@ -155,7 +216,7 @@ async function mixAudioToBuffer({
     src.start(ayaStarts[i] ?? 0);
   });
 
-  // 2) صوت الخلفية (مع التكرار إن طُلب)
+  // 2) صوت الخلفية (مع التكرار إن طُلب) + المؤثّرات الصوتيّة (v0.11.1)
   if (bgBuffer) {
     const dur = bgBuffer.duration;
     let t = 0;
@@ -165,7 +226,12 @@ async function mixAudioToBuffer({
       src.buffer = bgBuffer;
       const gain = oac.createGain();
       gain.gain.value = bgGain ?? 0.3;
-      src.connect(gain);
+      // v0.11.1 — إن كانت المؤثّرات مفعَّلة، أدخِل سلسلة FX بين المصدر والـgain
+      let endNode = src;
+      if (bgFXConfig && bgFXConfig.enabled) {
+        endNode = _exportBuildFXChain(oac, src, bgFXConfig);
+      }
+      endNode.connect(gain);
       gain.connect(oac.destination);
       const remaining = totalDuration - t;
       if (remaining < dur) src.start(t, 0, remaining);
@@ -353,6 +419,7 @@ async function startDesktopExportV2(opts) {
     bgCrossfadeSec,      // مدة الـ crossfade بالثواني
     bgVidTrim,           // {start,end} لتقطيع فيديو الخلفية (اختياري)
     bgAudioTrim,         // {start,end} لتقطيع صوت الخلفية (اختياري)
+    bgFXConfig,          // v0.11.1 — المؤثّرات الصوتيّة (recvid أو free-audio)
     codecKey,
     crf,
     preset,
@@ -391,6 +458,7 @@ async function startDesktopExportV2(opts) {
     bgVidAudioItems,
     bgVidCrossfadeSec: bgCrossfadeSec || 0,
     totalDuration, recGain,
+    bgFXConfig,        // v0.11.1
   });
   const wavAb = audioBufferToWav(mixed);
   if (cancelRef?.canceled) throw new Error("cancelled");

@@ -4923,6 +4923,10 @@ async function startExport(type) {
         bgLoop: ge("bg-loop"),
         recGain: gainVal,
         bgVideo: S.bgVid,
+        // v0.11.1 — المؤثّرات الصوتيّة (recvid أولاً، ثمّ free-audio)
+        bgFXConfig: (ge("recvid-on") && getFXConfig("recvid").enabled)
+          ? getFXConfig("recvid")
+          : (getFXConfig("free").enabled ? getFXConfig("free") : null),
         codecKey: (type === "mp4" ? "mp4-h264" : "webm-vp9"),
         videoBitrate: parseInt(gv("export-vbr") || "8") || 8,
         audioBitrate: "192k",

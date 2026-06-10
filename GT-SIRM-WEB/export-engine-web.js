@@ -84,6 +84,62 @@ function seekVideoToTimeWeb(v, t) {
   });
 }
 
+// ── v0.11.1 — محرّك المؤثّرات الصوتيّة (للتصدير V2 offline) ───────
+const WEB_EXPORT_REVERB_PRESETS = {
+  "room":      { duration: 0.3, decay: 4   },
+  "studio":    { duration: 0.5, decay: 3   },
+  "masjid-sm": { duration: 1.5, decay: 2.5 },
+  "masjid-lg": { duration: 3.0, decay: 2   },
+  "hall":      { duration: 5.0, decay: 1.5 },
+};
+
+function _webExportCreateIR(ctx, preset) {
+  const p = WEB_EXPORT_REVERB_PRESETS[preset] || WEB_EXPORT_REVERB_PRESETS["masjid-lg"];
+  const length = Math.max(1, Math.floor(ctx.sampleRate * p.duration));
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, p.decay);
+    }
+  }
+  return buffer;
+}
+
+function _webExportBuildFXChain(ctx, sourceNode, cfg) {
+  const inputGain = ctx.createGain();
+  inputGain.gain.value = cfg.volume;
+  sourceNode.connect(inputGain);
+  const eqLow = ctx.createBiquadFilter();
+  eqLow.type = "lowshelf"; eqLow.frequency.value = 200; eqLow.gain.value = cfg.eqLow;
+  const eqMid = ctx.createBiquadFilter();
+  eqMid.type = "peaking"; eqMid.frequency.value = 1000; eqMid.Q.value = 1; eqMid.gain.value = cfg.eqMid;
+  const eqHigh = ctx.createBiquadFilter();
+  eqHigh.type = "highshelf"; eqHigh.frequency.value = 5000; eqHigh.gain.value = cfg.eqHigh;
+  inputGain.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
+  const mixer = ctx.createGain(); mixer.gain.value = 1;
+  const dryGain = ctx.createGain();
+  const wetTotal = Math.min(1, (cfg.reverbAmt || 0) + (cfg.echoAmt || 0));
+  dryGain.gain.value = 1 - wetTotal * 0.4;
+  eqHigh.connect(dryGain); dryGain.connect(mixer);
+  if (cfg.reverbType && cfg.reverbType !== "none" && (cfg.reverbAmt || 0) > 0) {
+    const conv = ctx.createConvolver();
+    try { conv.buffer = _webExportCreateIR(ctx, cfg.reverbType); } catch (_) {}
+    const wetGain = ctx.createGain(); wetGain.gain.value = cfg.reverbAmt;
+    eqHigh.connect(conv); conv.connect(wetGain); wetGain.connect(mixer);
+  }
+  if ((cfg.echoAmt || 0) > 0) {
+    const delay = ctx.createDelay(2.0);
+    delay.delayTime.value = Math.max(0.05, Math.min(2.0, cfg.echoTime || 0.25));
+    const feedback = ctx.createGain();
+    feedback.gain.value = Math.max(0, Math.min(0.85, cfg.echoFb || 0));
+    const echoWet = ctx.createGain(); echoWet.gain.value = cfg.echoAmt;
+    eqHigh.connect(delay); delay.connect(feedback); feedback.connect(delay);
+    delay.connect(echoWet); echoWet.connect(mixer);
+  }
+  return mixer;
+}
+
 // ── خلط الصوت (مشترك مع المكتبية، لكن منسوخ هنا للويب) ──
 async function mixAudioToBufferWeb({
   audioBuffers, ayaStarts,
@@ -91,6 +147,7 @@ async function mixAudioToBufferWeb({
   bgVidAudioItems,          // [{buffer, gain, dur}] لخلفيات الفيديو مع صوت مفعَّل
   bgVidCrossfadeSec,        // مدة الـ crossfade لاحتساب overlap بين المقاطع
   totalDuration, recGain, sampleRate = 44100,
+  bgFXConfig,               // v0.11.1
 }) {
   const channels = 2;
   const length = Math.max(1, Math.ceil(totalDuration * sampleRate));
@@ -114,7 +171,12 @@ async function mixAudioToBufferWeb({
       src.buffer = bgBuffer;
       const gain = oac.createGain();
       gain.gain.value = bgGain ?? 0.3;
-      src.connect(gain); gain.connect(oac.destination);
+      // v0.11.1 — أدخِل سلسلة المؤثّرات إن كانت مفعَّلة
+      let endNode = src;
+      if (bgFXConfig && bgFXConfig.enabled) {
+        endNode = _webExportBuildFXChain(oac, src, bgFXConfig);
+      }
+      endNode.connect(gain); gain.connect(oac.destination);
       const remaining = totalDuration - t;
       if (remaining < dur) src.start(t, 0, remaining);
       else src.start(t);
@@ -402,6 +464,7 @@ async function startWebExportV2(opts) {
     bgVidAudioItems,
     bgVidCrossfadeSec: (typeof getCrossfadeDur === "function") ? getCrossfadeDur() : 0,
     totalDuration, recGain, sampleRate,
+    bgFXConfig: opts.bgFXConfig,        // v0.11.1
   });
   if (cancelRef?.canceled) { try { videoEncoder.close(); audioEncoder.close(); } catch (_) {} throw new Error("cancelled"); }
 

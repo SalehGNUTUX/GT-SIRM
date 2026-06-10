@@ -7657,6 +7657,10 @@ async function startExportDesktop(codecKey) {
       bgCrossfadeSec: getCrossfadeDur(),  // نفس مدة المعاينة بالضبط
       bgVidTrim,
       bgAudioTrim,
+      // v0.11.1 — المؤثّرات الصوتيّة: إن كان recvid فاعِلاً أخذ recvidFX، وإلّا free-audio FX
+      bgFXConfig: (ge("recvid-on") && getFXConfig("recvid").enabled)
+        ? getFXConfig("recvid")
+        : (getFXConfig("free").enabled ? getFXConfig("free") : null),
       codecKey,
       crf:          userCrf,
       preset:       userPreset,
