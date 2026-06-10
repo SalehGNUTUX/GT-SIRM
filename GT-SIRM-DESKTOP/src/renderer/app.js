@@ -5039,80 +5039,113 @@ const FILE_INPUT_WORKDIR_MAP = {
   "logo-input":       { key: "logos",       filters: [{ name: "صورة", extensions: ["png","jpg","jpeg","webp","svg"] }] },
 };
 
-// v0.12.8 — اعتراض على الـ.fu-area parent (لا على الـinput) لأنّ
-// الـ<input type="file"> غالباً مَخفيّ بـCSS، والمُستخدم يَنقر على الـfu-area
-// التي تَفتح dialog النَظام مباشرةً بدون مُرور بنا.
+// v0.12.10 — اعتراض مَوثوق:
+// 1) listener على الـinput نَفسه في capture phase (يَسبق فَتح الـfile picker الأصليّ).
+// 2) listener احتياطيّ على الـ.fu-area parent، لو نَقَر المُستخدم على .fu-icon/.fu-txt.
+// 3) document-level delegation كـsafety net في حال DOM تَغيَّر بعد التَحميل.
+function _workdirInterceptorHandler(input, config) {
+  return async (e) => {
+    // اِسمح بـclicks على sub-buttons داخل الـ.fu-area (إزالة، إعادة)
+    if (e.target.tagName === "BUTTON" && e.target.id !== input.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation?.();
+
+    let defaultPath = S.workDirSubfolders?.[config.key];
+    if (!defaultPath) {
+      try {
+        const info = await window.SIRM.workdirGet();
+        if (info?.subfolders) {
+          S.workDirSubfolders = info.subfolders;
+          defaultPath = info.subfolders[config.key];
+        }
+      } catch (err) {
+        console.warn("[interceptor] workdirGet error:", err);
+      }
+    }
+
+    if (!defaultPath) {
+      const old = input.style.pointerEvents;
+      input.style.pointerEvents = "";
+      input._bypassWorkdir = true;
+      input.click();
+      setTimeout(() => {
+        input.style.pointerEvents = old || "none";
+        input._bypassWorkdir = false;
+      }, 200);
+      return;
+    }
+
+    try {
+      const props = config.multiple ? ["openFile", "multiSelections"] : ["openFile"];
+      const res = await window.SIRM.dialogOpen({
+        title: "اختر ملفّاً",
+        defaultPath,
+        properties: props,
+        filters: config.filters,
+      });
+      if (!res || !res.length) return;
+      const files = [];
+      for (const fp of res) {
+        try {
+          const meta = await window.SIRM.readDownloadedFile(fp);
+          if (meta?.buffer) {
+            const file = new File([meta.buffer], meta.name || fp.split("/").pop(), {});
+            try { Object.defineProperty(file, "path", { value: fp, writable: false }); } catch (_) {}
+            files.push(file);
+          }
+        } catch (err) { console.warn("workdir-input read:", err); }
+      }
+      if (!files.length) return;
+      try {
+        const dt = new DataTransfer();
+        for (const f of files) dt.items.add(f);
+        input._bypassWorkdir = true;
+        input.files = dt.files;
+        input._bypassWorkdir = false;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      } catch (err) {
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    } catch (err) {
+      console.warn("[interceptor] error:", err);
+      toast?.(`❌ خطأ: ${err.message}`, "error", 3000);
+    }
+  };
+}
+
 function installWorkdirInputInterceptor() {
   if (!IS_DESKTOP) return;
+  let installed = 0;
   for (const id of Object.keys(FILE_INPUT_WORKDIR_MAP)) {
     const input = document.getElementById(id);
     if (!input) continue;
+    if (input._workdirInstalled) continue;
+    input._workdirInstalled = true;
     const config = FILE_INPUT_WORKDIR_MAP[id];
-    const fuArea = input.closest('.fu-area');
-    // إن وُجد parent fu-area، عَطِّل pointer-events على الـinput حتى لا يَتلقّى click
-    if (fuArea) {
-      input.style.pointerEvents = "none";
-    }
-    const target = fuArea || input;
-    target.addEventListener("click", async (e) => {
-      // اِسمح بـclicks على sub-buttons (مثل removeBg/restart)
-      if (e.target.tagName === "BUTTON" && e.target !== target) return;
-      e.preventDefault();
-      e.stopPropagation();
+    const handler = _workdirInterceptorHandler(input, config);
 
-      // اِستَعلِم المَسار (مع cache في S.workDirSubfolders)
-      let defaultPath = S.workDirSubfolders?.[config.key];
-      if (!defaultPath) {
-        try {
-          const info = await window.SIRM.workdirGet();
-          if (info?.subfolders) {
-            S.workDirSubfolders = info.subfolders;
-            defaultPath = info.subfolders[config.key];
-          }
-        } catch (_) {}
-      }
-      if (!defaultPath) {
-        // fallback: افتح الـinput الطبيعيّ
-        input.style.pointerEvents = "";
-        input.click();
-        setTimeout(() => { input.style.pointerEvents = "none"; }, 100);
-        return;
-      }
+    // v0.12.11 — pointer-events:none يَمنع وُصول clicks للـinput،
+    // فيَتلقّاها الـ.fu-area parent ويُحوّلها للمُعترِض.
+    input.style.pointerEvents = "none";
+    input.setAttribute("data-workdir-managed", "1");
 
-      try {
-        const props = config.multiple ? ["openFile", "multiSelections"] : ["openFile"];
-        const res = await window.SIRM.dialogOpen({
-          title: "اختر ملفّاً",
-          defaultPath,
-          properties: props,
-          filters: config.filters,
-        });
-        if (!res || !res.length) return;
-        const files = [];
-        for (const fp of res) {
-          try {
-            const meta = await window.SIRM.readDownloadedFile(fp);
-            if (meta?.buffer) {
-              const file = new File([meta.buffer], meta.name || fp.split("/").pop(), {});
-              try { Object.defineProperty(file, "path", { value: fp, writable: false }); } catch (_) {}
-              files.push(file);
-            }
-          } catch (err) { console.warn("workdir-input read:", err); }
-        }
-        if (!files.length) return;
-        try {
-          const dt = new DataTransfer();
-          for (const f of files) dt.items.add(f);
-          input.files = dt.files;
-          input.dispatchEvent(new Event("change", { bubbles: true }));
-        } catch (err) {
-          input.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-      } catch (err) {
-        console.warn("interceptor error:", err);
-      }
+    input.addEventListener("click", (e) => {
+      if (input._bypassWorkdir) return;
+      handler(e);
     }, true);
+
+    const fuArea = input.closest('.fu-area');
+    if (fuArea && !fuArea._workdirInstalled) {
+      fuArea._workdirInstalled = true;
+      fuArea.addEventListener("click", (e) => {
+        if (input._bypassWorkdir) return;
+        handler(e);
+      }, true);
+    }
+    installed++;
   }
+  console.log(`[interceptor] installed on ${installed} inputs`);
 }
 
 // ══════════════════════════════════════════════════════
@@ -6863,12 +6896,12 @@ function renderTemplates() {
   });
 }
 
-// v0.12.8 — وَضع تَعديل قالب: تَطبيق الحالة، انتقال لـtab-rec، عَرض بانر
+// v0.12.9 — وَضع تَعديل قالب: تَطبيق الحالة، انتقال لـtab-scene (السمات والمظهر)، عَرض بانر
 function startTemplateEdit(idx) {
   const t = S.templates[idx];
   if (!t) return;
   applyState(t.state);
-  if (typeof goTab === "function") goTab("rec");
+  if (typeof goTab === "function") goTab("scene");
   showTemplateEditBanner(idx);
 }
 

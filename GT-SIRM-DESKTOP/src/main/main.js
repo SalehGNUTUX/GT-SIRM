@@ -1079,19 +1079,184 @@ ipcMain.handle("dialog-save", async (_e, opts) => {
   return result.canceled ? null : result.filePath;
 });
 
+// v0.12.11 — تَجاوز bug Electron+GTK الذي يَتجاهل defaultPath ويَعود
+// لآخر مجلّد استَخدمه المُستخدم. الحلّ: استعمال أدوات النِظام التي تَحترم
+// المَسار: kdialog على KDE/Dolphin، zenity على GNOME/غيرها.
+function _which(bin) {
+  for (const p of [`/usr/bin/${bin}`, `/usr/local/bin/${bin}`, `/bin/${bin}`]) {
+    try { if (fs.existsSync(p)) return p; } catch (_) {}
+  }
+  try {
+    const out = require("child_process").execSync(`which ${bin}`, { encoding: "utf8" }).trim();
+    if (out && fs.existsSync(out)) return out;
+  } catch (_) {}
+  return null;
+}
+
+let _KDIALOG_PATH = null;
+let _ZENITY_PATH = null;
+let _DIALOG_CHECKED = false;
+function detectNativeDialog() {
+  if (_DIALOG_CHECKED) return { kdialog: _KDIALOG_PATH, zenity: _ZENITY_PATH };
+  _DIALOG_CHECKED = true;
+  if (process.platform !== "linux") return { kdialog: null, zenity: null };
+  _KDIALOG_PATH = _which("kdialog");
+  _ZENITY_PATH  = _which("zenity");
+  console.log(`[dialog] native helpers — kdialog=${_KDIALOG_PATH || "—"} zenity=${_ZENITY_PATH || "—"}`);
+  return { kdialog: _KDIALOG_PATH, zenity: _ZENITY_PATH };
+}
+
+function _isKdeSession() {
+  const xdg = (process.env.XDG_CURRENT_DESKTOP || "").toUpperCase();
+  if (xdg.includes("KDE")) return true;
+  if (process.env.KDE_FULL_SESSION) return true;
+  if ((process.env.DESKTOP_SESSION || "").toLowerCase().includes("plasma")) return true;
+  return false;
+}
+
+function _ensureTrailingSlash(p) {
+  if (!p) return p;
+  try {
+    if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+      return p.endsWith("/") ? p : (p + "/");
+    }
+  } catch (_) {}
+  return p;
+}
+
+// SENTINEL: يُميِّز "الأداة فَشلت في التَشغيل" عن "المُستخدم ألغى"
+const _DLG_UNAVAILABLE = Symbol("unavailable");
+
+function kdialogFileSelect({ defaultPath, multiple, filters, title, directory }) {
+  const { kdialog } = detectNativeDialog();
+  if (!kdialog) return Promise.resolve(_DLG_UNAVAILABLE);
+  const args = [];
+  if (directory) {
+    args.push("--getexistingdirectory", defaultPath || os.homedir());
+  } else {
+    if (multiple) { args.push("--multiple", "--separate-output"); }
+    args.push("--getopenfilename", _ensureTrailingSlash(defaultPath) || os.homedir());
+    if (Array.isArray(filters) && filters.length) {
+      const parts = filters.filter(f => f.extensions?.length).map(f =>
+        `${f.name || "Files"} (${f.extensions.map(e => "*." + e).join(" ")})`
+      );
+      parts.push("جميع الملفّات (*)");
+      args.push(parts.join("\n"));
+    }
+  }
+  if (title) args.push("--title", title);
+  return new Promise((resolve) => {
+    let resolved = false;
+    const proc = spawn(kdialog, args);
+    let out = "";
+    proc.stdout.on("data", d => out += d.toString());
+    proc.on("close", code => {
+      if (resolved) return; resolved = true;
+      // exit 0 + output → ملفّات؛ exit !=0 أو لا output → المُستخدم ألغى (null)
+      if (code === 0 && out.trim()) {
+        resolve(out.trim().split("\n").map(s => s.trim()).filter(Boolean));
+      } else {
+        resolve(null); // cancelled — لا تَنتقل لـfallback
+      }
+    });
+    proc.on("error", err => {
+      if (resolved) return; resolved = true;
+      console.warn("[kdialog] spawn error:", err);
+      resolve(_DLG_UNAVAILABLE);
+    });
+  });
+}
+
+function zenityFileSelect({ defaultPath, multiple, filters, title, directory }) {
+  const { zenity } = detectNativeDialog();
+  if (!zenity) return Promise.resolve(_DLG_UNAVAILABLE);
+  const args = ["--file-selection"];
+  if (title) args.push(`--title=${title}`);
+  if (directory) args.push("--directory");
+  if (multiple) { args.push("--multiple"); args.push("--separator=\n"); }
+  if (defaultPath) args.push(`--filename=${_ensureTrailingSlash(defaultPath)}`);
+  if (Array.isArray(filters) && !directory) {
+    for (const f of filters) {
+      if (!f.extensions?.length) continue;
+      const pats = f.extensions.map(ext => `*.${ext}`).join(" ");
+      args.push(`--file-filter=${f.name || "Files"} | ${pats}`);
+    }
+    args.push("--file-filter=الكلّ | *");
+  }
+  return new Promise((resolve) => {
+    let resolved = false;
+    const proc = spawn(zenity, args);
+    let out = "";
+    proc.stdout.on("data", d => out += d.toString());
+    proc.on("close", code => {
+      if (resolved) return; resolved = true;
+      if (code === 0 && out.trim()) {
+        resolve(out.trim().split("\n").map(s => s.trim()).filter(Boolean));
+      } else {
+        resolve(null); // cancelled — لا fallback
+      }
+    });
+    proc.on("error", err => {
+      if (resolved) return; resolved = true;
+      console.warn("[zenity] spawn error:", err);
+      resolve(_DLG_UNAVAILABLE);
+    });
+  });
+}
+
+// تَرتيب التَفضيل: KDE → kdialog؛ غير ذلك → zenity. الإلغاء يُعيد null بدون fallback.
+async function nativeFileSelect(payload) {
+  const { kdialog, zenity } = detectNativeDialog();
+  const tryOrder = _isKdeSession()
+    ? [kdialog && kdialogFileSelect, zenity && zenityFileSelect]
+    : [zenity && zenityFileSelect, kdialog && kdialogFileSelect];
+  for (const fn of tryOrder) {
+    if (!fn) continue;
+    const res = await fn(payload);
+    if (res === _DLG_UNAVAILABLE) continue; // الأداة فَشلت — جَرِّب التالي
+    return res; // null (المُستخدم ألغى) أو [paths]
+  }
+  return _DLG_UNAVAILABLE; // لا أداة عَملت — Electron fallback
+}
+
 ipcMain.handle("dialog-open", async (_e, opts) => {
   const isDir = opts.properties?.includes("openDirectory");
-  // v0.12.7 — احترام defaultPath: تَأكَّد من وجوده على القرص قبل تَمريره
+  const multiple = opts.properties?.includes("multiSelections") || opts.multiple;
   let defaultPath = opts.defaultPath;
   try {
     if (defaultPath && !fs.existsSync(defaultPath)) {
       fs.mkdirSync(defaultPath, { recursive: true });
     }
   } catch (_) { defaultPath = undefined; }
+
+  // v0.12.11 — على لينُكس استَعمِل kdialog/zenity (يَحترم defaultPath)
+  if (process.platform === "linux") {
+    const payload = {
+      defaultPath,
+      multiple,
+      directory: isDir,
+      filters: isDir ? null : (opts.filters || [{ name: "Files", extensions: ["*"] }]),
+      title: opts.title || (isDir ? "اختر مجلداً" : "اختر ملفاً"),
+    };
+    const paths = await nativeFileSelect(payload);
+    if (paths !== _DLG_UNAVAILABLE) {
+      return paths; // null (cancelled) أو array (selected) — لا fallback
+    }
+  }
+
+  // fallback: Electron dialog
+  if (defaultPath && !isDir) {
+    try {
+      const stat = fs.statSync(defaultPath);
+      if (stat.isDirectory()) {
+        defaultPath = path.join(defaultPath, "اختر-ملفاً");
+      }
+    } catch (_) {}
+  }
   const result = await dialog.showOpenDialog(mainWindow, {
     title:      opts.title || (isDir ? "اختر مجلداً" : "اختر ملفاً"),
     defaultPath,
-    properties: opts.properties || (opts.multiple ? ["openFile", "multiSelections"] : ["openFile"]),
+    properties: opts.properties || (multiple ? ["openFile", "multiSelections"] : ["openFile"]),
     filters:    isDir ? undefined : (opts.filters || [{ name: "All Files", extensions: ["*"] }]),
   });
   return result.canceled ? null : result.filePaths;
