@@ -1159,6 +1159,17 @@ body.offline .offline-badge{display:block}
             <label><input type="radio" name="dl-direct-type" value="image"> 🖼️ صورة</label>
           </div>
 
+          <!-- v0.12.4 — 3 خِيارات صَريحة لمَسار الحفظ -->
+          <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;padding:6px 8px;background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);font-size:11px">
+            <label style="cursor:pointer"><input type="radio" name="bgdl-save-mode" value="temporary"> 📁 مؤقت (/tmp) — يُحذف عند إعادة التشغيل</label>
+            <label style="cursor:pointer"><input type="radio" name="bgdl-save-mode" value="workdir" checked> 💾 مجلّد العمل (افتراضيّ) — تَوجيه ذكيّ حسب النَوع</label>
+            <label style="cursor:pointer"><input type="radio" name="bgdl-save-mode" value="manual"> 🗂️ مَسار يَدويّ مُخصَّص</label>
+            <div id="bgdl-path-row" style="display:none;gap:5px;margin-top:4px">
+              <input type="text" class="fc" id="bgdl-path" placeholder="مسار الحفظ المُخصَّص" style="flex:1">
+              <button class="btn btn-g bsm" id="bgdl-browse" style="padding:3px 10px">📂</button>
+            </div>
+          </div>
+
           <!-- تقطيع زمني (yt-dlp فقط) -->
           <div id="dl-trim-section">
             <div class="tgg" style="margin-top:5px">
@@ -1929,7 +1940,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.3</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.4</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

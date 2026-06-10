@@ -7040,6 +7040,30 @@ function initDlToolSwitch() {
     r.addEventListener("change", updateDlToolUI);
   });
 
+  // v0.12.4 — أَظهِر حقل المَسار اليَدويّ فقط عند "manual"
+  document.querySelectorAll('input[name="bgdl-save-mode"]').forEach(r => {
+    r.addEventListener("change", () => {
+      const row = document.getElementById("bgdl-path-row");
+      const m = radioVal("bgdl-save-mode");
+      if (row) row.style.display = m === "manual" ? "flex" : "none";
+    });
+  });
+  setTimeout(() => {
+    const row = document.getElementById("bgdl-path-row");
+    const m = radioVal("bgdl-save-mode");
+    if (row) row.style.display = m === "manual" ? "flex" : "none";
+  }, 0);
+  document.getElementById("bgdl-browse")?.addEventListener("click", async () => {
+    if (!IS_DESKTOP) return;
+    try {
+      const res = await window.SIRM.dialogOpen({
+        title: "اختر مَسار حفظ مُخصَّص",
+        properties: ["openDirectory", "createDirectory"],
+      });
+      if (res && res[0]) document.getElementById("bgdl-path").value = res[0];
+    } catch (e) { console.warn("bgdl browse:", e); }
+  });
+
   // ── ربط أزرار الأسهم (data-field / data-delta) ──────
   document.querySelectorAll(".trim-arrow[data-field]").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -7475,14 +7499,23 @@ async function runYtdlpDownload() {
   });
 
   try {
-    // v0.12.2 — تَوجيه ذكيّ حسب النوع لمجلّد العمل الفرعيّ المناسب
+    // v0.12.4 — 3 خِيارات صَريحة من قسم الاستيراد
     const subfolderMap = { video: "bgVideos", audio: "bgAudio", image: "logos" };
-    const workdirSubfolderKey = (S.dlSaveMode === "permanent" && !S.dlSavePath)
-      ? subfolderMap[type]
-      : undefined;
+    const bgMode = radioVal("bgdl-save-mode") || "workdir";
+    const bgPath = $("bgdl-path")?.value?.trim() || "";
+    let dlSaveMode = "temporary";
+    let dlSavePath = "";
+    let workdirSubfolderKey;
+    if (bgMode === "workdir") {
+      dlSaveMode = "permanent";
+      workdirSubfolderKey = subfolderMap[type];
+    } else if (bgMode === "manual") {
+      dlSaveMode = "permanent";
+      dlSavePath = bgPath;
+    }
     const result = await window.SIRM.ytdlpDownload({
       url, type, startTime, endTime,
-      dlSaveMode: S.dlSaveMode, dlSavePath: S.dlSavePath,
+      dlSaveMode, dlSavePath,
       workdirSubfolderKey,
     });
     window.SIRM.offYtdlpProgress();
