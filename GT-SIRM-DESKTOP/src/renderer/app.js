@@ -7760,7 +7760,14 @@ async function startExportDesktop(codecKey) {
 
   // ── حوار حفظ الملف ─────────────────────────────────
   $("rec-sub").textContent = "📁 اختر مكان الحفظ…";
-  const lastDir = localStorage.getItem("gt_sirm_lastExportDir") || "";
+  // v0.12.5 — أولويّة مَسار الافتراضيّ:
+  //   1) آخر مَسار حفظ (localStorage)
+  //   2) مجلّد العمل/exports/ (إن وُجد)
+  //   3) فارغ (يَستخدم default OS)
+  let lastDir = localStorage.getItem("gt_sirm_lastExportDir") || "";
+  if (!lastDir && S.workDirSubfolders?.exports) {
+    lastDir = S.workDirSubfolders.exports;
+  }
   const filename = `GT-SIRM_${Date.now()}.${fmt.ext}`;
   const outputPath = await window.SIRM.dialogSave({
     title: `حفظ بصيغة ${fmt.label}`,

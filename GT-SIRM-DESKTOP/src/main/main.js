@@ -1134,18 +1134,42 @@ ipcMain.handle("sys-info", () => ({
 //  v0.5.7 — حفظ/فتح المشاريع (.gtsirm)
 // ═══════════════════════════════════════════════════════
 
+// v0.12.5 — مساعد: مَسار مجلّد فَرعيّ من مجلّد العمل (إن أمكن)
+function workdirSubPath(subKey) {
+  try {
+    const cfg = loadWorkDirConfig();
+    const root = (cfg && cfg.path) ? cfg.path : getDefaultWorkDir();
+    const sub = WORK_DIR_SUBFOLDERS.find(f => f.key === subKey);
+    if (sub) return path.join(root, sub.name);
+  } catch (_) {}
+  return null;
+}
+
 ipcMain.handle("project-save-dialog", async (_e, defaultName) => {
+  // v0.12.5 — يَفتح في mvolada projects/ إذا لم يَكن لاسم مَسار صَريح
+  let defaultPath = defaultName;
+  if (!defaultPath) {
+    const projDir = workdirSubPath("projects");
+    const fileName = `gt-sirm-project-${Date.now()}.gtsirm`;
+    defaultPath = projDir ? path.join(projDir, fileName) : fileName;
+  } else if (!path.isAbsolute(defaultPath)) {
+    const projDir = workdirSubPath("projects");
+    if (projDir) defaultPath = path.join(projDir, defaultPath);
+  }
   const result = await dialog.showSaveDialog(mainWindow, {
     title: "حفظ المشروع",
-    defaultPath: defaultName || `gt-sirm-project-${Date.now()}.gtsirm`,
+    defaultPath,
     filters: [{ name: "GT-SIRM Project", extensions: ["gtsirm"] }],
   });
   return result.canceled ? null : result.filePath;
 });
 
 ipcMain.handle("project-open-dialog", async () => {
+  // v0.12.5 — يَفتح في projects/ افتراضياً
+  const projDir = workdirSubPath("projects");
   const result = await dialog.showOpenDialog(mainWindow, {
     title: "فتح مشروع",
+    defaultPath: projDir || undefined,
     properties: ["openFile"],
     filters: [
       { name: "GT-SIRM Project", extensions: ["gtsirm"] },
