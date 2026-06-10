@@ -106,6 +106,12 @@ body{background:var(--bg0);color:var(--t1);font-family:var(--fu);direction:rtl;d
 
 /* SECTIONS */
 .sec{margin-bottom:13px}
+/* v0.12.1 — جيوب الإعدادات (collapsible) */
+details.sec > summary.sec-t{cursor:pointer;list-style:none;user-select:none}
+details.sec > summary.sec-t::-webkit-details-marker{display:none}
+details.sec > summary.sec-t::after{content:"▸";opacity:.5;margin-inline-start:auto;font-size:11px;transition:transform .2s}
+details.sec[open] > summary.sec-t::after{content:"▾"}
+details.sec > summary.sec-t:hover{color:var(--p)}
 .sec-t{font-size:9px;font-weight:800;color:var(--a);text-transform:uppercase;letter-spacing:1.4px;margin-bottom:7px;padding-bottom:4px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:5px}
 .fg{margin-bottom:7px}
 .fl{display:block;font-size:10px;color:var(--t2);margin-bottom:2px}
@@ -1672,50 +1678,72 @@ body.offline .offline-badge{display:block}
       <!-- SETTINGS -->
       <div class="tp" id="tab-settings">
 
-        <!-- v0.12.0 — مجلّد العمل الافتراضيّ -->
-        <div class="sec desktop-only">
-          <div class="sec-t">📁 مجلّد العمل <span class="badge-new">v0.12</span></div>
-          <div class="note">مجلّد رَئيسيّ يَحوي كلّ مَصادر مَشاريعك (فيديوهات، صوت، شعارات، تَصدير) في مَكان واحد. عند رَفع مَلفّ خارجيّ يَسأل البرنامج إن كنت تُريد نَسخه إلى هذا المجلّد.</div>
-          <div class="fg" style="margin-top:6px"><label class="fl">المسار الحاليّ</label>
-            <input type="text" class="fc" id="workdir-path-display" readonly style="font-family:monospace;direction:ltr;font-size:11px">
-          </div>
-          <div id="workdir-status" style="font-size:10px;color:var(--al);margin-top:4px"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px">
-            <button class="btn btn-g bsm" id="workdir-open-btn">📂 فَتح المجلّد</button>
-            <button class="btn btn-p bsm" id="workdir-move-btn">🚚 نَقل المجلّد</button>
-          </div>
-          <div class="tgg" style="margin-top:8px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r);padding:5px 7px">
-            <span class="tgl">📥 اقتراح نَسخ الملفّات الخارجيّة<br><small style="color:var(--t3)">عند رفع مَلفّ من مَسار آخر، يَسأل إن كنت تُريد نَسخه إلى مجلّد العمل</small></span>
-            <label class="tg"><input type="checkbox" id="workdir-import-prompt" checked><span class="tgs"></span></label>
-          </div>
-          <details style="margin-top:8px">
-            <summary style="cursor:pointer;color:var(--t2);font-size:11px">📋 المجلّدات الفرعيّة</summary>
-            <div id="workdir-subfolders-list" style="font-size:11px;padding:6px 0;color:var(--t2);direction:rtl"></div>
-          </details>
-        </div>
+        <!-- v0.12.1 — كلّ قسم في "جيب" (details) قابل للطيّ -->
 
-        <div class="sec">
-          <div class="sec-t">💾 الحفظ التلقائي <span class="badge-new">v0.5.7</span></div>
-          <div class="note">يحفظ المشروع تلقائياً إلى آخر ملفّ .gtsirm حدّدته. يجب حفظ المشروع يدوياً أوّل مرة لتحديد المسار.</div>
-          <div class="tgg">
-            <span class="tgl">تفعيل الحفظ التلقائي</span>
-            <label class="tg"><input type="checkbox" id="autosave-on"><span class="tgs"></span></label>
+        <!-- 1) نسبة العرض — للأعلى لأنّها أوّل قرار في صناعة المقطع -->
+        <details class="sec" open>
+          <summary class="sec-t">📐 نسبة العرض</summary>
+          <div class="rcg" id="ratio-grp">
+            <input type="radio" name="ratio" id="r-916" value="9:16" checked><label for="r-916">📱 9:16 ريلز</label>
+            <input type="radio" name="ratio" id="r-11" value="1:1"><label for="r-11">🟦 1:1 مربع</label>
+            <input type="radio" name="ratio" id="r-169" value="16:9"><label for="r-169">🖥️ 16:9 يوتيوب</label>
+            <input type="radio" name="ratio" id="r-45" value="4:5"><label for="r-45">📸 4:5 انستجرام</label>
           </div>
-          <div id="autosave-ctrl" style="display:none;padding-top:5px">
-            <div class="fg"><label class="fl">المدّة بين كلّ حفظ</label>
-              <select class="fc" id="autosave-interval">
-                <option value="1">كلّ دقيقة</option>
-                <option value="5" selected>كلّ 5 دقائق</option>
-                <option value="10">كلّ 10 دقائق</option>
-                <option value="15">كلّ 15 دقيقة</option>
-                <option value="30">كلّ 30 دقيقة</option>
-              </select>
-            </div>
-            <div id="autosave-status" style="font-size:10px;color:var(--t3);margin-top:4px;padding:4px 8px;background:var(--bg1);border-radius:var(--r)">⏸️ غير مُفعَّل</div>
+        </details>
+
+        <!-- 2) قالب جاهز للمنصة -->
+        <details class="sec">
+          <summary class="sec-t">🎯 قالب جاهز للمنصة</summary>
+          <div class="fg">
+            <select class="fc" id="preset-sel">
+              <option value="">— اختر قالباً —</option>
+              <optgroup label="📱 ريلز / شورتس / تيك توك (9:16)">
+                <option value="reel-fhd">Reels/Shorts/TikTok — 1080×1920 Full HD</option>
+                <option value="reel-hd">Reels — 720×1280 سريع</option>
+              </optgroup>
+              <optgroup label="💻 يوتيوب أفقي (16:9)">
+                <option value="yt-fhd">YouTube — 1920×1080 Full HD</option>
+                <option value="yt-hd">YouTube — 1280×720 HD</option>
+              </optgroup>
+              <optgroup label="🟦 انستجرام مربع (1:1)">
+                <option value="ig-sq">Instagram Square — 1080×1080</option>
+              </optgroup>
+              <optgroup label="📸 انستجرام عمودي (4:5)">
+                <option value="ig-port">Instagram Portrait — 1080×1350</option>
+              </optgroup>
+              <optgroup label="🎬 سينمائي">
+                <option value="cinema">Cinema 21:9 — 2560×1080</option>
+              </optgroup>
+            </select>
           </div>
-        </div>
-        <div class="sec">
-          <div class="sec-t">📦 وحدات المحتوى</div>
+          <div class="note">القالب يضبط الأبعاد + FPS + جودة التصدير دفعةً واحدة. يُمكن تعديل القيم يدوياً بعدها.</div>
+        </details>
+
+        <!-- 3) جودة التصدير -->
+        <details class="sec">
+          <summary class="sec-t">🎬 جودة التصدير</summary>
+          <div class="fg"><label class="fl">دقة الفيديو</label>
+            <select class="fc" id="export-res">
+              <option value="720">720p (HD)</option>
+              <option value="1080" selected>1080p (Full HD)</option>
+              <option value="1920">1920×1080 (مخصص)</option>
+            </select>
+          </div>
+          <div class="fg"><label class="fl">معدل الإطارات (FPS)</label>
+            <select class="fc" id="export-fps">
+              <option value="24">24 fps (سينما)</option>
+              <option value="30" selected>30 fps (قياسي)</option>
+              <option value="60">60 fps (سلس)</option>
+            </select>
+          </div>
+          <div class="fg"><label class="fl">جودة الصورة (Mbps)</label>
+            <div class="sg"><input type="range" min="2" max="20" value="8" id="export-vbr"><span class="sv" id="export-vbr-v">8 Mbps</span></div>
+          </div>
+        </details>
+
+        <!-- 4) وحدات المحتوى -->
+        <details class="sec">
+          <summary class="sec-t">📦 وحدات المحتوى</summary>
           <div class="note">فعّل/ألغِ كلّ وحدة محتوى حسب حاجتك. التغييرات تُحفظ تلقائياً وتُطبَّق فوراً.</div>
           <div class="tgg">
             <span class="tgl">📖 وحدة القرآن الكريم<br><small style="color:var(--t3)">السور · القرّاء · الترجمات · صوت التلاوة</small></span>
@@ -1742,76 +1770,35 @@ body.offline .offline-badge{display:block}
             <label class="tg"><input type="checkbox" id="mod-hikam"><span class="tgs"></span></label>
           </div>
           <div class="note" style="margin-top:8px">✍️ <strong>محرّر النصّ الحرّ</strong> متاح دائماً — يظهر تلقائياً عند إلغاء وحدة القرآن.</div>
-        </div>
-        <div class="sec">
-          <div class="sec-t">🎯 قالب جاهز للمنصة</div>
-          <div class="fg">
-            <select class="fc" id="preset-sel">
-              <option value="">— اختر قالباً —</option>
-              <optgroup label="📱 ريلز / شورتس / تيك توك (9:16)">
-                <option value="reel-fhd">Reels/Shorts/TikTok — 1080×1920 Full HD</option>
-                <option value="reel-hd">Reels — 720×1280 سريع</option>
-              </optgroup>
-              <optgroup label="💻 يوتيوب أفقي (16:9)">
-                <option value="yt-fhd">YouTube — 1920×1080 Full HD</option>
-                <option value="yt-hd">YouTube — 1280×720 HD</option>
-              </optgroup>
-              <optgroup label="🟦 انستجرام مربع (1:1)">
-                <option value="ig-sq">Instagram Square — 1080×1080</option>
-              </optgroup>
-              <optgroup label="📸 انستجرام عمودي (4:5)">
-                <option value="ig-port">Instagram Portrait — 1080×1350</option>
-              </optgroup>
-              <optgroup label="🎬 سينمائي">
-                <option value="cinema">Cinema 21:9 — 2560×1080</option>
-              </optgroup>
-            </select>
+        </details>
+
+        <!-- 5) مجلّد العمل (v0.12) — تحت وحدات المحتوى -->
+        <details class="sec desktop-only blk">
+          <summary class="sec-t">📁 مجلّد العمل <span class="badge-new">v0.12</span></summary>
+          <div class="note">مجلّد رَئيسيّ يَحوي كلّ مَصادر مَشاريعك (فيديوهات، صوت، شعارات، تَصدير) في مَكان واحد. عند رَفع مَلفّ خارجيّ يَسأل البرنامج إن كنت تُريد نَسخه إلى هذا المجلّد.</div>
+          <div class="fg" style="margin-top:6px"><label class="fl">المسار الحاليّ</label>
+            <input type="text" class="fc" id="workdir-path-display" readonly style="font-family:monospace;font-size:11px">
           </div>
-          <div class="note">القالب يضبط الأبعاد + FPS + جودة التصدير دفعةً واحدة. يُمكن تعديل القيم يدوياً بعدها.</div>
-        </div>
-        <div class="sec">
-          <div class="sec-t">🎬 جودة التصدير</div>
-          <div class="fg"><label class="fl">دقة الفيديو</label>
-            <select class="fc" id="export-res">
-              <option value="720">720p (HD)</option>
-              <option value="1080" selected>1080p (Full HD)</option>
-              <option value="1920">1920×1080 (مخصص)</option>
-            </select>
+          <div id="workdir-status" style="font-size:10px;color:var(--al);margin-top:4px"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px">
+            <button class="btn btn-g bsm" id="workdir-open-btn">📂 فَتح المجلّد</button>
+            <button class="btn btn-p bsm" id="workdir-move-btn">🚚 نَقل المجلّد</button>
           </div>
-          <div class="fg"><label class="fl">معدل الإطارات (FPS)</label>
-            <select class="fc" id="export-fps">
-              <option value="24">24 fps (سينما)</option>
-              <option value="30" selected>30 fps (قياسي)</option>
-              <option value="60">60 fps (سلس)</option>
-            </select>
+          <div class="tgg" style="margin-top:8px">
+            <span class="tgl">📥 اقتراح نَسخ الملفّات الخارجيّة<br><small style="color:var(--t3)">عند رفع مَلفّ من مَسار آخر، يَسأل إن كنت تُريد نَسخه إلى مجلّد العمل</small></span>
+            <label class="tg"><input type="checkbox" id="workdir-import-prompt" checked><span class="tgs"></span></label>
           </div>
-          <div class="fg"><label class="fl">جودة الصورة (Mbps)</label>
-            <div class="sg"><input type="range" min="2" max="20" value="8" id="export-vbr"><span class="sv" id="export-vbr-v">8 Mbps</span></div>
-          </div>
-        </div>
-        <div class="sec">
-          <div class="sec-t">📐 نسبة العرض</div>
-          <div class="rcg" id="ratio-grp">
-            <input type="radio" name="ratio" id="r-916" value="9:16" checked><label for="r-916">📱 9:16 ريلز</label>
-            <input type="radio" name="ratio" id="r-11" value="1:1"><label for="r-11">🟦 1:1 مربع</label>
-            <input type="radio" name="ratio" id="r-169" value="16:9"><label for="r-169">🖥️ 16:9 يوتيوب</label>
-            <input type="radio" name="ratio" id="r-45" value="4:5"><label for="r-45">📸 4:5 انستجرام</label>
-          </div>
-        </div>
-        <div class="sec">
-          <div class="sec-t">🔊 الصوت عند المعاينة</div>
-          <div class="tgg"><span class="tgl">تشغيل الصوت تلقائياً</span><label class="tg"><input type="checkbox" id="auto-play-audio" checked><span class="tgs"></span></label></div>
-          <div class="tgg"><span class="tgl">إظهار مؤشر الصوت</span><label class="tg"><input type="checkbox" id="show-audio-status" checked><span class="tgs"></span></label></div>
-          <div class="tgg">
-            <span class="tgl">🔇 كتم الصوت تلقائياً عند التصدير</span>
-            <label class="tg"><input type="checkbox" id="mute-on-export"><span class="tgs"></span></label>
-          </div>
-          <span class="note" style="display:block;margin-top:2px">يمكن أيضاً الكتم/الرفع من زر نافذة التصدير في أي وقت</span>
-        </div>
-        <!-- مجلد التحميل — Desktop فقط -->
-        <div class="sec desktop-only blk" style="display:none">
-          <div class="sec-t">📁 مجلد حفظ الوسائط <span class="badge-new">Desktop</span></div>
-          <div class="rg c2" style="margin-bottom:6px">
+          <details style="margin-top:8px">
+            <summary style="cursor:pointer;color:var(--t2);font-size:11px">📋 المجلّدات الفرعيّة</summary>
+            <div id="workdir-subfolders-list" style="font-size:11px;padding:6px 0;color:var(--t2)"></div>
+          </details>
+        </details>
+
+        <!-- 6) مجلد حفظ الوسائط (yt-dlp) — مَكمِّل لمجلّد العمل -->
+        <details class="sec desktop-only blk">
+          <summary class="sec-t">📁 مجلد حفظ الوسائط (yt-dlp) <span class="badge-new">Desktop</span></summary>
+          <div class="note">مَسار التَنزيلات الجديدة من yt-dlp. يُمكن تَركه على /tmp المؤقت أو تَوجيهه إلى مَسار دائم — يُنصَح بمجلّد العمل أعلاه.</div>
+          <div class="rg c2" style="margin-bottom:6px;margin-top:6px">
             <div class="rc"><input type="radio" name="dl-save-mode" id="dls-tmp" value="tmp" checked>
               <label for="dls-tmp"><span class="ri">🗑️</span><span>مؤقت (/tmp)</span></label></div>
             <div class="rc"><input type="radio" name="dl-save-mode" id="dls-perm" value="permanent">
@@ -1826,9 +1813,45 @@ body.offline .offline-badge{display:block}
             <span class="note" id="dl-path-status">لم يُختر مجلد — سيُستخدم /tmp</span>
           </div>
           <span class="note" id="dl-mode-note">⚠️ الملفات في /tmp قد تُحذف عند إعادة التشغيل</span>
-        </div>
-        <div class="sec">
-          <div class="sec-t">📱 عرض الأدوات (موبايل)</div>
+        </details>
+
+        <!-- 7) الحفظ التلقائي -->
+        <details class="sec">
+          <summary class="sec-t">💾 الحفظ التلقائي <span class="badge-new">v0.5.7</span></summary>
+          <div class="note">يحفظ المشروع تلقائياً إلى آخر ملفّ .gtsirm حدّدته. يجب حفظ المشروع يدوياً أوّل مرة لتحديد المسار.</div>
+          <div class="tgg">
+            <span class="tgl">تفعيل الحفظ التلقائي</span>
+            <label class="tg"><input type="checkbox" id="autosave-on"><span class="tgs"></span></label>
+          </div>
+          <div id="autosave-ctrl" style="display:none;padding-top:5px">
+            <div class="fg"><label class="fl">المدّة بين كلّ حفظ</label>
+              <select class="fc" id="autosave-interval">
+                <option value="1">كلّ دقيقة</option>
+                <option value="5" selected>كلّ 5 دقائق</option>
+                <option value="10">كلّ 10 دقائق</option>
+                <option value="15">كلّ 15 دقيقة</option>
+                <option value="30">كلّ 30 دقيقة</option>
+              </select>
+            </div>
+            <div id="autosave-status" style="font-size:10px;color:var(--t3);margin-top:4px;padding:4px 8px;background:var(--bg1);border-radius:var(--r)">⏸️ غير مُفعَّل</div>
+          </div>
+        </details>
+
+        <!-- 8) الصوت عند المعاينة -->
+        <details class="sec">
+          <summary class="sec-t">🔊 الصوت عند المعاينة</summary>
+          <div class="tgg"><span class="tgl">تشغيل الصوت تلقائياً</span><label class="tg"><input type="checkbox" id="auto-play-audio" checked><span class="tgs"></span></label></div>
+          <div class="tgg"><span class="tgl">إظهار مؤشر الصوت</span><label class="tg"><input type="checkbox" id="show-audio-status" checked><span class="tgs"></span></label></div>
+          <div class="tgg">
+            <span class="tgl">🔇 كتم الصوت تلقائياً عند التصدير</span>
+            <label class="tg"><input type="checkbox" id="mute-on-export"><span class="tgs"></span></label>
+          </div>
+          <span class="note" style="display:block;margin-top:2px">يمكن أيضاً الكتم/الرفع من زر نافذة التصدير في أي وقت</span>
+        </details>
+
+        <!-- 9) عرض الأدوات -->
+        <details class="sec">
+          <summary class="sec-t">📱 عرض الأدوات (موبايل)</summary>
           <div class="fg"><label class="fl">الحجم الافتراضي للأدوات</label>
             <select class="fc" id="panel-default-size">
               <option value="50">50٪ من الشاشة</option>
@@ -1837,10 +1860,11 @@ body.offline .offline-badge{display:block}
             </select>
           </div>
           <div class="tgg"><span class="tgl">فتح الأدوات تلقائياً عند التشغيل</span><label class="tg"><input type="checkbox" id="auto-open-panel"><span class="tgs"></span></label></div>
-        </div>
-        <!-- ffmpeg — Desktop فقط -->
-        <div class="sec desktop-only blk" style="display:none">
-          <div class="sec-t">🎬 إعدادات ffmpeg <span class="badge-new">Desktop</span></div>
+        </details>
+
+        <!-- 10) إعدادات ffmpeg — Desktop فقط -->
+        <details class="sec desktop-only blk">
+          <summary class="sec-t">🎬 إعدادات ffmpeg <span class="badge-new">Desktop</span></summary>
           <div class="fg"><label class="fl">صيغة التصدير</label>
             <select class="fc" id="export-codec">
               <option value="mp4-h264">MP4 — H.264 (متوافق عالمياً)</option>
@@ -1869,18 +1893,20 @@ body.offline .offline-badge{display:block}
             </select>
           </div>
           <div id="ffmpeg-log"></div>
-        </div>
+        </details>
 
-        <!-- معلومات النظام — Desktop فقط -->
-        <div class="sec desktop-only blk" style="display:none">
-          <div class="sec-t">🖥️ معلومات النظام</div>
+        <!-- 11) معلومات النظام — Desktop فقط -->
+        <details class="sec desktop-only blk">
+          <summary class="sec-t">🖥️ معلومات النظام</summary>
           <div id="sys-info-row"></div>
-        </div>
+        </details>
 
-        <div class="sec">
-          <div class="sec-t">🗑️ إعادة الضبط</div>
+        <!-- 12) إعادة الضبط -->
+        <details class="sec">
+          <summary class="sec-t">🗑️ إعادة الضبط</summary>
           <button class="btn btn-d bfw" id="reset-settings-btn">⚠️ إعادة جميع الإعدادات للافتراضي</button>
-        </div>
+        </details>
+
       </div>
 
       <!-- ABOUT -->
@@ -1892,7 +1918,7 @@ body.offline .offline-badge{display:block}
         </div>
         <div class="sec">
           <div class="sec-t">📋 المشروع</div>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.0</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.1</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
