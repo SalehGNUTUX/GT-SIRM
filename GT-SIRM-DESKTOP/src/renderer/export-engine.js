@@ -191,6 +191,41 @@ function _exportBuildFXChain(ctx, sourceNode, cfg) {
   return mixer;
 }
 
+// v0.11.2 — تَطبيق سلسلة FX مَرّة واحدة على كامل bgBuffer (مع التَكرار إن لزم)
+// يَعود buffer أطول قليلاً من totalDuration (للسماح بـreverb tail).
+// لماذا؟ في v0.11.1 كانت FX تُطبَّق في كلّ تَكرار، فتُولَّد IRs عشوائيّة مختلفة
+// تَتراكَب وتُسبّب تَشويشاً. هنا IR واحد فقط على كامل المُحتوى.
+async function preprocessBgBufferWithFX(bgBuffer, cfg, bgLoop, totalDuration, sampleRate) {
+  const tailSec = 4;
+  const channels = bgBuffer.numberOfChannels || 2;
+  const totalSamples = Math.max(1, Math.floor((totalDuration + tailSec) * sampleRate));
+  const preCtx = new OfflineAudioContext(channels, totalSamples, sampleRate);
+
+  // mixer يَجمع كلّ التَكرارات قبل سلسلة FX
+  const mixer = preCtx.createGain();
+  mixer.gain.value = 1;
+
+  const dur = bgBuffer.duration;
+  let t = 0;
+  let safety = 0;
+  while (t < totalDuration && safety++ < 4096) {
+    const src = preCtx.createBufferSource();
+    src.buffer = bgBuffer;
+    src.connect(mixer);
+    const remaining = totalDuration - t;
+    if (remaining < dur) src.start(t, 0, remaining);
+    else                 src.start(t);
+    if (!bgLoop) break;
+    t += dur;
+  }
+
+  // سلسلة FX على mixer مَرّة واحدة (IR واحد لكامل المُحتوى)
+  const fxOut = _exportBuildFXChain(preCtx, mixer, cfg);
+  fxOut.connect(preCtx.destination);
+
+  return await preCtx.startRendering();
+}
+
 // ── خلط الصوت إلى AudioBuffer واحد ───────────────────
 async function mixAudioToBuffer({
   audioBuffers, ayaStarts,
@@ -216,28 +251,42 @@ async function mixAudioToBuffer({
     src.start(ayaStarts[i] ?? 0);
   });
 
-  // 2) صوت الخلفية (مع التكرار إن طُلب) + المؤثّرات الصوتيّة (v0.11.1)
+  // 2) صوت الخلفية (مع التكرار إن طُلب) + المؤثّرات الصوتيّة
+  // v0.11.2 — إن كانت المؤثّرات مفعَّلة، نَطبّقها **مرّة واحدة** على كامل bgBuffer
+  // المُكرَّر، لا في كلّ تَكرار. كلّ تطبيق يُولّد IR عشوائيّاً مختلفاً —
+  // تَطبيق عدّة مرّات يُكدّس IRs مختلفة فينتج تَشويش.
   if (bgBuffer) {
-    const dur = bgBuffer.duration;
-    let t = 0;
-    let safety = 0;
-    while (t < totalDuration && safety++ < 4096) {
+    let effectiveBuffer = bgBuffer;
+    if (bgFXConfig && bgFXConfig.enabled) {
+      effectiveBuffer = await preprocessBgBufferWithFX(
+        bgBuffer, bgFXConfig, bgLoop, totalDuration, sampleRate
+      );
+      // effectiveBuffer جاهز مع المؤثّرات مُدمَجة + tail — نَضعه كـsource واحد
       const src = oac.createBufferSource();
-      src.buffer = bgBuffer;
+      src.buffer = effectiveBuffer;
       const gain = oac.createGain();
       gain.gain.value = bgGain ?? 0.3;
-      // v0.11.1 — إن كانت المؤثّرات مفعَّلة، أدخِل سلسلة FX بين المصدر والـgain
-      let endNode = src;
-      if (bgFXConfig && bgFXConfig.enabled) {
-        endNode = _exportBuildFXChain(oac, src, bgFXConfig);
-      }
-      endNode.connect(gain);
+      src.connect(gain);
       gain.connect(oac.destination);
-      const remaining = totalDuration - t;
-      if (remaining < dur) src.start(t, 0, remaining);
-      else                 src.start(t);
-      if (!bgLoop) break;
-      t += dur;
+      src.start(0);
+    } else {
+      // المسار العاديّ بدون مؤثّرات — حلقة التَكرار كالسابق
+      const dur = bgBuffer.duration;
+      let t = 0;
+      let safety = 0;
+      while (t < totalDuration && safety++ < 4096) {
+        const src = oac.createBufferSource();
+        src.buffer = bgBuffer;
+        const gain = oac.createGain();
+        gain.gain.value = bgGain ?? 0.3;
+        src.connect(gain);
+        gain.connect(oac.destination);
+        const remaining = totalDuration - t;
+        if (remaining < dur) src.start(t, 0, remaining);
+        else                 src.start(t);
+        if (!bgLoop) break;
+        t += dur;
+      }
     }
   }
 

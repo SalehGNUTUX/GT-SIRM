@@ -140,6 +140,31 @@ function _webExportBuildFXChain(ctx, sourceNode, cfg) {
   return mixer;
 }
 
+// v0.11.2 — FX مَرّة واحدة على كامل bgBuffer (مع التَكرار) لتَجنّب تَراكب IRs العشوائيّة
+async function _webPreprocessBgBufferWithFX(bgBuffer, cfg, bgLoop, totalDuration, sampleRate) {
+  const tailSec = 4;
+  const channels = bgBuffer.numberOfChannels || 2;
+  const totalSamples = Math.max(1, Math.floor((totalDuration + tailSec) * sampleRate));
+  const preCtx = new OfflineAudioContext(channels, totalSamples, sampleRate);
+  const mixer = preCtx.createGain();
+  mixer.gain.value = 1;
+  const dur = bgBuffer.duration;
+  let t = 0, safety = 0;
+  while (t < totalDuration && safety++ < 4096) {
+    const src = preCtx.createBufferSource();
+    src.buffer = bgBuffer;
+    src.connect(mixer);
+    const remaining = totalDuration - t;
+    if (remaining < dur) src.start(t, 0, remaining);
+    else                 src.start(t);
+    if (!bgLoop) break;
+    t += dur;
+  }
+  const fxOut = _webExportBuildFXChain(preCtx, mixer, cfg);
+  fxOut.connect(preCtx.destination);
+  return await preCtx.startRendering();
+}
+
 // ── خلط الصوت (مشترك مع المكتبية، لكن منسوخ هنا للويب) ──
 async function mixAudioToBufferWeb({
   audioBuffers, ayaStarts,
@@ -163,25 +188,33 @@ async function mixAudioToBufferWeb({
     src.start(ayaStarts[i] ?? 0);
   });
 
+  // v0.11.2 — FX مَرّة واحدة على كامل bgBuffer (لا في كلّ تَكرار)
   if (bgBuffer) {
-    const dur = bgBuffer.duration;
-    let t = 0, safety = 0;
-    while (t < totalDuration && safety++ < 4096) {
+    if (bgFXConfig && bgFXConfig.enabled) {
+      const effectiveBuffer = await _webPreprocessBgBufferWithFX(
+        bgBuffer, bgFXConfig, bgLoop, totalDuration, sampleRate
+      );
       const src = oac.createBufferSource();
-      src.buffer = bgBuffer;
+      src.buffer = effectiveBuffer;
       const gain = oac.createGain();
       gain.gain.value = bgGain ?? 0.3;
-      // v0.11.1 — أدخِل سلسلة المؤثّرات إن كانت مفعَّلة
-      let endNode = src;
-      if (bgFXConfig && bgFXConfig.enabled) {
-        endNode = _webExportBuildFXChain(oac, src, bgFXConfig);
+      src.connect(gain); gain.connect(oac.destination);
+      src.start(0);
+    } else {
+      const dur = bgBuffer.duration;
+      let t = 0, safety = 0;
+      while (t < totalDuration && safety++ < 4096) {
+        const src = oac.createBufferSource();
+        src.buffer = bgBuffer;
+        const gain = oac.createGain();
+        gain.gain.value = bgGain ?? 0.3;
+        src.connect(gain); gain.connect(oac.destination);
+        const remaining = totalDuration - t;
+        if (remaining < dur) src.start(t, 0, remaining);
+        else src.start(t);
+        if (!bgLoop) break;
+        t += dur;
       }
-      endNode.connect(gain); gain.connect(oac.destination);
-      const remaining = totalDuration - t;
-      if (remaining < dur) src.start(t, 0, remaining);
-      else src.start(t);
-      if (!bgLoop) break;
-      t += dur;
     }
   }
 
