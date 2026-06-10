@@ -7,6 +7,40 @@
 
 ---
 
+## [0.12.6] — 2026-06-10 — 4 إصلاحات
+
+### 🐛 4 إصلاحات في تَجربة المستخدم
+
+#### (1) القوالب المُخصَّصة لا تَستجيب لـ"تطبيق" و "حذف"
+**السبب**: CSP في `index.html` يُحظر `onclick=""` inline (`script-src 'self'` بدون `unsafe-inline`).
+**الإصلاح**: `data-tpl-apply` و `data-tpl-del` + delegated event listeners في `renderTemplates()`.
+
+#### (2) نسبة العرض في الإعدادات (radio 4 خِيارات) لا تُغَيِّر شيئاً
+**السبب**: `name="ratio"` في الإعدادات (السطر 1702 في HTML) لم يُربط بأيّ handler. الـradio الفعليّ في تَبويب المشهد اسمه `name="fmt"` ويُعالَج عبر `onFmtChange`.
+**الإصلاح**: في `initEventListeners`، ربط `name="ratio"` لـ:
+1. مُزامنة مع `name="fmt"` (تَحديث الـchecked المُكافِئ).
+2. استدعاء `onFmtChange()`.
+
+#### (3) القالب الجاهز يَعود إلى "اختر قالباً" بعد الاختيار
+**السبب**: `onPresetChange` كان فيه `setTimeout(() => { e.target.value = ""; }, 100)` لتَمكين إعادة اختيار نَفس القيمة.
+**الإصلاح**: حَذف إعادة الضَبط. القيمة تَبقى ظاهرة لأنّها مَعلومة مهمّة للمستخدم.
+
+#### (4) زرّ الاستيراد يَفتح من المنزل لا من مجلّد العمل المُختَصّ
+**السبب**: `<input type="file">` لا يَدعم `defaultPath` (قَيد API الويب).
+**الحلّ**: `installWorkdirInputInterceptor()` يَعترض النَقر على inputs المُحدَّدة في `FILE_INPUT_WORKDIR_MAP`:
+- `bg-vid-input` → `bg-videos/`
+- `bg-audio-input` → `bg-audio/`
+- `bg-img-input` → `bg-videos/` (مَعتاد للخَلفيّات)
+- `recvid-file` → `recitations/`
+- `free-audio-file` → `custom-audio/`
+- `logo-input` → `logos/`
+
+يَفتح Electron `dialog-open` مع `defaultPath` المُختَصّ + filters صحيحة. يَقرأ المَلفّ عبر IPC، يَبني File، يُسلّمه للـhandler الأصليّ (نَفس مَسار الـv0.8.8).
+
+📦 PWA cache → v51.
+
+---
+
 ## [0.12.5] — 2026-06-10
 
 ### 📁 مَسارات الحوار الافتراضيّة تَنفتح في مجلّد العمل

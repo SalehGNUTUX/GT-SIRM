@@ -141,6 +141,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initHikamModule();     // v0.10.0 — وحدة الحِكَم والمواعظ
   initAudioFXControls(); // v0.11.0 — محرّك المؤثّرات الصوتيّة
   initWorkDir();         // v0.12.0 — مجلّد العمل الافتراضيّ
+  setTimeout(installWorkdirInputInterceptor, 500);  // v0.12.6 — بعد تَحميل مجلّد العمل
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
 
   // ⚠️ الترتيب مهم: نستعيد الإعدادات بعد تسجيل المستمعين فقط
@@ -2398,6 +2399,18 @@ function initEventListeners() {
   const presetSel = $("preset-sel");
   if (presetSel) presetSel.addEventListener("change", onPresetChange);
 
+  // v0.12.6 — نسبة العرض في الإعدادات (name="ratio") تُحدِّث fmt + canvas
+  document.querySelectorAll('input[name="ratio"]').forEach(r => {
+    r.addEventListener("change", () => {
+      if (!r.checked) return;
+      // زامِن radio في تَبويب المشهد (name="fmt")
+      const fmtRadios = document.querySelectorAll('input[name="fmt"]');
+      fmtRadios.forEach(f => { f.checked = f.value === r.value; });
+      // طَبِّق التَغيير
+      if (typeof onFmtChange === "function") onFmtChange();
+    });
+  });
+
   // إظهار/إخفاء لوحة إعدادات اسم السورة
   const snameOn = $("sname-on");
   if (snameOn) snameOn.addEventListener("change", (e) => {
@@ -2886,8 +2899,8 @@ function onPresetChange(e) {
   const v = e.target.value;
   if (!v) return;
   applyPreset(v);
-  // أعد الاختيار إلى "اختر قالباً" حتى يتاح إعادة التطبيق بنفس القيمة
-  setTimeout(() => { e.target.value = ""; }, 100);
+  // v0.12.6 — يَبقى الاختيار ظاهراً (لا نُعيد للقيمة الفارغة)
+  // لإعادة تَطبيق نَفس القالب: غَيِّر لقالب آخر ثمّ ارجع، أو استَخدم زرّ "إعادة تَطبيق" مستقبلاً.
 }
 
 function fitCanvas() {
@@ -5012,6 +5025,72 @@ function initAudioFXControls() {
 }
 
 // ══════════════════════════════════════════════════════
+//  v0.12.6 — اعتراض النَقر على <input type="file"> لفَتح Electron dialog
+//  في مَسار مجلّد العمل المُختصّ حسب نوع المَلفّ.
+//  المَلفّ المُختار يُحوَّل لـFile object ويُسلَّم للـhandler الأصليّ.
+// ══════════════════════════════════════════════════════
+// خريطة input → subfolderKey + filters
+const FILE_INPUT_WORKDIR_MAP = {
+  "bg-vid-input":     { key: "bgVideos",    filters: [{ name: "فيديو", extensions: ["mp4","webm","mov","mkv","avi","m4v"] }], multiple: true },
+  "bg-audio-input":   { key: "bgAudio",     filters: [{ name: "صوت", extensions: ["mp3","aac","ogg","flac","wav","m4a","opus"] }] },
+  "bg-img-input":     { key: "bgVideos",    filters: [{ name: "صورة", extensions: ["jpg","jpeg","png","webp","gif","bmp","avif"] }] },
+  "recvid-file":      { key: "recitations", filters: [{ name: "فيديو", extensions: ["mp4","webm","mov","mkv"] }] },
+  "free-audio-file":  { key: "customAudio", filters: [{ name: "صوت/فيديو", extensions: ["mp3","aac","ogg","flac","wav","m4a","opus","mp4","webm","mov"] }] },
+  "logo-input":       { key: "logos",       filters: [{ name: "صورة", extensions: ["png","jpg","jpeg","webp","svg"] }] },
+};
+
+function installWorkdirInputInterceptor() {
+  if (!IS_DESKTOP) return;
+  for (const id of Object.keys(FILE_INPUT_WORKDIR_MAP)) {
+    const input = document.getElementById(id);
+    if (!input) continue;
+    const config = FILE_INPUT_WORKDIR_MAP[id];
+    input.addEventListener("click", async (e) => {
+      // اعترِض النَقر فقط إذا كان مجلّد العمل مُهيَّأ
+      const defaultPath = S.workDirSubfolders?.[config.key];
+      if (!defaultPath) return; // اترك السلوك الافتراضيّ
+      e.preventDefault();
+      try {
+        const props = config.multiple ? ["openFile", "multiSelections"] : ["openFile"];
+        const res = await window.SIRM.dialogOpen({
+          title: "اختر ملفّاً",
+          defaultPath,
+          properties: props,
+          filters: config.filters,
+        });
+        if (!res || !res.length) return;
+        // اقرأ المَلفّات وأنشئ File objects ثمّ سَلِّم للـhandler
+        const files = [];
+        for (const fp of res) {
+          try {
+            const meta = await window.SIRM.readDownloadedFile(fp);
+            if (meta && meta.buffer) {
+              const file = new File([meta.buffer], meta.name || fp.split("/").pop(), {});
+              // أَضِف path للتَحكّم في التَنظيم لاحقاً
+              try { Object.defineProperty(file, "path", { value: fp, writable: false }); } catch (_) {}
+              files.push(file);
+            }
+          } catch (err) { console.warn("workdir-input read failed:", err); }
+        }
+        if (!files.length) return;
+        // أَطلِق change event مع الملفّات (DataTransfer trick)
+        try {
+          const dt = new DataTransfer();
+          for (const f of files) dt.items.add(f);
+          input.files = dt.files;
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        } catch (err) {
+          // fallback: استَدعِ handlers مباشرةً
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      } catch (err) {
+        console.warn("workdir input interceptor error:", err);
+      }
+    }, true /* capture */);
+  }
+}
+
+// ══════════════════════════════════════════════════════
 //  v0.12.0 — مجلّد العمل الافتراضيّ (سطح المكتب)
 // ══════════════════════════════════════════════════════
 async function initWorkDir() {
@@ -6712,6 +6791,7 @@ function applyState(st) {
   loadVerses(); onFmtChange();
 }
 
+// v0.12.6 — CSP يَمنع onclick inline → تَحويل لـdata-attributes + delegated listener
 function renderTemplates() {
   const grid = $("tpl-grid"), emp = $("tpl-empty");
   if (!S.templates.length) { grid.innerHTML = ""; emp.style.display = "block"; return; }
@@ -6721,10 +6801,26 @@ function renderTemplates() {
   <div class="tpl-name">📁 ${t.name}</div>
   <div class="tpl-date">${t.date}</div>
   <div class="tpl-actions">
-  <button class="btn btn-p bsm" onclick="applyState(S.templates[${i}].state);goTab('rec')">✅ تطبيق</button>
-  <button class="btn btn-d bsm" onclick="delTemplate(${i})">🗑️</button>
+  <button class="btn btn-p bsm" data-tpl-apply="${i}">✅ تطبيق</button>
+  <button class="btn btn-d bsm" data-tpl-del="${i}">🗑️</button>
   </div>
   </div>`).join("");
+  // ربط delegated مَرّة واحدة (يُعاد التهيئة عند كلّ rerender)
+  grid.querySelectorAll("[data-tpl-apply]").forEach(b => {
+    b.addEventListener("click", () => {
+      const idx = parseInt(b.dataset.tplApply);
+      const t = S.templates[idx];
+      if (!t) return;
+      applyState(t.state);
+      if (typeof goTab === "function") goTab("rec");
+    });
+  });
+  grid.querySelectorAll("[data-tpl-del]").forEach(b => {
+    b.addEventListener("click", () => {
+      const idx = parseInt(b.dataset.tplDel);
+      if (Number.isFinite(idx)) delTemplate(idx);
+    });
+  });
 }
 
 function delTemplate(i) { S.templates.splice(i, 1); persistTemplates(); renderTemplates(); toast("🗑️ تم الحذف", "info"); }
