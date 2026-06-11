@@ -1,14 +1,17 @@
 <div align="center">
 
+<img src="./GT-SIRM-ICON.png" alt="GT-SIRM" width="180" />
+
 # GT-SIRM
 ### GnuTux Short Islamic Reels Maker
 
 **صانع ريلز إسلاميّة بجودة احترافيّة — قرآن، حديث، أذكار، أدعية، أسماء الله الحسنى، حِكَم**
 
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
-[![Platform: Linux + Web](https://img.shields.io/badge/Platform-Linux%20%2B%20Web-orange?logo=linux)](#)
-[![Status](https://img.shields.io/badge/Status-Pre--alpha-yellow)](#)
-[![Version](https://img.shields.io/badge/Version-0.1.0-brightgreen)](./CHANGELOG.md)
+[![Platform: Linux + Web + Android](https://img.shields.io/badge/Platform-Linux%20%7C%20Web%20%7C%20Android-orange?logo=linux)](#)
+[![Status](https://img.shields.io/badge/Status-Beta-blueviolet)](#)
+[![Version](https://img.shields.io/badge/Version-0.13.3-brightgreen)](./CHANGELOG.md)
+[![Releases](https://img.shields.io/github/v/release/SalehGNUTUX/GT-SIRM?include_prereleases&label=Latest%20Release)](https://github.com/SalehGNUTUX/GT-SIRM/releases)
 
 </div>
 
@@ -30,27 +33,66 @@
 
 يَرِثُ GT-SIRM كلَّ مزايا [GT-SQRM](https://github.com/SalehGNUTUX/GT-SQRM) (صانع الريلز القرآنيّة) — مع توگل لتفعيل/إلغاء وحدة القرآن — ويُضيف إليها وحدات للحديث والأذكار والأدعية وأسماء الله الحسنى والحِكَم، إلى جانب محرّر نصٍّ حرٍّ، وأداة Chromakey لإزالة الخلفيّات، ومرونةً كاملةً في استيراد الصوت والصورة والفيديو.
 
-### الميزات المخطَّطة (v1.0)
+### الميزات المُكتمَلة (v0.13.3) ✅
 
-- 📖 **وحدة القرآن** — موروثة من GT-SQRM v3.0 (قابلة للإلغاء)
-- 📜 **وحدة الحديث الشريف** — الكتب الستة مع شارة التصحيح
-- 🕊️ **وحدة الأذكار** — 132 فئة و 267 ذكراً من حصن المسلم (مأخوذة من مشروع [GT-HISNMUSLIM](https://github.com/SalehGNUTUX/GT_HISNMUSLIM) بإذن المؤلِّف نفسه)
-- ✨ **أسماء الله الحسنى** — 99+1 اسماً مع المعاني والشواهد القرآنيّة (من حديث الترمذي وشروح ابن القيّم وابن عثيمين)
-- 🤲 **الأدعية المأثورة** — 32 دعاءً من القرآن والسنّة الصحيحة (الصحيحان والسنن) مع المصدر والمناسبة
-- 🌟 **الحِكَم والمواعظ** — 32 قولاً للسلف بإسناد لقائله ومرجعه (الصحابة، التابعون، الأئمّة الأربعة، ابن القيّم وابن تيمية)
-- ✍️ **محرّر النصّ الحرّ** — لاستيراد أيّ نصٍّ خارجيّ
-- 🎬 **Chromakey** — إزالة الخلفيّات بـ WebGL shader و ffmpeg
-- 🎤 **3 مصادر صوت** — ميكروفون + TTS عربيّ + صامت
-- 🎨 **كلّ مزايا GT-SQRM v3** — 10 أنماط ظهور · 9 أنماط ألوان · 9 موجات صوت · 16 خطّاً · خلفيّات متعددة
+#### 📚 وَحدات المحتوى الإسلاميّ (6 وَحدات، 6557+ عُنصراً)
+- 📖 **القرآن الكَريم** — 114 سورة، 6236 آية + قُرّاء + 60 ترجمة (api.alquran.cloud + everyayah)
+- 📜 **الحديث الشَريف** — 90 حَديثاً (الأربعون النووية + رياض الصالحين) مع شارة التصحيح
+- 🕊️ **الأذكار** — 267 ذكراً في 132 فئة (من [GT-HISNMUSLIM](https://github.com/SalehGNUTUX/GT_HISNMUSLIM) بإذن المؤلِّف)
+- ✨ **أسماء الله الحسنى** — 100 اسماً مع المعاني والشواهد القرآنيّة (حديث الترمذي + ابن القيّم + ابن عثيمين)
+- 🤲 **الأدعية المأثورة** — 32 دعاءً من القرآن والسنّة الصحيحة (5 فئات) مع المصدر
+- 🌟 **الحِكَم والمواعظ** — 32 قولاً للسلف بإسناد لقائله (4 فئات: صحابة + تابعون + أئمّة + ابن القيّم/ابن تيمية)
+
+#### 🎙️ مَصادر الصَوت
+- **التَلاوة من القرآن** — قُرّاء حَقيقيّون (everyayah.com)
+- **صَوت مُخصّص** — استيراد ملفّ + تَنزيل عَبر yt-dlp (سَطح المكتب)
+- **فيديو تَلاوة جاهز** (recvid) — استبدال كامل بفيديو من خارج البَرنامج
+- **🎙️ تَسجيل الميكروفون** (v0.13.0) — مع canvas ذَبذبات حيّة + استماع مُباشَر + مؤثّرات صَوتيّة
+- **🤖 توليد القِراءة من النصّ (TTS)** (v0.13.1، تَجريبيّ) — Google Translate TTS + eSpeak-NG + API مُخصّص
+
+#### 🎨 المُحرّك البَصريّ والصَوتيّ
+- **محرّك تَصدير حَتميّ** — ffmpeg (سَطح المكتب، إطار بإطار) + WebCodecs (الويب)
+- **10 أنماط ظهور الآيات** — تَلاشي، انزلاق، تَكبير، سُقوط، صُعود، ضَبابيّ، توهّج، كلمة-بكلمة، مُختلط…
+- **9 أنماط ألوان** — دافئ، بارد، ليليّ، سينما، رمضان، صَحراء، بنّيّ، أبيض-أسود…
+- **9 موجات صَوت** — Bars/Line/Area/Dots/Mirror/Radial/Blocks/Pulse/Wave3D
+- **مؤثّرات بَصرية** — Vignette، Grain، نُجوم، أَشعّة، بوكيه، Pixelate، Mosaic، Ripple، Wave، Swirl، Kaleidoscope، Glitch، Old Film
+- **مؤثّرات صَوتية** (v0.11) — Reverb (5 presets) + Echo + 3-band EQ على bgAudio و recvid
+- **🎭 Chromakey** — إزالة الخَلفيّات بـYCbCr + spill suppression
+- **16 خَطّاً عَربيّاً** مَحلّيّاً — Amiri Quran، Scheherazade، Lateef، Harmattan، Reem Kufi، Aref Ruqaa، Cairo، Tajawal…
+
+#### ✍️ التَّحكُّم بالنَصّ
+- **محرّر النَصّ الحرّ** — استيراد أيّ نَصّ خارجيّ
+- **توقيت تَفصيليّ لكلّ شَريحة** + 🔒 **تَجميد** فَرديّ (v0.13.0)
+- **تَجزئة ذَكيّة** للأذكار (آيات ﴿﴾، أقواس، ترقيم عَربيّ)
+- **تَوقيت آليّ** متزامِن مع مدّة الصَوت (مع إصلاح WebM duration bug)
+
+#### 📁 مجلّد العَمل (سَطح المكتب، v0.12)
+- مَسار افتراضيّ: `~/Documents/مجلد عمل ريلز إسلامية/`
+- 8 مَجلّدات فَرعيّة (projects/bg-videos/bg-audio/recitations/custom-audio/logos/exports/recordings)
+- توجيه ذَكيّ تلقائيّ لتَنزيلات yt-dlp
+- اعتراض ملفّات الرَفع → kdialog/zenity مع فَتح في المجلّد الصَحيح
+
+#### 💾 إدارة المَشاريع
+- صيغة `.gtsirm` (JSON مع base64 dataURL ≤50MB)
+- حِفظ تلقائيّ + استرجاع المَشاريع المَفقودة
+- مُعالج "🔄 استيراد إعدادات GT-SQRM" لنَقل القَوالب والقُرّاء والخُطوط
+- ارتباط بصيغة `.gtsirm` على سَطح المكتب + Android
+
+#### 🖼️ الواجهة (v0.12.12+)
+- جميع الأقسام قابلة للطيّ (57 على سَطح المكتب، 46 على الويب)
+- البَدء افتراضيّاً على تَبويب الإعدادات (v0.13.1)
+- نَجمة ذَهبيّة "⭐ رَئيسيّ" لقسم وَحدات المحتوى
+- يَعمل بدون إنترنت 100% (v0.13.2) — الخُطوط مَحلّيّة + لا CDN
 
 ---
 
-## 📦 النسختان
+## 📦 النُّسَخ الثَلاث
 
-| النسخة | المجلد | الوصف |
-|---|---|---|
-| 🐧 **سطح المكتب** | [`GT-SIRM-DESKTOP/`](./GT-SIRM-DESKTOP/) | Electron + ffmpeg لـ AppImage / DEB / RPM |
-| 🌐 **الويب (PWA)** | [`GT-SIRM-WEB/`](./GT-SIRM-WEB/) | Vanilla JS + WebCodecs لكلّ المتصفّحات |
+| النسخة | المجلد | الحُزَم | الوصف |
+|---|---|---|---|
+| 🐧 **سطح المكتب** | [`GT-SIRM-DESKTOP/`](./GT-SIRM-DESKTOP/) | AppImage · DEB · RPM | Electron + ffmpeg + yt-dlp |
+| 🌐 **الويب (PWA)** | [`GT-SIRM-WEB/`](./GT-SIRM-WEB/) | تَشغيل في المُتصفّح | Vanilla JS + WebCodecs |
+| 📱 **Android** | [`GT-SIRM-WEB/android/`](./GT-SIRM-WEB/) | APK (debug + release) | Capacitor 6 + WebView |
 
 ---
 
@@ -73,7 +115,11 @@ sudo dpkg -i gt-sirm_x.y.z_amd64.deb
 sudo dnf install ./gt-sirm-x.y.z.x86_64.rpm
 ```
 
-تفاصيل التثبيت الكاملة في [`GT-SIRM-DESKTOP/README.md`](./GT-SIRM-DESKTOP/README.md).
+### نُسخة Android — APK
+حَمِّل `GT-SIRM-x.y.z-debug.apk` مِن [الإصدارات](https://github.com/SalehGNUTUX/GT-SIRM/releases) ثُمَّ ثَبِّته يَدويّاً.
+يَطلب الأذونات: ميكروفون + تَخزين + وَسائط + اهتزاز عند الحاجة فقط.
+
+تفاصيل التثبيت الكاملة في [`GT-SIRM-DESKTOP/README.md`](./GT-SIRM-DESKTOP/README.md) و[`GT-SIRM-WEB/README.md`](./GT-SIRM-WEB/README.md).
 
 ---
 
