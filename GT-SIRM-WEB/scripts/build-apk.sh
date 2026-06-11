@@ -83,6 +83,15 @@ fi
 echo "🔄 مزامنة ملفّات الويب مع Android..."
 npx cap sync android
 
+# ── إعادة تَوليد الأَيقونات (v0.13.2) ──────────────────────────
+# cap sync قد يَكتب فوق الأَيقونات بالافتراضيّة — أَعِد تَوليدها
+if command -v python3 >/dev/null 2>&1 && [ -f "GT-SIRM-icons/GT-SIRM-icon-original.png" ]; then
+    echo "🎨 إعادة تَوليد أيقونات Android من اللوغو الأَصليّ..."
+    cd "$PROJECT_DIR/.."
+    python3 "$PROJECT_DIR/scripts/gen-android-icons.py" || echo "⚠️ فَشَل تَوليد الأَيقونات (يَكمل البَناء بالافتراضيّة)"
+    cd "$PROJECT_DIR"
+fi
+
 # ── البناء ─────────────────────────────────────────────────────
 mkdir -p dist-apk
 

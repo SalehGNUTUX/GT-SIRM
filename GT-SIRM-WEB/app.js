@@ -189,6 +189,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   restoreLogo();
   restoreMixedAnimsOrder();
   initAutoSave();
+  initCapacitor();       // v0.13.2 — Android: زرّ الرُجوع + فَتح ملفّات .gtsirm
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js").catch(() => { });
   }
@@ -2379,6 +2380,125 @@ function restoreReciters() {
       renderReciters();
     }
   } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════════
+//  v0.13.2 — Capacitor (Android APK): زرّ الرُجوع + ملفّات .gtsirm
+//  يَعمل فقط داخل WebView (window.Capacitor مَوجود). في المُتصفّح يَتجاوَز.
+// ══════════════════════════════════════════════════════
+S.isNativeAndroid = !!(typeof window !== "undefined" && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+async function _handleAppExitConfirm() {
+  // إن لم تَكن هُناك تَغييرات، اخرُج مُباشَرةً
+  if (!S.projectDirty) {
+    try { await window.Capacitor.Plugins.App.exitApp(); } catch (_) {}
+    return;
+  }
+  // اعرض مُربّع تَأكيد مَركَزيّ
+  const old = document.getElementById("android-exit-confirm");
+  if (old) old.remove();
+  const modal = document.createElement("div");
+  modal.id = "android-exit-confirm";
+  modal.style.cssText = "position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center";
+  modal.innerHTML = `
+    <div style="background:var(--bg0);border:2px solid var(--p);border-radius:var(--r);padding:22px;max-width:420px;width:92%;direction:rtl;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.6)">
+      <div style="font-size:42px;margin-bottom:12px">⚠️</div>
+      <h3 style="margin:0 0 12px 0;color:var(--al);font-size:17px">تَغييرات غَير محفوظة</h3>
+      <p style="font-size:13px;color:var(--t1);line-height:1.8;margin:0 0 16px 0">لديك تَعديلات في المشروع لم تَحفَظها بَعد. ماذا تُريد أن تَفعل؟</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn btn-a" id="x-save" style="font-weight:700;padding:10px">💾 احفظ ثُمَّ اخرُج</button>
+        <button class="btn btn-d" id="x-exit" style="padding:10px">⚠️ اخرُج بدون حِفظ</button>
+        <button class="btn btn-g" id="x-cancel" style="padding:10px">↩️ إلغاء — اِبقَ في البَرنامج</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.querySelector("#x-cancel").addEventListener("click", () => modal.remove());
+  modal.querySelector("#x-exit").addEventListener("click", async () => {
+    modal.remove();
+    try { await window.Capacitor.Plugins.App.exitApp(); } catch (_) {}
+  });
+  modal.querySelector("#x-save").addEventListener("click", async () => {
+    modal.remove();
+    try {
+      await saveProjectInteractive();
+      // اِنتَظِر قَليلاً ثُمَّ اخرُج
+      setTimeout(() => {
+        if (!S.projectDirty) {
+          try { window.Capacitor.Plugins.App.exitApp(); } catch (_) {}
+        }
+      }, 500);
+    } catch (e) {
+      toast?.(`❌ فَشِل الحِفظ: ${e.message}`, "error", 3000);
+    }
+  });
+}
+
+async function _handleIncomingFile(uri) {
+  if (!uri) return;
+  try {
+    const { Filesystem } = window.Capacitor.Plugins;
+    // اِقرَأ الملفّ كـtext
+    const result = await Filesystem.readFile({
+      path: uri,
+      encoding: "utf8",
+    });
+    const text = (typeof result.data === "string") ? result.data : await new Blob([result.data]).text();
+    // أَنشئ Blob ثُمَّ مَرِّره للـopener
+    const fname = uri.split("/").pop().split("?")[0] || "imported.gtsirm";
+    const blob = new Blob([text], { type: "application/json" });
+    const file = new File([blob], fname, { type: "application/json" });
+    if (typeof openProjectFromBlob === "function") {
+      await openProjectFromBlob(file);
+    } else {
+      toast?.(`📂 وَصَل ملفّ: ${fname}`, "info", 2500);
+    }
+  } catch (e) {
+    console.warn("[capacitor] file open failed:", e);
+    toast?.(`❌ فَشِل فَتح الملفّ: ${e.message}`, "error", 3000);
+  }
+}
+
+function initCapacitor() {
+  if (!S.isNativeAndroid) return;
+  console.log("[GT-SIRM] Capacitor Android mode");
+  const { App } = window.Capacitor.Plugins;
+  if (!App) {
+    console.warn("[capacitor] App plugin مَفقود");
+    return;
+  }
+  // زرّ الرُجوع: اعرض مُربّع تَأكيد بَدلاً من الخُروج المُباشِر
+  App.addListener("backButton", async (ev) => {
+    // إن كان هُناك مُربّع مَفتوح، أَغلِقه أوّلاً
+    const openModals = document.querySelectorAll("[id$='-confirm-modal'], [id$='-warning'], #android-exit-confirm");
+    for (const m of openModals) {
+      if (m.style.display !== "none" && getComputedStyle(m).display !== "none") {
+        m.remove();
+        return;
+      }
+    }
+    // إن كان هُناك tab-panel مَفتوح في المُحرّك المُتنقّل، اِسمَح للـWebView بإغلاقه
+    if (ev.canGoBack && typeof window.history !== "undefined" && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    await _handleAppExitConfirm();
+  });
+  // فَتح ملفّ .gtsirm من Intent
+  App.addListener("appUrlOpen", async (data) => {
+    if (!data || !data.url) return;
+    console.log("[capacitor] appUrlOpen:", data.url);
+    if (data.url.includes(".gtsirm") || data.url.startsWith("content://") || data.url.startsWith("file://")) {
+      await _handleIncomingFile(data.url);
+    }
+  });
+  // اِفحَص launch intent (لو فُتح البَرنامج عَبر النَقر على ملفّ)
+  App.getLaunchUrl().then((res) => {
+    if (res && res.url) {
+      console.log("[capacitor] launch url:", res.url);
+      _handleIncomingFile(res.url);
+    }
+  }).catch(() => {});
 }
 
 function initAutoSave() {
