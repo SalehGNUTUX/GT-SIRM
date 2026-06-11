@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld("SIRM", {
   workdirEnsure:     ()      => ipcRenderer.invoke("workdir-ensure"),
   workdirMove:       (opts)  => ipcRenderer.invoke("workdir-move", opts),
   workdirImportFile: (opts)  => ipcRenderer.invoke("workdir-import-file", opts),
+  workdirSaveBuffer: (opts)  => ipcRenderer.invoke("workdir-save-buffer", opts),
   workdirOpen:       ()      => ipcRenderer.invoke("workdir-open"),
 
   // ── تحميل مباشر (wget / aria2c) ─────────────────────

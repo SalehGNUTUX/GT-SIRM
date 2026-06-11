@@ -182,6 +182,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDuasModule();      // v0.10.0 — وحدة الأدعية المأثورة
   initHikamModule();     // v0.10.0 — وحدة الحِكَم والمواعظ
   initAudioFXControls(); // v0.11.0 — محرّك المؤثّرات الصوتيّة
+  initMicRecorder();     // v0.13.0 — تَسجيل الميكروفون
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
   restoreAllSettings();
   restoreLogo();
@@ -377,7 +378,10 @@ function getActiveAudioDuration() {
 
 // v0.8.6 — معالج موحَّد لزرّ "🎚️"
 function openPerSliceSmart() {
+  // v0.13.0 — افتح الـ<details class="sec"> الحاوية إن كانت مَطويّة
   const perSliceCb = document.getElementById("free-per-slice");
+  const sec = perSliceCb?.closest("details.sec");
+  if (sec && !sec.open) sec.open = true;
   if (perSliceCb && !perSliceCb.checked) {
     perSliceCb.checked = true;
     perSliceCb.dispatchEvent(new Event("change", { bubbles: true }));
@@ -389,9 +393,9 @@ function openPerSliceSmart() {
   if (typeof updateAyaInfo === "function") updateAyaInfo();
   if (typeof updateAyaUI === "function") updateAyaUI();
   setTimeout(() => {
-    const t = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list");
+    const t = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list") || sec;
     if (t) t.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, 120);
+  }, 150);
 }
 
 function syncVersesToActiveAudio() {
@@ -400,10 +404,28 @@ function syncVersesToActiveAudio() {
   if (!isText) return false;
   const audioDur = getActiveAudioDuration();
   if (audioDur == null) return false;
+  if (!Array.isArray(S.ayaDurations)) S.ayaDurations = [];
+  // v0.13.0 — احترام التَجميد
+  const items = S.freePerSlice || [];
+  const hasLocks = items.length === S.verses.length && items.some(it => it.locked);
+  if (hasLocks) {
+    const lockedSum = items.reduce((s, it) =>
+      (it.locked && it.enabled !== false) ? s + (it.dur || 0) : s, 0);
+    const unlockedCount = items.filter(it => !it.locked && it.enabled !== false).length;
+    const remaining = Math.max(0, audioDur - lockedSum);
+    const perUnlocked = unlockedCount > 0 ? Math.max(0.5, remaining / unlockedCount) : 0;
+    items.forEach((it, i) => {
+      if (it.enabled === false) it.dur = 0.001;
+      else if (!it.locked) it.dur = perUnlocked;
+      const dur = it.dur;
+      if (S.verses[i]) S.verses[i].manualDuration = dur;
+      S.ayaDurations[i] = dur;
+    });
+    return true;
+  }
   const enabled = S.verses.map((v, i) => v.enabled !== false ? i : -1).filter(i => i >= 0);
   if (!enabled.length) return false;
   const per = audioDur / enabled.length;
-  if (!Array.isArray(S.ayaDurations)) S.ayaDurations = [];
   S.verses.forEach((v, i) => {
     if (v.enabled === false) { v.manualDuration = 0.001; S.ayaDurations[i] = 0.001; }
     else { v.manualDuration = per; S.ayaDurations[i] = per; }
@@ -424,6 +446,7 @@ function buildPerSliceList() {
       text: v.text || "",
       dur: (old[i] && old[i].text === v.text) ? old[i].dur : (v.manualDuration || baseDur),
       enabled: v.enabled !== false,
+      locked: !!(old[i] && old[i].text === v.text && old[i].locked),
     }));
     return S.freePerSlice;
   }
@@ -435,6 +458,7 @@ function buildPerSliceList() {
     text,
     dur: (old[i] && old[i].text === text) ? old[i].dur : effDur,
     enabled: true,
+    locked: !!(old[i] && old[i].text === text && old[i].locked),
   }));
   return S.freePerSlice;
 }
@@ -451,12 +475,14 @@ function renderPerSliceList() {
   }
   list.innerHTML = items.map((it, i) => {
     const en = it.enabled !== false;
+    const lk = !!it.locked;
     return `
-    <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--b1);${en ? "" : "opacity:0.45"}">
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--b1);${en ? "" : "opacity:0.45"}${lk ? ";background:rgba(220,180,30,0.06)" : ""}">
       <input type="checkbox" data-slice-enable="${i}" ${en ? "checked" : ""} title="تفعيل/إلغاء الشريحة" style="flex-shrink:0;cursor:pointer">
       <span style="color:var(--al);font-size:10px;font-weight:700;flex-shrink:0;width:24px;text-align:center">${i + 1}</span>
       <span style="flex:1;font-size:11px;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl" title="${escapeHtml(it.text)}">${escapeHtml(it.text)}</span>
-      <input type="number" min="0.5" max="60" step="0.1" value="${it.dur.toFixed(1)}" data-slice-idx="${i}" class="fc" style="width:64px;font-size:11px;padding:3px 5px" ${en ? "" : "disabled"}>
+      <button type="button" data-slice-lock="${i}" title="${lk ? "إلغاء التَجميد — السَماح بإعادة التَوزيع" : "تَجميد المدّة — لا تَتَغيَّر عند تَعديل شَرائح أخرى"}" style="padding:2px 6px;flex-shrink:0;font-size:13px;background:${lk ? "rgba(220,180,30,0.2)" : "var(--bg2)"};border:1px solid ${lk ? "#dcb41e" : "var(--b1)"};border-radius:4px;cursor:pointer;color:${lk ? "#dcb41e" : "var(--t2)"}">${lk ? "🔒" : "🔓"}</button>
+      <input type="number" min="0.5" max="60" step="0.1" value="${it.dur.toFixed(1)}" data-slice-idx="${i}" class="fc" style="width:64px;font-size:11px;padding:3px 5px" ${(en && !lk) ? "" : "disabled"}>
       <span style="font-size:9px;color:var(--t3)">ث</span>
     </div>
   `;
@@ -466,6 +492,7 @@ function renderPerSliceList() {
       const idx = parseInt(inp.dataset.sliceIdx);
       const v = Math.max(0.5, parseFloat(inp.value) || 0);
       if (!S.freePerSlice[idx]) return;
+      if (S.freePerSlice[idx].locked) return;
       const lock = !!ge("free-per-slice-lock");
       if (lock) {
         redistributePerSliceFromEdit(idx, v);
@@ -477,13 +504,22 @@ function renderPerSliceList() {
       syncPerSliceToPlayback();
     });
   });
-  // v0.8.1 — checkbox التفعيل/الإلغاء
   list.querySelectorAll("input[data-slice-enable]").forEach(cb => {
     cb.addEventListener("change", () => {
       const idx = parseInt(cb.dataset.sliceEnable);
       if (!S.freePerSlice[idx]) return;
       S.freePerSlice[idx].enabled = cb.checked;
       if (S.verses[idx]) S.verses[idx].enabled = cb.checked;
+      renderPerSliceList();
+      updatePerSliceStats();
+    });
+  });
+  // v0.13.0 — زرّ تَجميد لكلّ شريحة
+  list.querySelectorAll("button[data-slice-lock]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.sliceLock);
+      if (!S.freePerSlice[idx]) return;
+      S.freePerSlice[idx].locked = !S.freePerSlice[idx].locked;
       renderPerSliceList();
       updatePerSliceStats();
     });
@@ -504,37 +540,36 @@ function syncPerSliceToPlayback() {
   if (typeof updateAyaUI === "function") updateAyaUI();
 }
 
+// v0.13.0 — إعادة توزيع مع احترام الشَرائح المُجمَّدة
 function redistributePerSliceFromEdit(changedIdx, newDur) {
   const items = S.freePerSlice || [];
   if (!items.length || changedIdx < 0 || changedIdx >= items.length) return;
   const MIN = 0.5;
-  const oldDur = items[changedIdx].dur || MIN;
-  const others = items.length - 1;
-  if (others === 0) {
-    items[changedIdx].dur = Math.max(MIN, newDur);
+  const total = items.reduce((s, it) => s + (it.dur || 0), 0);
+  const absorbers = items
+    .map((it, i) => ({ it, i }))
+    .filter(({ it, i }) => i !== changedIdx && !it.locked && it.enabled !== false);
+  const fixedSum = items.reduce((s, it, i) =>
+    (i !== changedIdx && (it.locked || it.enabled === false)) ? s + (it.dur || 0) : s, 0);
+  if (absorbers.length === 0) {
+    items[changedIdx].dur = Math.max(MIN, total - fixedSum);
     return;
   }
-  const total = items.reduce((s, it) => s + (it.dur || 0), 0);
-  const minOthersSum = MIN * others;
-  const maxNew = total - minOthersSum;
+  const maxNew = total - fixedSum - absorbers.length * MIN;
   const finalNew = Math.max(MIN, Math.min(maxNew, newDur));
-  const remainder = total - finalNew;
-  const othersSum = total - oldDur;
-  items.forEach((it, i) => {
-    if (i === changedIdx) {
-      it.dur = finalNew;
-    } else {
-      const share = othersSum > 0 ? (it.dur / othersSum) : (1 / others);
-      it.dur = Math.max(MIN, remainder * share);
-    }
+  items[changedIdx].dur = finalNew;
+  const remainder = total - finalNew - fixedSum;
+  const absorbersSum = absorbers.reduce((s, a) => s + (a.it.dur || 0), 0);
+  absorbers.forEach(({ it }) => {
+    const share = absorbersSum > 0 ? (it.dur / absorbersSum) : (1 / absorbers.length);
+    it.dur = Math.max(MIN, remainder * share);
   });
   const actualTotal = items.reduce((s, it) => s + (it.dur || 0), 0);
   const drift = total - actualTotal;
   if (Math.abs(drift) > 0.001) {
-    for (let i = items.length - 1; i >= 0; i--) {
-      if (i === changedIdx) continue;
-      const candidate = items[i].dur + drift;
-      if (candidate >= MIN) { items[i].dur = candidate; break; }
+    for (let i = absorbers.length - 1; i >= 0; i--) {
+      const candidate = absorbers[i].it.dur + drift;
+      if (candidate >= MIN) { absorbers[i].it.dur = candidate; break; }
     }
   }
 }
@@ -4412,6 +4447,354 @@ function initAudioFXControls() {
   });
 }
 
+// ══════════════════════════════════════════════════════
+//  v0.13.0 — تَسجيل الميكروفون (نسخة الويب) — نَفس التَصميم
+//  الفَرق الوَحيد: زرّ "تَنزيل" بَدلاً من "حِفظ في مجلّد العَمل"
+// ══════════════════════════════════════════════════════
+S.micStream = null;
+S.micRecorder = null;
+S.micChunks = [];
+S.micBlob = null;
+S.micAudioCtx = null;
+S.micSourceNode = null;
+S.micAnalyser = null;
+S.micMonitorOut = null;
+S.micStartTime = 0;
+S.micPausedDur = 0;
+S.micPauseStart = 0;
+S.micIsPaused = false;
+S.micTimerInt = null;
+S.micRaf = null;
+
+async function _initMicChain() {
+  if (S.micAudioCtx) return;
+  try {
+    S.micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+  } catch (e) {
+    toast(`❌ تَعذَّر الوُصول للميكروفون: ${e.message || e.name}`, "error", 3500);
+    throw e;
+  }
+  S.micAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  S.micSourceNode = S.micAudioCtx.createMediaStreamSource(S.micStream);
+  S.micAnalyser = S.micAudioCtx.createAnalyser();
+  S.micAnalyser.fftSize = 1024;
+  S.micAnalyser.smoothingTimeConstant = 0.85;
+  S.micSourceNode.connect(S.micAnalyser);
+  _wireMicMonitor();
+  _startMicVisuals();
+}
+
+function _wireMicMonitor() {
+  try { if (S.micMonitorOut) { S.micMonitorOut.disconnect(); S.micMonitorOut = null; } } catch (_) {}
+  const monitorOn = !!ge("mic-monitor-on");
+  if (!monitorOn || !S.micAudioCtx || !S.micSourceNode) return;
+  const useFX = !!ge("mic-monitor-fx");
+  let outNode;
+  if (useFX) {
+    const cfg = (typeof getFXConfig === "function") ? getFXConfig("free") : null;
+    outNode = cfg ? buildAudioFXChain(S.micAudioCtx, S.micSourceNode, cfg) : S.micSourceNode;
+  } else {
+    outNode = S.micSourceNode;
+  }
+  outNode.connect(S.micAudioCtx.destination);
+  S.micMonitorOut = outNode;
+}
+
+function _startMicVisuals() {
+  const canvas = document.getElementById("mic-wave-canvas");
+  const levelBar = document.getElementById("mic-level-bar");
+  if (!canvas || !S.micAnalyser) return;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  const tdata = new Uint8Array(S.micAnalyser.fftSize);
+  const fdata = new Uint8Array(S.micAnalyser.frequencyBinCount);
+  const draw = () => {
+    if (!S.micAnalyser) return;
+    S.micAnalyser.getByteTimeDomainData(tdata);
+    S.micAnalyser.getByteFrequencyData(fdata);
+    ctx.fillStyle = "rgba(2, 11, 5, 0.9)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#0ad07a";
+    ctx.beginPath();
+    const sliceW = W / tdata.length;
+    let x = 0;
+    for (let i = 0; i < tdata.length; i++) {
+      const v = tdata[i] / 128.0;
+      const y = (v * H) / 2;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      x += sliceW;
+    }
+    ctx.stroke();
+    if (levelBar) {
+      let sum = 0;
+      for (let i = 0; i < fdata.length; i++) sum += fdata[i];
+      const pct = Math.min(100, (sum / fdata.length / 100) * 100);
+      levelBar.style.width = pct + "%";
+    }
+    S.micRaf = requestAnimationFrame(draw);
+  };
+  draw();
+}
+
+function _stopMicVisuals() {
+  if (S.micRaf) { cancelAnimationFrame(S.micRaf); S.micRaf = null; }
+}
+
+function _stopMicChain() {
+  _stopMicVisuals();
+  try { if (S.micMonitorOut) S.micMonitorOut.disconnect(); } catch (_) {}
+  S.micMonitorOut = null;
+  if (S.micStream) {
+    S.micStream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+    S.micStream = null;
+  }
+  if (S.micAudioCtx) {
+    try { S.micAudioCtx.close(); } catch (_) {}
+    S.micAudioCtx = null;
+  }
+  S.micSourceNode = null;
+  S.micAnalyser = null;
+  const canvas = document.getElementById("mic-wave-canvas");
+  if (canvas) {
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "rgba(2, 11, 5, 0.9)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  const lb = document.getElementById("mic-level-bar");
+  if (lb) lb.style.width = "0%";
+}
+
+async function startMicRecording() {
+  try { await _initMicChain(); } catch (_) { return; }
+  const mimeCandidates = [
+    "audio/webm;codecs=opus", "audio/webm",
+    "audio/ogg;codecs=opus", "audio/ogg",
+  ];
+  let mimeType = "";
+  for (const m of mimeCandidates) {
+    if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
+  }
+  try {
+    S.micRecorder = mimeType
+      ? new MediaRecorder(S.micStream, { mimeType })
+      : new MediaRecorder(S.micStream);
+  } catch (e) {
+    toast(`❌ MediaRecorder: ${e.message}`, "error", 3500);
+    return;
+  }
+  S.micChunks = [];
+  S.micRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) S.micChunks.push(e.data);
+  };
+  S.micRecorder.onstop = onMicRecorderStop;
+  S.micRecorder.start(250);
+  S.micStartTime = Date.now();
+  S.micPausedDur = 0;
+  S.micIsPaused = false;
+  document.getElementById("mic-pre").style.display = "none";
+  document.getElementById("mic-during").style.display = "block";
+  document.getElementById("mic-post").style.display = "none";
+  S.micTimerInt = setInterval(() => {
+    if (S.micIsPaused) return;
+    const sec = Math.floor((Date.now() - S.micStartTime - S.micPausedDur) / 1000);
+    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
+    const el = document.getElementById("mic-rec-time");
+    if (el) el.textContent = `${mm}:${ss}`;
+  }, 250);
+}
+
+function pauseResumeMicRecording() {
+  if (!S.micRecorder) return;
+  const btn = document.getElementById("mic-rec-pause");
+  const dot = document.getElementById("mic-rec-dot");
+  if (S.micRecorder.state === "recording") {
+    S.micRecorder.pause();
+    S.micPauseStart = Date.now();
+    S.micIsPaused = true;
+    if (btn) btn.textContent = "▶️";
+    if (dot) dot.style.color = "var(--t3)";
+  } else if (S.micRecorder.state === "paused") {
+    S.micRecorder.resume();
+    if (S.micPauseStart) S.micPausedDur += Date.now() - S.micPauseStart;
+    S.micPauseStart = 0;
+    S.micIsPaused = false;
+    if (btn) btn.textContent = "⏸️";
+    if (dot) dot.style.color = "var(--danger)";
+  }
+}
+
+function stopMicRecording() {
+  if (!S.micRecorder) return;
+  if (S.micRecorder.state !== "inactive") S.micRecorder.stop();
+}
+
+function onMicRecorderStop() {
+  if (S.micTimerInt) { clearInterval(S.micTimerInt); S.micTimerInt = null; }
+  const mimeType = S.micChunks[0]?.type || "audio/webm";
+  S.micBlob = new Blob(S.micChunks, { type: mimeType });
+  const url = URL.createObjectURL(S.micBlob);
+  const audio = document.getElementById("mic-preview");
+  if (audio) { audio.src = url; }
+  const durSec = Math.floor((Date.now() - S.micStartTime - S.micPausedDur) / 1000);
+  const mm = String(Math.floor(durSec / 60)).padStart(2, "0");
+  const ss = String(durSec % 60).padStart(2, "0");
+  const info = document.getElementById("mic-info");
+  if (info) {
+    const sizeKB = (S.micBlob.size / 1024).toFixed(1);
+    const ext = mimeType.includes("ogg") ? "ogg" : "webm";
+    info.textContent = `📊 المدّة: ${mm}:${ss} · الحجم: ${sizeKB} KB · النَوع: .${ext}`;
+  }
+  document.getElementById("mic-pre").style.display = "none";
+  document.getElementById("mic-during").style.display = "none";
+  document.getElementById("mic-post").style.display = "block";
+  _stopMicChain();
+}
+
+function redoMicRecording() {
+  if (S.micBlob) {
+    const audio = document.getElementById("mic-preview");
+    if (audio && audio.src) { try { URL.revokeObjectURL(audio.src); } catch (_) {} audio.src = ""; }
+    S.micBlob = null;
+  }
+  document.getElementById("mic-pre").style.display = "flex";
+  document.getElementById("mic-during").style.display = "none";
+  document.getElementById("mic-post").style.display = "none";
+  const t = document.getElementById("mic-rec-time"); if (t) t.textContent = "00:00";
+}
+
+function applyMicRecording() {
+  if (!S.micBlob) return;
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const ext = (S.micBlob.type.includes("ogg")) ? "ogg" : "webm";
+  const file = new File([S.micBlob], `mic-${ts}.${ext}`, { type: S.micBlob.type });
+  const fauInput = document.getElementById("free-audio-file");
+  if (!fauInput) {
+    toast("❌ مَيدان الصوت المُخصّص غَير موجود", "error", 2500);
+    return;
+  }
+  try {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    fauInput.files = dt.files;
+    fauInput.dispatchEvent(new Event("change", { bubbles: true }));
+  } catch (e) {
+    if (typeof onFreeAudio === "function") onFreeAudio({ files: [file] });
+  }
+  const toggle = document.getElementById("free-audio-on");
+  if (toggle && !toggle.checked) {
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  toast(`✅ اُعتُمِد التَسجيل (${file.name}) كصَوت تَلاوة`, "success", 2500);
+}
+
+function downloadMicRecording() {
+  if (!S.micBlob) return;
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const ext = (S.micBlob.type.includes("ogg")) ? "ogg" : "webm";
+  const url = URL.createObjectURL(S.micBlob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `recording-${ts}.${ext}`;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+  toast(`⬇️ تَنزيل: recording-${ts}.${ext}`, "info", 2000);
+}
+
+// v0.13.0 — مَفاتيح المؤثّرات المُتزامِنة بَين mic-fx و free-fx
+const MIC_FX_SYNC_KEYS = [
+  "fx-on", "fx-vol", "fx-reverb-type", "fx-reverb-amt",
+  "fx-echo-amt", "fx-echo-time", "fx-echo-fb",
+  "fx-eq-low", "fx-eq-mid", "fx-eq-high",
+];
+let _micFXSyncBusy = false;
+
+function _copyValue(fromEl, toEl) {
+  if (fromEl.type === "checkbox") toEl.checked = fromEl.checked;
+  else toEl.value = fromEl.value;
+}
+
+function setupMicFXMirror() {
+  for (const key of MIC_FX_SYNC_KEYS) {
+    const micEl = document.getElementById(`mic-${key}`);
+    const freeEl = document.getElementById(`free-${key}`);
+    if (!micEl || !freeEl) continue;
+    const onMicChange = () => {
+      if (_micFXSyncBusy) return;
+      _micFXSyncBusy = true;
+      try {
+        _copyValue(micEl, freeEl);
+        freeEl.dispatchEvent(new Event("input", { bubbles: true }));
+        freeEl.dispatchEvent(new Event("change", { bubbles: true }));
+      } finally { _micFXSyncBusy = false; }
+    };
+    micEl.addEventListener("input", onMicChange);
+    micEl.addEventListener("change", onMicChange);
+    const onFreeChange = () => {
+      if (_micFXSyncBusy) return;
+      _micFXSyncBusy = true;
+      try {
+        _copyValue(freeEl, micEl);
+        const micOut = document.getElementById(`mic-${key}-v`);
+        const freeOut = document.getElementById(`free-${key}-v`);
+        if (micOut && freeOut) micOut.textContent = freeOut.textContent;
+        if (key === "fx-on") {
+          const micCtrl = document.getElementById("mic-fx-ctrl");
+          if (micCtrl) micCtrl.style.display = micEl.checked ? "block" : "none";
+        }
+      } finally { _micFXSyncBusy = false; }
+    };
+    freeEl.addEventListener("input", onFreeChange);
+    freeEl.addEventListener("change", onFreeChange);
+    _copyValue(freeEl, micEl);
+  }
+  document.getElementById("mic-fx-on")?.addEventListener("change", (e) => {
+    const ctrl = document.getElementById("mic-fx-ctrl");
+    if (ctrl) ctrl.style.display = e.target.checked ? "block" : "none";
+  });
+  const initOn = document.getElementById("mic-fx-on")?.checked;
+  const micCtrlInit = document.getElementById("mic-fx-ctrl");
+  if (micCtrlInit) micCtrlInit.style.display = initOn ? "block" : "none";
+  for (const key of MIC_FX_SYNC_KEYS) {
+    const micOut = document.getElementById(`mic-${key}-v`);
+    const freeOut = document.getElementById(`free-${key}-v`);
+    if (micOut && freeOut) micOut.textContent = freeOut.textContent;
+  }
+}
+
+function initMicRecorder() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    const summary = document.querySelector('[id="mic-on"]')?.closest("details");
+    if (summary) summary.style.display = "none";
+    return;
+  }
+  const micOn = document.getElementById("mic-on");
+  const micCtrl = document.getElementById("mic-ctrl");
+  micOn?.addEventListener("change", () => {
+    if (micCtrl) micCtrl.style.display = micOn.checked ? "block" : "none";
+    if (!micOn.checked) {
+      if (S.micRecorder && S.micRecorder.state !== "inactive") {
+        try { S.micRecorder.stop(); } catch (_) {}
+      }
+      _stopMicChain();
+    } else {
+      _initMicChain().catch(() => {});
+    }
+  });
+  document.getElementById("mic-monitor-on")?.addEventListener("change", _wireMicMonitor);
+  document.getElementById("mic-monitor-fx")?.addEventListener("change", _wireMicMonitor);
+  document.getElementById("mic-rec-start")?.addEventListener("click", startMicRecording);
+  document.getElementById("mic-rec-pause")?.addEventListener("click", pauseResumeMicRecording);
+  document.getElementById("mic-rec-stop")?.addEventListener("click", stopMicRecording);
+  document.getElementById("mic-redo")?.addEventListener("click", redoMicRecording);
+  document.getElementById("mic-apply")?.addEventListener("click", applyMicRecording);
+  document.getElementById("mic-download")?.addEventListener("click", downloadMicRecording);
+  setupMicFXMirror();
+}
+
 function onBgAudio(input) {
   const file = input.files[0];
   if (!file) return;
@@ -4438,9 +4821,9 @@ function onBgAudio(input) {
   $("bg-audio-info").textContent = `✅ ${file.name} (${(file.size / 1e6).toFixed(1)}MB)`;
   toast("🎵 تم تحميل صوت الخلفية", "success");
 
-  // v0.8.5 — أعِد توزيع مدد الشرائح لتُطابق مدّة الصوت
-  const tryResync = () => {
-    if (!isFinite(a.duration) || a.duration <= 0.5) return;
+  // v0.8.5 / v0.13.0 — أعِد توزيع مدد الشرائح لتُطابق مدّة الصوت
+  // WebM/Opus من MediaRecorder تَفتقد duration metadata — حلّ بحيلة الـseek
+  const _doResync = () => {
     if (syncVersesToActiveAudio()) {
       if (typeof renderPerSliceList === "function") renderPerSliceList();
       if (typeof updateAyaInfo === "function") updateAyaInfo();
@@ -4448,7 +4831,20 @@ function onBgAudio(input) {
       toast(`🔄 أُعيد توزيع الشرائح (${a.duration.toFixed(1)}s)`, "info", 2500);
     }
   };
-  if (isFinite(a.duration) && a.duration > 0.5) tryResync();
+  const tryResync = () => {
+    if (a.duration === Infinity) {
+      const fix = () => {
+        a.currentTime = 0;
+        setTimeout(() => { if (isFinite(a.duration) && a.duration > 0.5) _doResync(); }, 50);
+      };
+      a.addEventListener("timeupdate", fix, { once: true });
+      try { a.currentTime = 1e101; } catch (_) { fix(); }
+      return;
+    }
+    if (!isFinite(a.duration) || a.duration <= 0.5) return;
+    _doResync();
+  };
+  if (isFinite(a.duration) && a.duration > 0.5 && a.duration !== Infinity) tryResync();
   else a.addEventListener("loadedmetadata", tryResync, { once: true });
 }
 
@@ -6455,9 +6851,10 @@ function startAutoSave() {
       const json = JSON.stringify(proj);
       if (json.length < 4_500_000) {
         localStorage.setItem("gt_sirm_autosave_blob", json);
-        // v0.11.3 — مسح dirty بعد الحفظ الناجح
-        if (typeof clearProjectDirty === "function") clearProjectDirty();
-        toast(`💾 حفظ تلقائيّ في المتصفّح — ${new Date().toLocaleTimeString("ar")}`, "info", 1500);
+        // v0.13.0 — localStorage backup فقط، ليس حِفظاً حَقيقيّاً للمَلفّ.
+        // لا نَمسَح dirty — يَجب أن يَظهر تَنبيه "تَغييرات غَير محفوظة" عند الإغلاق
+        // حتى يُصدّر المُستخدم المَلفّ يدوياً إلى .gtsirm.
+        toast(`💾 نَسخة احتياطيّة في المتصفّح (صدّر .gtsirm للحفظ الدائم) — ${new Date().toLocaleTimeString("ar")}`, "info", 1800);
       } else {
         toast("⚠️ المشروع كبير جداً للحفظ في المتصفّح — صدّر يدوياً", "warn", 2200);
       }

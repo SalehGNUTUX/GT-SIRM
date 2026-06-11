@@ -343,6 +343,34 @@ ipcMain.handle("workdir-move", async (_e, opts) => {
 });
 
 // IPC: نَسخ ملفّ خارجيّ إلى المجلّد الفرعيّ المناسب من مجلّد العمل
+// v0.13.0 — حِفظ buffer مُباشَر في مجلّد عَمل فَرعيّ (تَسجيلات الميكروفون)
+ipcMain.handle("workdir-save-buffer", async (_e, opts) => {
+  const { buffer, filename, subfolderKey } = opts || {};
+  if (!buffer || !filename || !subfolderKey) {
+    return { ok: false, error: "buffer / filename / subfolderKey مَطلوبة" };
+  }
+  const cfg = loadWorkDirConfig();
+  const root = (cfg && cfg.path) ? cfg.path : getDefaultWorkDir();
+  const subfolder = WORK_DIR_SUBFOLDERS.find(f => f.key === subfolderKey);
+  if (!subfolder) return { ok: false, error: "subfolderKey غير معروف" };
+  const targetDir = path.join(root, subfolder.name);
+  try {
+    fs.mkdirSync(targetDir, { recursive: true });
+    let targetPath = path.join(targetDir, filename);
+    if (fs.existsSync(targetPath)) {
+      const ext = path.extname(filename);
+      const base = path.basename(filename, ext);
+      let n = 1;
+      while (fs.existsSync(path.join(targetDir, `${base}-${n}${ext}`)) && n < 1000) n++;
+      targetPath = path.join(targetDir, `${base}-${n}${ext}`);
+    }
+    fs.writeFileSync(targetPath, Buffer.from(buffer));
+    return { ok: true, path: targetPath };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
 ipcMain.handle("workdir-import-file", async (_e, opts) => {
   const { sourcePath, subfolderKey, moveFile } = opts || {};
   if (!sourcePath || !subfolderKey) return { ok: false, error: "sourcePath و subfolderKey مَطلوبان" };

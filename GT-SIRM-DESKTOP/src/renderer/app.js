@@ -140,6 +140,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDuasModule();      // v0.10.0 — وحدة الأدعية المأثورة
   initHikamModule();     // v0.10.0 — وحدة الحِكَم والمواعظ
   initAudioFXControls(); // v0.11.0 — محرّك المؤثّرات الصوتيّة
+  initMicRecorder();     // v0.13.0 — تَسجيل الميكروفون
   initWorkDir();         // v0.12.0 — مجلّد العمل الافتراضيّ
   setTimeout(installWorkdirInputInterceptor, 500);  // v0.12.6 — بعد تَحميل مجلّد العمل
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
@@ -371,27 +372,30 @@ function getActiveAudioDuration() {
 // v0.8.6 — معالج موحَّد لزرّ "🎚️ ضبط توقيت كلّ شريحة" من أيّ وحدة
 // يُجبر إعادة بناء القائمة من S.verses الحاليّة + مزامنة مع الصوت + النقل السلِس
 function openPerSliceSmart() {
-  // 1) فعِّل توگل التوقيت التفصيلي
+  // v0.13.0 — 1) افتح الـ<details class="sec"> الحاوية إن كانت مَطويّة
   const perSliceCb = document.getElementById("free-per-slice");
+  const sec = perSliceCb?.closest("details.sec");
+  if (sec && !sec.open) sec.open = true;
+  // 2) فعِّل توگل التوقيت التفصيلي
   if (perSliceCb && !perSliceCb.checked) {
     perSliceCb.checked = true;
     perSliceCb.dispatchEvent(new Event("change", { bubbles: true }));
   }
-  // 2) امسح freePerSlice القديمة لإجبار إعادة البناء من S.verses
+  // 3) امسح freePerSlice القديمة لإجبار إعادة البناء من S.verses
   S.freePerSlice = null;
-  // 3) أعِد البناء من المصدر النصّيّ النشط (يقرأ S.verses تلقائياً)
+  // 4) أعِد البناء من المصدر النصّيّ النشط (يقرأ S.verses تلقائياً)
   if (typeof buildPerSliceList === "function") buildPerSliceList();
-  // 4) زامِن مع الصوت النشط (إن وُجد)
+  // 5) زامِن مع الصوت النشط (إن وُجد)
   if (typeof syncVersesToActiveAudio === "function") syncVersesToActiveAudio();
-  // 5) ارسم القائمة + حدِّث الواجهة
+  // 6) ارسم القائمة + حدِّث الواجهة
   if (typeof renderPerSliceList === "function") renderPerSliceList();
   if (typeof updateAyaInfo === "function") updateAyaInfo();
   if (typeof updateAyaUI === "function") updateAyaUI();
-  // 6) انتقل سلِساً إلى القسم
+  // 7) انتقل سلِساً إلى القسم
   setTimeout(() => {
-    const t = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list");
+    const t = document.getElementById("free-per-slice-ctrl") || document.getElementById("free-per-slice-list") || sec;
     if (t) t.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, 120);
+  }, 150);
 }
 
 function syncVersesToActiveAudio() {
@@ -401,15 +405,36 @@ function syncVersesToActiveAudio() {
   if (!isText) return false;
   const audioDur = getActiveAudioDuration();
   if (audioDur == null) return false;
+  if (!Array.isArray(S.ayaDurations)) S.ayaDurations = [];
+
+  // v0.13.0 — احترام الشَرائح المُجمَّدة (locked) إن وُجدت
+  const items = S.freePerSlice || [];
+  const hasLocks = items.length === S.verses.length && items.some(it => it.locked);
+  if (hasLocks) {
+    const lockedSum = items.reduce((s, it) =>
+      (it.locked && it.enabled !== false) ? s + (it.dur || 0) : s, 0);
+    const unlockedCount = items.filter(it => !it.locked && it.enabled !== false).length;
+    const remaining = Math.max(0, audioDur - lockedSum);
+    const perUnlocked = unlockedCount > 0 ? Math.max(0.5, remaining / unlockedCount) : 0;
+    items.forEach((it, i) => {
+      if (it.enabled === false) it.dur = 0.001;
+      else if (!it.locked) it.dur = perUnlocked;
+      // المُجمَّدة تَبقى كَما هي
+      const dur = it.dur;
+      if (S.verses[i]) S.verses[i].manualDuration = dur;
+      S.ayaDurations[i] = dur;
+    });
+    return true;
+  }
+
+  // المَنطق الأصليّ: توزيع مُتساوٍ
   const enabled = S.verses.map((v, i) => v.enabled !== false ? i : -1).filter(i => i >= 0);
   if (!enabled.length) return false;
   const per = audioDur / enabled.length;
-  if (!Array.isArray(S.ayaDurations)) S.ayaDurations = [];
   S.verses.forEach((v, i) => {
     if (v.enabled === false) { v.manualDuration = 0.001; S.ayaDurations[i] = 0.001; }
     else { v.manualDuration = per; S.ayaDurations[i] = per; }
   });
-  // حدِّث أيضاً freePerSlice إن وُجد
   if (Array.isArray(S.freePerSlice) && S.freePerSlice.length === S.verses.length) {
     S.freePerSlice.forEach((s, i) => { if (s.enabled !== false) s.dur = per; });
   }
@@ -429,6 +454,8 @@ function buildPerSliceList() {
       text: v.text || "",
       dur: (old[i] && old[i].text === v.text) ? old[i].dur : (v.manualDuration || baseDur),
       enabled: v.enabled !== false,
+      // v0.13.0 — احفظ حالة التَجميد عَبر إعادة البناء
+      locked: !!(old[i] && old[i].text === v.text && old[i].locked),
     }));
     return S.freePerSlice;
   }
@@ -441,6 +468,7 @@ function buildPerSliceList() {
     text,
     dur: (old[i] && old[i].text === text) ? old[i].dur : effDur,
     enabled: true,
+    locked: !!(old[i] && old[i].text === text && old[i].locked),
   }));
   return S.freePerSlice;
 }
@@ -457,12 +485,14 @@ function renderPerSliceList() {
   }
   list.innerHTML = items.map((it, i) => {
     const en = it.enabled !== false;
+    const lk = !!it.locked;
     return `
-    <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--b1);${en ? "" : "opacity:0.45"}">
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--b1);${en ? "" : "opacity:0.45"}${lk ? ";background:rgba(220,180,30,0.06)" : ""}">
       <input type="checkbox" data-slice-enable="${i}" ${en ? "checked" : ""} title="تفعيل/إلغاء الشريحة" style="flex-shrink:0;cursor:pointer">
       <span style="color:var(--al);font-size:10px;font-weight:700;flex-shrink:0;width:24px;text-align:center">${i + 1}</span>
       <span style="flex:1;font-size:11px;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl" title="${escapeHtml(it.text)}">${escapeHtml(it.text)}</span>
-      <input type="number" min="0.5" max="60" step="0.1" value="${it.dur.toFixed(1)}" data-slice-idx="${i}" class="fc" style="width:64px;font-size:11px;padding:3px 5px" ${en ? "" : "disabled"}>
+      <button type="button" data-slice-lock="${i}" title="${lk ? "إلغاء التَجميد — السَماح بإعادة التَوزيع" : "تَجميد المدّة — لا تَتَغيَّر عند تَعديل شَرائح أخرى"}" style="padding:2px 6px;flex-shrink:0;font-size:13px;background:${lk ? "rgba(220,180,30,0.2)" : "var(--bg2)"};border:1px solid ${lk ? "#dcb41e" : "var(--b1)"};border-radius:4px;cursor:pointer;color:${lk ? "#dcb41e" : "var(--t2)"}">${lk ? "🔒" : "🔓"}</button>
+      <input type="number" min="0.5" max="60" step="0.1" value="${it.dur.toFixed(1)}" data-slice-idx="${i}" class="fc" style="width:64px;font-size:11px;padding:3px 5px" ${(en && !lk) ? "" : "disabled"}>
       <span style="font-size:9px;color:var(--t3)">ث</span>
     </div>
   `;
@@ -473,6 +503,7 @@ function renderPerSliceList() {
       const idx = parseInt(inp.dataset.sliceIdx);
       const v = Math.max(0.5, parseFloat(inp.value) || 0);
       if (!S.freePerSlice[idx]) return;
+      if (S.freePerSlice[idx].locked) return; // مُجمَّدة — لا تَعديل
       const lock = !!ge("free-per-slice-lock");
       if (lock) {
         redistributePerSliceFromEdit(idx, v);
@@ -490,8 +521,17 @@ function renderPerSliceList() {
       const idx = parseInt(cb.dataset.sliceEnable);
       if (!S.freePerSlice[idx]) return;
       S.freePerSlice[idx].enabled = cb.checked;
-      // نقل لـ verses[]
       if (S.verses[idx]) S.verses[idx].enabled = cb.checked;
+      renderPerSliceList();
+      updatePerSliceStats();
+    });
+  });
+  // v0.13.0 — ربط زرّ التَجميد لكلّ شريحة
+  list.querySelectorAll("button[data-slice-lock]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.sliceLock);
+      if (!S.freePerSlice[idx]) return;
+      S.freePerSlice[idx].locked = !S.freePerSlice[idx].locked;
       renderPerSliceList();
       updatePerSliceStats();
     });
@@ -514,42 +554,43 @@ function syncPerSliceToPlayback() {
   if (typeof updateAyaUI === "function") updateAyaUI();
 }
 
-// v0.5.2 — إعادة توزيع تلقائيّ: عند تعديل شريحة، الفرق يُوزَّع على الباقي بالتناسب
+// v0.5.2 / v0.13.0 — إعادة توزيع تلقائيّ مع احترام الشَرائح المُجمَّدة (locked)
+// الشَرائح المُجمَّدة لا تَتَغيَّر مدّتها؛ التَوزيع يَتمّ فقط على الشَرائح الحرّة المُفعَّلة.
 function redistributePerSliceFromEdit(changedIdx, newDur) {
   const items = S.freePerSlice || [];
   if (!items.length || changedIdx < 0 || changedIdx >= items.length) return;
   const MIN = 0.5;
-  const oldDur = items[changedIdx].dur || MIN;
-  const others = items.length - 1;
-  // شريحة وحيدة → لا يوجد ما نوزّع عليه
-  if (others === 0) {
-    items[changedIdx].dur = Math.max(MIN, newDur);
+  const total = items.reduce((s, it) => s + (it.dur || 0), 0);
+  // الشَرائح "المُمتصّة" للفَرق: ليست المُعَدَّلة، ولا مُجمَّدة، ولا مُلغاة
+  const absorbers = items
+    .map((it, i) => ({ it, i }))
+    .filter(({ it, i }) => i !== changedIdx && !it.locked && it.enabled !== false);
+  // مَجموع الشَرائح الثابتة (مُجمَّدة أو مُلغاة) — لا تَتَغيَّر
+  const fixedSum = items.reduce((s, it, i) =>
+    (i !== changedIdx && (it.locked || it.enabled === false)) ? s + (it.dur || 0) : s, 0);
+  // لا مُمتصّات → الشَريحة المُعَدَّلة تَأخذ ما تَبقّى فقط
+  if (absorbers.length === 0) {
+    items[changedIdx].dur = Math.max(MIN, total - fixedSum);
     return;
   }
-  // الإجمالي يبقى ثابتاً
-  const total = items.reduce((s, it) => s + (it.dur || 0), 0);
-  const minOthersSum = MIN * others;
-  const maxNew = total - minOthersSum;
+  // أقصى مدّة مُمكنة للشَريحة المُعَدَّلة: total - الثابت - (المُمتصّات × MIN)
+  const maxNew = total - fixedSum - absorbers.length * MIN;
   const finalNew = Math.max(MIN, Math.min(maxNew, newDur));
-  const remainder = total - finalNew;
-  // توزيع المتبقّي على الباقي بالتناسب مع قيمهم الحاليّة
-  const othersSum = total - oldDur;
-  items.forEach((it, i) => {
-    if (i === changedIdx) {
-      it.dur = finalNew;
-    } else {
-      const share = othersSum > 0 ? (it.dur / othersSum) : (1 / others);
-      it.dur = Math.max(MIN, remainder * share);
-    }
+  items[changedIdx].dur = finalNew;
+  // المُتَبقّي يُوزَّع على المُمتصّات بالتَناسُب مع قيمهم الحاليّة
+  const remainder = total - finalNew - fixedSum;
+  const absorbersSum = absorbers.reduce((s, a) => s + (a.it.dur || 0), 0);
+  absorbers.forEach(({ it }) => {
+    const share = absorbersSum > 0 ? (it.dur / absorbersSum) : (1 / absorbers.length);
+    it.dur = Math.max(MIN, remainder * share);
   });
-  // تصحيح أخطاء التقريب على آخر شريحة غير المعدَّلة
+  // تَصحيح أخطاء التَقريب على آخر مُمتصّة
   const actualTotal = items.reduce((s, it) => s + (it.dur || 0), 0);
   const drift = total - actualTotal;
   if (Math.abs(drift) > 0.001) {
-    for (let i = items.length - 1; i >= 0; i--) {
-      if (i === changedIdx) continue;
-      const candidate = items[i].dur + drift;
-      if (candidate >= MIN) { items[i].dur = candidate; break; }
+    for (let i = absorbers.length - 1; i >= 0; i--) {
+      const candidate = absorbers[i].it.dur + drift;
+      if (candidate >= MIN) { absorbers[i].it.dur = candidate; break; }
     }
   }
 }
@@ -5025,6 +5066,414 @@ function initAudioFXControls() {
 }
 
 // ══════════════════════════════════════════════════════
+//  v0.13.0 — تَسجيل الميكروفون مع استماع مُباشَر + ذَبذبات
+//  - getUserMedia → MediaRecorder (يَكتب blob جافّ بدون FX)
+//  - AnalyserNode لذَبذبات + level meter
+//  - الاستماع المُباشَر اختياريّ (toggle) — افتراضيّاً OFF لتَجنّب feedback
+//  - تَوگل لـFX على الاستماع فقط (الـblob يَبقى جافّاً)
+//  - بعد التَسجيل: حِفظ لـworkdir/recordings أو اعتماد كـfree-audio
+// ══════════════════════════════════════════════════════
+S.micStream = null;
+S.micRecorder = null;
+S.micChunks = [];
+S.micBlob = null;
+S.micAudioCtx = null;
+S.micSourceNode = null;
+S.micAnalyser = null;
+S.micMonitorOut = null;
+S.micStartTime = 0;
+S.micPausedDur = 0;
+S.micPauseStart = 0;
+S.micIsPaused = false;
+S.micTimerInt = null;
+S.micRaf = null;
+
+async function _initMicChain() {
+  if (S.micAudioCtx) return; // مُهيَّأ مُسبقاً
+  try {
+    S.micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+  } catch (e) {
+    toast(`❌ تَعذَّر الوُصول للميكروفون: ${e.message || e.name}`, "error", 3500);
+    throw e;
+  }
+  S.micAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  S.micSourceNode = S.micAudioCtx.createMediaStreamSource(S.micStream);
+  S.micAnalyser = S.micAudioCtx.createAnalyser();
+  S.micAnalyser.fftSize = 1024;
+  S.micAnalyser.smoothingTimeConstant = 0.85;
+  S.micSourceNode.connect(S.micAnalyser);
+  _wireMicMonitor();
+  _startMicVisuals();
+}
+
+function _wireMicMonitor() {
+  // أَزِل الاتّصال السابِق
+  try { if (S.micMonitorOut) { S.micMonitorOut.disconnect(); S.micMonitorOut = null; } } catch (_) {}
+  const monitorOn = !!ge("mic-monitor-on");
+  if (!monitorOn || !S.micAudioCtx || !S.micSourceNode) return;
+  const useFX = !!ge("mic-monitor-fx");
+  let outNode;
+  if (useFX) {
+    // أَنشِئ سلسلة FX من إعدادات free-fx مع تَطبيق كامل
+    const cfg = (typeof getFXConfig === "function") ? getFXConfig("free") : null;
+    if (cfg) {
+      outNode = buildAudioFXChain(S.micAudioCtx, S.micSourceNode, cfg);
+    } else {
+      outNode = S.micSourceNode;
+    }
+  } else {
+    outNode = S.micSourceNode;
+  }
+  outNode.connect(S.micAudioCtx.destination);
+  S.micMonitorOut = outNode;
+}
+
+function _startMicVisuals() {
+  const canvas = document.getElementById("mic-wave-canvas");
+  const levelBar = document.getElementById("mic-level-bar");
+  if (!canvas || !S.micAnalyser) return;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  const tdata = new Uint8Array(S.micAnalyser.fftSize);
+  const fdata = new Uint8Array(S.micAnalyser.frequencyBinCount);
+  const draw = () => {
+    if (!S.micAnalyser) return;
+    S.micAnalyser.getByteTimeDomainData(tdata);
+    S.micAnalyser.getByteFrequencyData(fdata);
+    // ذَبذبات (waveform)
+    ctx.fillStyle = "rgba(2, 11, 5, 0.9)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#0ad07a";
+    ctx.beginPath();
+    const sliceW = W / tdata.length;
+    let x = 0;
+    for (let i = 0; i < tdata.length; i++) {
+      const v = tdata[i] / 128.0;
+      const y = (v * H) / 2;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      x += sliceW;
+    }
+    ctx.stroke();
+    // level meter (RMS)
+    if (levelBar) {
+      let sum = 0;
+      for (let i = 0; i < fdata.length; i++) sum += fdata[i];
+      const avg = sum / fdata.length;
+      const pct = Math.min(100, (avg / 100) * 100);
+      levelBar.style.width = pct + "%";
+    }
+    S.micRaf = requestAnimationFrame(draw);
+  };
+  draw();
+}
+
+function _stopMicVisuals() {
+  if (S.micRaf) { cancelAnimationFrame(S.micRaf); S.micRaf = null; }
+}
+
+function _stopMicChain() {
+  _stopMicVisuals();
+  try { if (S.micMonitorOut) S.micMonitorOut.disconnect(); } catch (_) {}
+  S.micMonitorOut = null;
+  if (S.micStream) {
+    S.micStream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+    S.micStream = null;
+  }
+  if (S.micAudioCtx) {
+    try { S.micAudioCtx.close(); } catch (_) {}
+    S.micAudioCtx = null;
+  }
+  S.micSourceNode = null;
+  S.micAnalyser = null;
+  // مَسح الـcanvas
+  const canvas = document.getElementById("mic-wave-canvas");
+  if (canvas) {
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "rgba(2, 11, 5, 0.9)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  const lb = document.getElementById("mic-level-bar");
+  if (lb) lb.style.width = "0%";
+}
+
+async function startMicRecording() {
+  try {
+    await _initMicChain();
+  } catch (_) { return; }
+
+  // ابدأ MediaRecorder من الـstream نَفسه (يُسَجَّل جافّاً)
+  const mimeCandidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+  ];
+  let mimeType = "";
+  for (const m of mimeCandidates) {
+    if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
+  }
+  try {
+    S.micRecorder = mimeType
+      ? new MediaRecorder(S.micStream, { mimeType })
+      : new MediaRecorder(S.micStream);
+  } catch (e) {
+    toast(`❌ MediaRecorder: ${e.message}`, "error", 3500);
+    return;
+  }
+  S.micChunks = [];
+  S.micRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) S.micChunks.push(e.data);
+  };
+  S.micRecorder.onstop = onMicRecorderStop;
+  S.micRecorder.start(250);
+
+  S.micStartTime = Date.now();
+  S.micPausedDur = 0;
+  S.micIsPaused = false;
+  document.getElementById("mic-pre").style.display = "none";
+  document.getElementById("mic-during").style.display = "block";
+  document.getElementById("mic-post").style.display = "none";
+
+  S.micTimerInt = setInterval(() => {
+    if (S.micIsPaused) return;
+    const sec = Math.floor((Date.now() - S.micStartTime - S.micPausedDur) / 1000);
+    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
+    const el = document.getElementById("mic-rec-time");
+    if (el) el.textContent = `${mm}:${ss}`;
+  }, 250);
+}
+
+function pauseResumeMicRecording() {
+  if (!S.micRecorder) return;
+  const btn = document.getElementById("mic-rec-pause");
+  const dot = document.getElementById("mic-rec-dot");
+  if (S.micRecorder.state === "recording") {
+    S.micRecorder.pause();
+    S.micPauseStart = Date.now();
+    S.micIsPaused = true;
+    if (btn) btn.textContent = "▶️";
+    if (dot) dot.style.color = "var(--t3)";
+  } else if (S.micRecorder.state === "paused") {
+    S.micRecorder.resume();
+    if (S.micPauseStart) S.micPausedDur += Date.now() - S.micPauseStart;
+    S.micPauseStart = 0;
+    S.micIsPaused = false;
+    if (btn) btn.textContent = "⏸️";
+    if (dot) dot.style.color = "var(--danger)";
+  }
+}
+
+function stopMicRecording() {
+  if (!S.micRecorder) return;
+  if (S.micRecorder.state !== "inactive") S.micRecorder.stop();
+}
+
+function onMicRecorderStop() {
+  if (S.micTimerInt) { clearInterval(S.micTimerInt); S.micTimerInt = null; }
+  const mimeType = S.micChunks[0]?.type || "audio/webm";
+  S.micBlob = new Blob(S.micChunks, { type: mimeType });
+  const url = URL.createObjectURL(S.micBlob);
+  const audio = document.getElementById("mic-preview");
+  if (audio) { audio.src = url; }
+  const durSec = Math.floor((Date.now() - S.micStartTime - S.micPausedDur) / 1000);
+  const mm = String(Math.floor(durSec / 60)).padStart(2, "0");
+  const ss = String(durSec % 60).padStart(2, "0");
+  const info = document.getElementById("mic-info");
+  if (info) {
+    const sizeKB = (S.micBlob.size / 1024).toFixed(1);
+    const ext = mimeType.includes("ogg") ? "ogg" : "webm";
+    info.textContent = `📊 المدّة: ${mm}:${ss} · الحجم: ${sizeKB} KB · النَوع: .${ext}`;
+  }
+  document.getElementById("mic-pre").style.display = "none";
+  document.getElementById("mic-during").style.display = "none";
+  document.getElementById("mic-post").style.display = "block";
+  // اِقطَع الاستماع المُباشَر بعد الإيقاف
+  _stopMicChain();
+}
+
+function redoMicRecording() {
+  if (S.micBlob) {
+    const audio = document.getElementById("mic-preview");
+    if (audio && audio.src) { try { URL.revokeObjectURL(audio.src); } catch (_) {} audio.src = ""; }
+    S.micBlob = null;
+  }
+  document.getElementById("mic-pre").style.display = "flex";
+  document.getElementById("mic-during").style.display = "none";
+  document.getElementById("mic-post").style.display = "none";
+  const t = document.getElementById("mic-rec-time"); if (t) t.textContent = "00:00";
+}
+
+function applyMicRecording() {
+  if (!S.micBlob) return;
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const ext = (S.micBlob.type.includes("ogg")) ? "ogg" : "webm";
+  const file = new File([S.micBlob], `mic-${ts}.${ext}`, { type: S.micBlob.type });
+  const fauInput = document.getElementById("free-audio-file");
+  if (!fauInput) {
+    toast("❌ مَيدان الصوت المُخصّص غَير موجود", "error", 2500);
+    return;
+  }
+  try {
+    fauInput._bypassWorkdir = true; // تَجاوُز اعتراض workdir
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    fauInput.files = dt.files;
+    fauInput.dispatchEvent(new Event("change", { bubbles: true }));
+    setTimeout(() => { fauInput._bypassWorkdir = false; }, 200);
+  } catch (e) {
+    if (typeof onFreeAudio === "function") onFreeAudio({ files: [file] });
+  }
+  // فَعِّل التَوگل تلقائيّاً
+  const toggle = document.getElementById("free-audio-on");
+  if (toggle && !toggle.checked) {
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  toast(`✅ اُعتُمِد التَسجيل (${file.name}) كصَوت تَلاوة`, "success", 2500);
+}
+
+async function saveMicToWorkdir() {
+  if (!S.micBlob || !IS_DESKTOP) return;
+  try {
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const ext = (S.micBlob.type.includes("ogg")) ? "ogg" : "webm";
+    const filename = `recording-${ts}.${ext}`;
+    const ab = await S.micBlob.arrayBuffer();
+    const result = await window.SIRM.workdirSaveBuffer({
+      buffer: ab,
+      filename,
+      subfolderKey: "recordings",
+    });
+    if (result?.ok) {
+      toast(`💾 حُفِظ في: ${result.path.split("/").slice(-2).join("/")}`, "success", 3000);
+    } else {
+      toast(`❌ فَشِل الحفظ: ${result?.error || "خَطأ"}`, "error", 3000);
+    }
+  } catch (e) {
+    toast(`❌ فَشِل الحفظ: ${e.message}`, "error", 3000);
+  }
+}
+
+// v0.13.0 — مَفاتيح المؤثّرات المُتزامِنة بَين mic-fx و free-fx
+const MIC_FX_SYNC_KEYS = [
+  "fx-on", "fx-vol", "fx-reverb-type", "fx-reverb-amt",
+  "fx-echo-amt", "fx-echo-time", "fx-echo-fb",
+  "fx-eq-low", "fx-eq-mid", "fx-eq-high",
+];
+let _micFXSyncBusy = false;
+
+function _copyValue(fromEl, toEl) {
+  if (fromEl.type === "checkbox") toEl.checked = fromEl.checked;
+  else toEl.value = fromEl.value;
+}
+
+function _updateOutputSpan(elId, suffix) {
+  const el = document.getElementById(elId);
+  const out = document.getElementById(elId + "-v");
+  if (el && out) {
+    const v = el.value;
+    out.textContent = (suffix === "type") ? "" : `${v}${suffix}`;
+  }
+}
+
+function setupMicFXMirror() {
+  for (const key of MIC_FX_SYNC_KEYS) {
+    const micEl = document.getElementById(`mic-${key}`);
+    const freeEl = document.getElementById(`free-${key}`);
+    if (!micEl || !freeEl) continue;
+    // sync mic → free
+    const onMicChange = () => {
+      if (_micFXSyncBusy) return;
+      _micFXSyncBusy = true;
+      try {
+        _copyValue(micEl, freeEl);
+        freeEl.dispatchEvent(new Event("input", { bubbles: true }));
+        freeEl.dispatchEvent(new Event("change", { bubbles: true }));
+      } finally { _micFXSyncBusy = false; }
+    };
+    micEl.addEventListener("input", onMicChange);
+    micEl.addEventListener("change", onMicChange);
+    // sync free → mic
+    const onFreeChange = () => {
+      if (_micFXSyncBusy) return;
+      _micFXSyncBusy = true;
+      try {
+        _copyValue(freeEl, micEl);
+        // حدِّث الـoutput span للـmic
+        const micOut = document.getElementById(`mic-${key}-v`);
+        const freeOut = document.getElementById(`free-${key}-v`);
+        if (micOut && freeOut) micOut.textContent = freeOut.textContent;
+        // مَرئيّة mic-fx-ctrl
+        if (key === "fx-on") {
+          const micCtrl = document.getElementById("mic-fx-ctrl");
+          if (micCtrl) micCtrl.style.display = micEl.checked ? "block" : "none";
+        }
+      } finally { _micFXSyncBusy = false; }
+    };
+    freeEl.addEventListener("input", onFreeChange);
+    freeEl.addEventListener("change", onFreeChange);
+    // مَزامنة أوّليّة mic ← free
+    _copyValue(freeEl, micEl);
+  }
+  // مَرئيّة mic-fx-ctrl
+  document.getElementById("mic-fx-on")?.addEventListener("change", (e) => {
+    const ctrl = document.getElementById("mic-fx-ctrl");
+    if (ctrl) ctrl.style.display = e.target.checked ? "block" : "none";
+  });
+  // مَزامنة أوّليّة لمَرئيّة الـctrl
+  const initOn = document.getElementById("mic-fx-on")?.checked;
+  const micCtrlInit = document.getElementById("mic-fx-ctrl");
+  if (micCtrlInit) micCtrlInit.style.display = initOn ? "block" : "none";
+  // مَزامنة أوّليّة لـoutput spans
+  for (const key of MIC_FX_SYNC_KEYS) {
+    const micOut = document.getElementById(`mic-${key}-v`);
+    const freeOut = document.getElementById(`free-${key}-v`);
+    if (micOut && freeOut) micOut.textContent = freeOut.textContent;
+  }
+}
+
+function initMicRecorder() {
+  // اِخفِ القسم إن لم يَتوفّر getUserMedia
+  if (!navigator.mediaDevices?.getUserMedia) {
+    const summary = document.querySelector('[id="mic-on"]')?.closest("details");
+    if (summary) summary.style.display = "none";
+    return;
+  }
+  // اِخفِ زرّ "حِفظ في مجلّد العَمل" في الويب
+  if (!IS_DESKTOP) {
+    const sb = document.getElementById("mic-save-workdir");
+    if (sb) sb.style.display = "none";
+  }
+  const micOn = document.getElementById("mic-on");
+  const micCtrl = document.getElementById("mic-ctrl");
+  micOn?.addEventListener("change", () => {
+    if (micCtrl) micCtrl.style.display = micOn.checked ? "block" : "none";
+    if (!micOn.checked) {
+      if (S.micRecorder && S.micRecorder.state !== "inactive") {
+        try { S.micRecorder.stop(); } catch (_) {}
+      }
+      _stopMicChain();
+    } else {
+      _initMicChain().catch(() => {});
+    }
+  });
+  document.getElementById("mic-monitor-on")?.addEventListener("change", _wireMicMonitor);
+  document.getElementById("mic-monitor-fx")?.addEventListener("change", _wireMicMonitor);
+  document.getElementById("mic-rec-start")?.addEventListener("click", startMicRecording);
+  document.getElementById("mic-rec-pause")?.addEventListener("click", pauseResumeMicRecording);
+  document.getElementById("mic-rec-stop")?.addEventListener("click", stopMicRecording);
+  document.getElementById("mic-redo")?.addEventListener("click", redoMicRecording);
+  document.getElementById("mic-apply")?.addEventListener("click", applyMicRecording);
+  document.getElementById("mic-save-workdir")?.addEventListener("click", saveMicToWorkdir);
+  // v0.13.0 — تَزامُن mic-fx ↔ free-fx
+  setupMicFXMirror();
+}
+
+// ══════════════════════════════════════════════════════
 //  v0.12.6 — اعتراض النَقر على <input type="file"> لفَتح Electron dialog
 //  في مَسار مجلّد العمل المُختصّ حسب نوع المَلفّ.
 //  المَلفّ المُختار يُحوَّل لـFile object ويُسلَّم للـhandler الأصليّ.
@@ -5302,9 +5751,10 @@ function onBgAudio(input) {
   $("bg-audio-info").textContent = `✅ ${file.name} (${(file.size / 1e6).toFixed(1)}MB)`;
   toast("🎵 تم تحميل صوت الخلفية", "success");
 
-  // v0.8.5 — أعِد توزيع مدد الشرائح لتُطابق مدّة الصوت الجديد
-  const tryResync = () => {
-    if (!isFinite(a.duration) || a.duration <= 0.5) return;
+  // v0.8.5 / v0.13.0 — أعِد توزيع مدد الشرائح لتُطابق مدّة الصوت الجديد
+  // WebM/Opus من MediaRecorder تَفتقد duration metadata (duration === Infinity)
+  // الحلّ: حيلة الـseek لإجبار Chromium على فَحص الـcontainer
+  const _doResync = () => {
     if (syncVersesToActiveAudio()) {
       if (typeof renderPerSliceList === "function") renderPerSliceList();
       if (typeof updateAyaInfo === "function") updateAyaInfo();
@@ -5312,7 +5762,21 @@ function onBgAudio(input) {
       toast(`🔄 أُعيد توزيع الشرائح لتُطابق مدّة الصوت (${a.duration.toFixed(1)}s)`, "info", 2500);
     }
   };
-  if (isFinite(a.duration) && a.duration > 0.5) tryResync();
+  const tryResync = () => {
+    if (a.duration === Infinity) {
+      // WebM fix: اذهَب لِنِهاية وَهميّة ثُمَّ ارجع لـ0
+      const fix = () => {
+        a.currentTime = 0;
+        setTimeout(() => { if (isFinite(a.duration) && a.duration > 0.5) _doResync(); }, 50);
+      };
+      a.addEventListener("timeupdate", fix, { once: true });
+      try { a.currentTime = 1e101; } catch (_) { fix(); }
+      return;
+    }
+    if (!isFinite(a.duration) || a.duration <= 0.5) return;
+    _doResync();
+  };
+  if (isFinite(a.duration) && a.duration > 0.5 && a.duration !== Infinity) tryResync();
   else a.addEventListener("loadedmetadata", tryResync, { once: true });
 }
 
@@ -8625,21 +9089,22 @@ function startAutoSave() {
   }
   _autoSaveTimer = setInterval(async () => {
     if (!S.projectDirty) return;
-    let ok = false;
     if (IS_DESKTOP_BUILD && S.projectFilePath) {
-      ok = await saveProjectToPath(S.projectFilePath);
+      // حِفظ حَقيقيّ على القُرص — يَمسَح dirty ضِمن saveProjectToPath
+      const ok = await saveProjectToPath(S.projectFilePath);
       if (ok) toast(`💾 حفظ تلقائيّ — ${new Date().toLocaleTimeString("ar")}`, "info", 1500);
     } else {
-      // الويب أو سطح المكتب بدون مَسار → localStorage
+      // v0.13.0 — لا مَسار حَقيقيّ بَعد → localStorage كـbackup فقط (لا يَمسَح dirty)
+      // المُستخدم يَجب أن يَحفظ يدوياً مَرّة لتَخصيص مَسار، وإلّا يَجب أن يَظهر
+      // تَنبيه "تَغييرات غَير محفوظة" عند الإغلاق.
       try {
         const proj = await serializeProject();
         const json = JSON.stringify(proj);
         if (json.length < 4_500_000) {
           localStorage.setItem("gt_sirm_autosave_blob", json);
-          clearProjectDirty();  // v0.11.3 — مسح dirty بعد الحفظ الناجح
-          ok = true;
-          const where = IS_DESKTOP_BUILD ? "في الذاكرة المحلّيّة" : "في المتصفّح";
-          toast(`💾 حفظ تلقائيّ ${where} — ${new Date().toLocaleTimeString("ar")}`, "info", 1500);
+          // ⚠️ لا نَستدعي clearProjectDirty() هُنا — لم يُحفَظ المَلفّ بَعد على القُرص
+          const where = IS_DESKTOP_BUILD ? "في الذاكرة المحلّيّة (احفظ يدوياً لـ.gtsirm)" : "في المتصفّح";
+          toast(`💾 نَسخة احتياطيّة ${where} — ${new Date().toLocaleTimeString("ar")}`, "info", 1800);
         } else {
           toast(`⚠️ المشروع كبير جدّاً للحفظ في الذاكرة المحلّيّة (${(json.length/1e6).toFixed(1)}MB) — احفظ يدوياً`, "warn", 3000);
         }

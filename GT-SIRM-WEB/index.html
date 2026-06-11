@@ -784,6 +784,99 @@ body.offline .offline-badge{display:block}
           </div>
         </details>
 
+        <!-- ═══ v0.13.0 — 🎙️ تَسجيل الميكروفون ═══ -->
+        <details class="sec">
+          <summary class="sec-t">🎙️ تَسجيل الميكروفون <span class="badge-new">v0.13</span></summary>
+          <div class="note">سَجّل صَوتك مُباشرةً واستَخدِمه كتَلاوة. يَدعم الاستماع المُباشر، مَشاهدة ذَبذبات الصَوت، وتَطبيق المؤثّرات الصوتيّة الموجودة في قسم "الصَوت المُخصّص".</div>
+
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px;margin-top:6px">
+            <span class="tgl">🎙️ تَفعيل قسم التَسجيل<br><small style="color:var(--t3)">يَطلب إذناً للوُصول للميكروفون عند بَدء التَسجيل</small></span>
+            <label class="tg"><input type="checkbox" id="mic-on"><span class="tgs"></span></label>
+          </div>
+
+          <div id="mic-ctrl" style="display:none;margin-top:6px;padding:8px;background:var(--bg2);border:1px dashed var(--b1);border-radius:var(--r)">
+
+            <div class="tgg" style="margin-top:0">
+              <span class="tgl">🎧 الاستماع المُباشر<br><small style="color:var(--t3)">يُمرَّر الميكروفون إلى السمّاعات. <strong style="color:var(--danger)">⚠️ استَخدِم سمّاعات الرَأس</strong> لتَجنّب feedback</small></span>
+              <label class="tg"><input type="checkbox" id="mic-monitor-on"><span class="tgs"></span></label>
+            </div>
+            <div class="tgg">
+              <span class="tgl">🎛️ تَطبيق المؤثّرات على الاستماع المُباشر<br><small style="color:var(--t3)">يُسمَع الصَدى/EQ في الوقت الحقيقيّ (لا يُحفَظ في التَسجيل)</small></span>
+              <label class="tg"><input type="checkbox" id="mic-monitor-fx"><span class="tgs"></span></label>
+            </div>
+
+            <div style="margin-top:8px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r);padding:4px">
+              <canvas id="mic-wave-canvas" width="320" height="48" style="display:block;width:100%;height:48px"></canvas>
+            </div>
+            <div style="height:6px;background:var(--bg1);border-radius:3px;overflow:hidden;margin-top:4px">
+              <div id="mic-level-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#0a5,#fa0,#f00);transition:width 0.08s"></div>
+            </div>
+
+            <div id="mic-pre" style="display:flex;flex-direction:column;gap:5px;margin-top:8px">
+              <button class="btn btn-d bsm" id="mic-rec-start" style="font-weight:700">● بَدء التَسجيل</button>
+              <div style="font-size:10px;color:var(--t3)">سيَطلب المُتصفّح إذناً للوُصول للميكروفون عند الضَغط أوّل مَرّة.</div>
+            </div>
+
+            <div id="mic-during" style="display:none;margin-top:8px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+                <span style="color:var(--danger);font-weight:700;font-size:16px" id="mic-rec-dot">●</span>
+                <span style="font-family:monospace;font-size:15px;font-weight:700" id="mic-rec-time">00:00</span>
+                <button class="btn btn-g bsm" id="mic-rec-pause" style="padding:3px 10px" title="إيقاف مؤقَّت">⏸️</button>
+                <button class="btn btn-p bsm" id="mic-rec-stop" style="flex:1;color:var(--danger);font-weight:700">⏹ إيقاف وحفظ</button>
+              </div>
+            </div>
+
+            <div id="mic-post" style="display:none;margin-top:8px">
+              <audio id="mic-preview" controls style="width:100%;margin-bottom:5px"></audio>
+              <div id="mic-info" style="font-size:10px;color:var(--t3);margin-bottom:5px"></div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap">
+                <button class="btn btn-p bsm" id="mic-apply" style="flex:1;min-width:140px">✅ اعتماد كتَلاوة</button>
+                <button class="btn btn-g bsm" id="mic-download" style="padding:3px 10px" title="تَنزيل المَلفّ">⬇️ تَنزيل</button>
+                <button class="btn btn-g bsm" id="mic-redo" style="padding:3px 10px" title="تَسجيل من جَديد">↻ إعادة</button>
+              </div>
+            </div>
+
+            <!-- v0.13.0 — مؤثّرات صَوتيّة على تَسجيل الميكروفون (تَتزامن مع free-fx) -->
+            <details style="margin-top:8px;background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px">
+              <summary style="cursor:pointer;color:var(--t2);font-size:12px;font-weight:600">🎛️ مؤثّرات صَوتيّة على التَسجيل</summary>
+              <div style="padding:6px 0">
+                <div class="note" style="font-size:10px">تُطبَّق على الـtake النِهائيّ في المعاينة والتَصدير. تَتزامن تلقائيّاً مع المؤثّرات في "🎤 صَوت تَلاوة مُخصّص".</div>
+                <div class="tgg" style="margin-top:6px">
+                  <span class="tgl">تَفعيل المؤثّرات</span>
+                  <label class="tg"><input type="checkbox" id="mic-fx-on"><span class="tgs"></span></label>
+                </div>
+                <div id="mic-fx-ctrl" style="display:none;margin-top:6px">
+                  <div class="fg"><label class="fl">🔊 مستوى الصوت</label><div class="sg"><input type="range" min="0" max="200" step="1" value="100" id="mic-fx-vol"><span class="sv" id="mic-fx-vol-v">100%</span></div></div>
+
+                  <div style="font-size:11px;color:var(--al);font-weight:700;margin:6px 0 4px 0">🌊 الصدى (Reverb)</div>
+                  <div class="fg"><label class="fl">نوع البيئة</label>
+                    <select class="fc" id="mic-fx-reverb-type">
+                      <option value="none">بدون</option>
+                      <option value="room">غرفة صغيرة</option>
+                      <option value="studio">استوديو</option>
+                      <option value="masjid-sm">مسجد صغير</option>
+                      <option value="masjid-lg" selected>مسجد كبير</option>
+                      <option value="hall">قاعة كبيرة</option>
+                    </select>
+                  </div>
+                  <div class="fg"><label class="fl">شدّة الصدى</label><div class="sg"><input type="range" min="0" max="100" step="1" value="30" id="mic-fx-reverb-amt"><span class="sv" id="mic-fx-reverb-amt-v">30%</span></div></div>
+
+                  <div style="font-size:11px;color:var(--al);font-weight:700;margin:8px 0 4px 0">🔁 الإكو (Delay)</div>
+                  <div class="fg"><label class="fl">شدّة الإكو</label><div class="sg"><input type="range" min="0" max="100" step="1" value="0" id="mic-fx-echo-amt"><span class="sv" id="mic-fx-echo-amt-v">0%</span></div></div>
+                  <div class="fg"><label class="fl">وقت التأخير (ms)</label><div class="sg"><input type="range" min="50" max="800" step="10" value="250" id="mic-fx-echo-time"><span class="sv" id="mic-fx-echo-time-v">250ms</span></div></div>
+                  <div class="fg"><label class="fl">التغذية الراجعة</label><div class="sg"><input type="range" min="0" max="80" step="1" value="30" id="mic-fx-echo-fb"><span class="sv" id="mic-fx-echo-fb-v">30%</span></div></div>
+
+                  <div style="font-size:11px;color:var(--al);font-weight:700;margin:8px 0 4px 0">🎚️ التسوية الصوتيّة (EQ)</div>
+                  <div class="fg"><label class="fl">الجِير (Bass)</label><div class="sg"><input type="range" min="-12" max="12" step="1" value="0" id="mic-fx-eq-low"><span class="sv" id="mic-fx-eq-low-v">0dB</span></div></div>
+                  <div class="fg"><label class="fl">الوسط (Mid)</label><div class="sg"><input type="range" min="-12" max="12" step="1" value="0" id="mic-fx-eq-mid"><span class="sv" id="mic-fx-eq-mid-v">0dB</span></div></div>
+                  <div class="fg"><label class="fl">الحادّ (Treble)</label><div class="sg"><input type="range" min="-12" max="12" step="1" value="0" id="mic-fx-eq-high"><span class="sv" id="mic-fx-eq-high-v">0dB</span></div></div>
+                </div>
+              </div>
+            </details>
+
+          </div>
+        </details>
+
         <!-- ═══ v0.8.4 — قسم التوقيت التفصيلي (قبل النصّ الحرّ) ═══ -->
         <details class="sec">
           <summary class="sec-t">⏱️ توقيت تفصيليّ لكلّ شريحة <span class="badge-new">v0.8.4</span></summary>
@@ -1537,7 +1630,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.12.12</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.13.0</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>
