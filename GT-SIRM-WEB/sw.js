@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v57 — إصدار v0.13.0 (تَسجيل الميكروفون + FX + تَجميد لكلّ شَريحة + إصلاح autosave dirty)
+// GT-SIRM Service Worker v58 — إصدار v0.13.1 (TTS تَجريبيّ + Google/eSpeak/Custom API + ⭐ وَحدات + بَدء على الإعدادات + تَرتيب fx)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v57";
+const CACHE_VER = "gt-sirm-v58";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

@@ -47,6 +47,11 @@ contextBridge.exposeInMainWorld("SIRM", {
   workdirMove:       (opts)  => ipcRenderer.invoke("workdir-move", opts),
   workdirImportFile: (opts)  => ipcRenderer.invoke("workdir-import-file", opts),
   workdirSaveBuffer: (opts)  => ipcRenderer.invoke("workdir-save-buffer", opts),
+  edgeTtsSynth:      (opts)  => ipcRenderer.invoke("edge-tts-synth", opts),
+  googleTtsSynth:    (opts)  => ipcRenderer.invoke("google-tts-synth", opts),
+  espeakTtsSynth:    (opts)  => ipcRenderer.invoke("espeak-tts-synth", opts),
+  espeakAvailable:   ()      => ipcRenderer.invoke("espeak-available"),
+  customTtsSynth:    (opts)  => ipcRenderer.invoke("custom-tts-synth", opts),
   workdirOpen:       ()      => ipcRenderer.invoke("workdir-open"),
 
   // ── تحميل مباشر (wget / aria2c) ─────────────────────

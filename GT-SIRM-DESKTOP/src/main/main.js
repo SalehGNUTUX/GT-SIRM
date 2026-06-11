@@ -343,6 +343,349 @@ ipcMain.handle("workdir-move", async (_e, opts) => {
 });
 
 // IPC: نَسخ ملفّ خارجيّ إلى المجلّد الفرعيّ المناسب من مجلّد العمل
+// v0.13.1 — Edge TTS عَبر WebSocket مع Sec-MS-GEC headers (مَطلوبة منذ 2024)
+const TTS_TRUSTED_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
+const TTS_GEC_VERSION = "1-130.0.2849.68";
+const TTS_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0";
+
+function _computeSecMsGec() {
+  // مُطابَقة Python edge-tts بالضَبط (بـfloat):
+  // ticks = time.time() * 1e7 + 11644473600 * 1e7
+  // rounded = ticks - (ticks % (5 * 60 * 1e7))
+  // hash = SHA256(f"{int(rounded)}{TRUSTED_TOKEN}")
+  const ticks = (Date.now() / 1000) * 1e7 + 11644473600 * 1e7;
+  const fiveMin = 5 * 60 * 1e7;
+  const rounded = ticks - (ticks % fiveMin);
+  // tofixed(0) لتَجنّب الـscientific notation
+  const clockStr = rounded.toFixed(0);
+  const input = clockStr + TTS_TRUSTED_TOKEN;
+  return require("crypto").createHash("sha256").update(input).digest("hex").toUpperCase();
+}
+
+function _ttsExtractAudio(buf) {
+  // أوّل 2 بايت = حجم header (big-endian)
+  const headerLen = buf.readUInt16BE(0);
+  return buf.slice(2 + headerLen);
+}
+
+ipcMain.handle("edge-tts-synth", async (event, opts) => {
+  const { text, voice, rate, pitch, pauseMs } = opts || {};
+  if (!text) return { ok: false, error: "نَصّ فارغ" };
+  let WebSocketLib;
+  try { WebSocketLib = require("ws"); }
+  catch (e) { return { ok: false, error: "مَكتبة ws غَير مُتاحة" }; }
+
+  const gec = _computeSecMsGec();
+  const url = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TTS_TRUSTED_TOKEN}&Sec-MS-GEC=${gec}&Sec-MS-GEC-Version=${TTS_GEC_VERSION}`;
+
+  return new Promise((resolve) => {
+    let ws;
+    try {
+      ws = new WebSocketLib(url, {
+        headers: {
+          "Pragma": "no-cache",
+          "Cache-Control": "no-cache",
+          "Origin": "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
+          "Accept-Encoding": "gzip, deflate, br",
+          "Accept-Language": "en-US,en;q=0.9",
+          "User-Agent": TTS_USER_AGENT,
+          "Sec-MS-GEC": gec,
+          "Sec-MS-GEC-Version": TTS_GEC_VERSION,
+        },
+      });
+    } catch (e) { resolve({ ok: false, error: String(e.message) }); return; }
+
+    const chunks = [];
+    let resolved = false;
+    const timer = setTimeout(() => {
+      if (resolved) return; resolved = true;
+      try { ws.close(); } catch (_) {}
+      resolve({ ok: false, error: "انتَهَت المُهلة" });
+    }, 45000);
+
+    const escape = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+    let body = escape(text);
+    if (pauseMs > 0) {
+      body = body.split(/(?<=[.!?؟،]+)\s+/g).filter(Boolean).map(s => s.trim()).join(`<break time="${pauseMs}ms"/>`);
+    }
+    const rateStr = (rate >= 0 ? "+" : "") + rate + "%";
+    const pitchStr = (pitch >= 0 ? "+" : "") + pitch + "%";
+    const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="ar-SA"><voice name="${voice}"><prosody rate="${rateStr}" pitch="${pitchStr}">${body}</prosody></voice></speak>`;
+
+    ws.on("open", () => {
+      const now = new Date().toISOString();
+      const configMsg = `X-Timestamp:${now}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n` +
+        JSON.stringify({ context: { synthesis: { audio: {
+          metadataoptions: { sentenceBoundaryEnabled: false, wordBoundaryEnabled: false },
+          outputFormat: "audio-24khz-48kbitrate-mono-mp3",
+        } } } });
+      ws.send(configMsg);
+      const reqId = require("crypto").randomUUID().replace(/-/g, "");
+      const ssmlMsg = `X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${now}\r\nPath:ssml\r\n\r\n${ssml}`;
+      ws.send(ssmlMsg);
+    });
+    ws.on("message", (data, isBinary) => {
+      if (isBinary) {
+        try {
+          const audio = _ttsExtractAudio(data);
+          chunks.push(audio);
+        } catch (e) { console.warn("[edge-tts] parse:", e); }
+      } else {
+        const txt = data.toString();
+        if (txt.includes("Path:turn.end")) {
+          if (resolved) return; resolved = true;
+          clearTimeout(timer);
+          try { ws.close(); } catch (_) {}
+          if (chunks.length) {
+            const buf = Buffer.concat(chunks);
+            resolve({ ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) });
+          } else {
+            resolve({ ok: false, error: "لم يَتمّ استلام بيانات صَوتيّة" });
+          }
+        }
+      }
+    });
+    ws.on("error", (err) => {
+      if (resolved) return; resolved = true;
+      clearTimeout(timer);
+      resolve({ ok: false, error: String(err.message || err) });
+    });
+    ws.on("close", () => {
+      if (resolved) return; resolved = true;
+      clearTimeout(timer);
+      if (chunks.length) {
+        const buf = Buffer.concat(chunks);
+        resolve({ ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) });
+      } else {
+        resolve({ ok: false, error: "اِنقَطَع الاتّصال بدون بيانات" });
+      }
+    });
+  });
+});
+
+// v0.13.1+ — Google Translate TTS (مَوثوق، مَجّانيّ، يَدعم العَربيّة)
+// حدّ ~200 حرف لكلّ طَلب — نُقسّم النَصّ على حدود الجُمَل
+function _splitForGoogle(text, maxLen = 200) {
+  if (text.length <= maxLen) return [text];
+  const parts = [];
+  const sentences = text.split(/(?<=[.!?؟،\n]+)\s+/);
+  let cur = "";
+  for (const s of sentences) {
+    if ((cur + " " + s).trim().length <= maxLen) cur = (cur + " " + s).trim();
+    else {
+      if (cur) parts.push(cur);
+      if (s.length > maxLen) {
+        const words = s.split(/\s+/); cur = "";
+        for (const w of words) {
+          if ((cur + " " + w).trim().length <= maxLen) cur = (cur + " " + w).trim();
+          else { if (cur) parts.push(cur); cur = w; }
+        }
+      } else cur = s;
+    }
+  }
+  if (cur) parts.push(cur);
+  return parts;
+}
+
+// تَحويل MP3 إلى صَوت ذَكوريّ عَبر pitch shift بـffmpeg
+// (Google TTS له صَوت أنثَوي فقط — نَخفض الـpitch بنِسبة 0.85 لإضافة صَوت ذَكوريّ)
+async function _applyMaleVoicePitch(mp3Buffer) {
+  const ffmpegPath = require("path").join(__dirname, "../../resources/bin/ffmpeg");
+  const fs = require("fs"), os = require("os"), path = require("path");
+  const realFfmpeg = fs.existsSync(ffmpegPath) ? ffmpegPath : "ffmpeg";
+  const tmpIn = path.join(os.tmpdir(), `tts-in-${Date.now()}.mp3`);
+  const tmpOut = path.join(os.tmpdir(), `tts-out-${Date.now()}.mp3`);
+  fs.writeFileSync(tmpIn, Buffer.from(mp3Buffer));
+  return new Promise((resolve, reject) => {
+    const { spawn } = require("child_process");
+    // asetrate يُخفض pitch + atempo يُعيد المدّة الأَصليّة
+    const proc = spawn(realFfmpeg, [
+      "-y", "-i", tmpIn,
+      "-af", "asetrate=24000*0.85,aresample=24000,atempo=1.0/0.85",
+      "-codec:a", "libmp3lame", "-qscale:a", "5",
+      tmpOut,
+    ]);
+    let stderr = "";
+    proc.stderr.on("data", d => stderr += d.toString());
+    proc.on("close", (code) => {
+      try { fs.unlinkSync(tmpIn); } catch (_) {}
+      if (code !== 0) {
+        try { fs.unlinkSync(tmpOut); } catch (_) {}
+        reject(new Error(`ffmpeg pitch shift فَشل (${code})`));
+        return;
+      }
+      try {
+        const buf = fs.readFileSync(tmpOut);
+        fs.unlinkSync(tmpOut);
+        resolve(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+      } catch (e) { reject(e); }
+    });
+    proc.on("error", reject);
+  });
+}
+
+ipcMain.handle("google-tts-synth", async (_e, opts) => {
+  const { text, gender } = opts || {};
+  if (!text) return { ok: false, error: "نَصّ فارغ" };
+  const https = require("https");
+  const parts = _splitForGoogle(text, 200);
+  const buffers = [];
+  try {
+    for (let i = 0; i < parts.length; i++) {
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(parts[i])}&tl=ar&client=tw-ob&ttsspeed=1`;
+      const data = await new Promise((resolve, reject) => {
+        const req = https.get(url, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "ar,en;q=0.5",
+            "Referer": "https://translate.google.com/",
+          },
+          timeout: 15000,
+        }, (res) => {
+          if (res.statusCode !== 200) {
+            res.resume();
+            reject(new Error(`HTTP ${res.statusCode}`));
+            return;
+          }
+          const chunks = [];
+          res.on("data", c => chunks.push(c));
+          res.on("end", () => resolve(Buffer.concat(chunks)));
+          res.on("error", reject);
+        });
+        req.on("error", reject);
+        req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
+      });
+      buffers.push(data);
+    }
+    let combined = Buffer.concat(buffers);
+    let resultBuffer = combined.buffer.slice(combined.byteOffset, combined.byteOffset + combined.byteLength);
+    // تَحويل لصَوت ذَكوريّ إن طُلِب
+    if (gender === "male") {
+      try { resultBuffer = await _applyMaleVoicePitch(resultBuffer); }
+      catch (e) { console.warn("[google-tts] male pitch failed:", e.message); }
+    }
+    return { ok: true, buffer: resultBuffer, partCount: parts.length };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+// ── eSpeak-NG (مَفتوح المَصدر، مَحلّيّ، روبوتيّ لكن مَوثوق) ──
+let _ESPEAK_PATH = null, _ESPEAK_CHECKED = false;
+function _detectEspeak() {
+  if (_ESPEAK_CHECKED) return _ESPEAK_PATH;
+  _ESPEAK_CHECKED = true;
+  const fs = require("fs");
+  for (const p of ["/usr/bin/espeak-ng", "/usr/local/bin/espeak-ng", "/usr/bin/espeak", "/usr/local/bin/espeak"]) {
+    try { if (fs.existsSync(p)) { _ESPEAK_PATH = p; return p; } } catch (_) {}
+  }
+  try {
+    const out = require("child_process").execSync("which espeak-ng 2>/dev/null || which espeak 2>/dev/null", { encoding: "utf8" }).trim();
+    if (out) { _ESPEAK_PATH = out; return out; }
+  } catch (_) {}
+  return null;
+}
+
+ipcMain.handle("espeak-tts-synth", async (_e, opts) => {
+  const { text, gender } = opts || {};
+  if (!text) return { ok: false, error: "نَصّ فارغ" };
+  const espeakPath = _detectEspeak();
+  if (!espeakPath) return { ok: false, error: "eSpeak-NG غَير مُثبَّت — ثَبِّته من apt/dnf: sudo apt install espeak-ng" };
+  const fs = require("fs"), os = require("os"), path = require("path");
+  const tmpWav = path.join(os.tmpdir(), `espeak-${Date.now()}.wav`);
+  const tmpMp3 = path.join(os.tmpdir(), `espeak-${Date.now()}.mp3`);
+  return new Promise((resolve) => {
+    const { spawn } = require("child_process");
+    // -v ar = صَوت عَربيّ، -s سُرعة، -p نَبرة (0-99)
+    const pitch = gender === "male" ? "30" : "60";
+    const args = ["-v", "ar", "-s", "140", "-p", pitch, "-w", tmpWav, text];
+    const proc = spawn(espeakPath, args);
+    let stderr = "";
+    proc.stderr.on("data", d => stderr += d.toString());
+    proc.on("close", async (code) => {
+      if (code !== 0) {
+        resolve({ ok: false, error: `eSpeak فَشل (${code}): ${stderr}` });
+        return;
+      }
+      try {
+        // حَوِّل WAV لـMP3 بـffmpeg
+        const ffmpegPath = path.join(__dirname, "../../resources/bin/ffmpeg");
+        const realFfmpeg = fs.existsSync(ffmpegPath) ? ffmpegPath : "ffmpeg";
+        const ffproc = spawn(realFfmpeg, ["-y", "-i", tmpWav, "-codec:a", "libmp3lame", "-qscale:a", "5", tmpMp3]);
+        ffproc.on("close", (fcode) => {
+          try { fs.unlinkSync(tmpWav); } catch (_) {}
+          if (fcode !== 0) { resolve({ ok: false, error: "ffmpeg تَحويل MP3 فَشل" }); return; }
+          try {
+            const buf = fs.readFileSync(tmpMp3);
+            fs.unlinkSync(tmpMp3);
+            resolve({ ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) });
+          } catch (e) { resolve({ ok: false, error: String(e.message) }); }
+        });
+        ffproc.on("error", (e) => resolve({ ok: false, error: String(e.message) }));
+      } catch (e) { resolve({ ok: false, error: String(e.message) }); }
+    });
+    proc.on("error", (e) => resolve({ ok: false, error: String(e.message) }));
+  });
+});
+
+ipcMain.handle("espeak-available", async () => {
+  return { available: !!_detectEspeak() };
+});
+
+// ── API مُخصّص يُعرّفه المُستخدم في الإعدادات ──
+ipcMain.handle("custom-tts-synth", async (_e, opts) => {
+  const { text, urlTemplate, method = "GET", bodyTemplate, headersJSON } = opts || {};
+  if (!text || !urlTemplate) return { ok: false, error: "نَصّ أو URL غَير مَوجود" };
+  let url = urlTemplate.replace(/\{text\}/g, encodeURIComponent(text));
+  let body = null;
+  if (method === "POST" && bodyTemplate) {
+    body = bodyTemplate.replace(/\{text\}/g, text);
+  }
+  let headers = { "User-Agent": "GT-SIRM/0.13.1" };
+  if (headersJSON) {
+    try { Object.assign(headers, JSON.parse(headersJSON)); }
+    catch (_) {}
+  }
+  try {
+    const url2 = new URL(url);
+    const lib = url2.protocol === "http:" ? require("http") : require("https");
+    return await new Promise((resolve) => {
+      const reqOpts = {
+        method, headers,
+        host: url2.hostname,
+        port: url2.port || (url2.protocol === "http:" ? 80 : 443),
+        path: url2.pathname + url2.search,
+        timeout: 30000,
+      };
+      if (method === "POST" && body) {
+        headers["Content-Length"] = Buffer.byteLength(body);
+        if (!headers["Content-Type"]) headers["Content-Type"] = "application/json";
+      }
+      const req = lib.request(reqOpts, (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          resolve({ ok: false, error: `HTTP ${res.statusCode}` });
+          return;
+        }
+        const chunks = [];
+        res.on("data", c => chunks.push(c));
+        res.on("end", () => {
+          const buf = Buffer.concat(chunks);
+          resolve({ ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) });
+        });
+        res.on("error", e => resolve({ ok: false, error: String(e.message) }));
+      });
+      req.on("error", e => resolve({ ok: false, error: String(e.message) }));
+      req.on("timeout", () => { req.destroy(); resolve({ ok: false, error: "timeout" }); });
+      if (body) req.write(body);
+      req.end();
+    });
+  } catch (e) {
+    return { ok: false, error: String(e.message) };
+  }
+});
+
 // v0.13.0 — حِفظ buffer مُباشَر في مجلّد عَمل فَرعيّ (تَسجيلات الميكروفون)
 ipcMain.handle("workdir-save-buffer", async (_e, opts) => {
   const { buffer, filename, subfolderKey } = opts || {};

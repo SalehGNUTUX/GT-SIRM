@@ -183,6 +183,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initHikamModule();     // v0.10.0 — وحدة الحِكَم والمواعظ
   initAudioFXControls(); // v0.11.0 — محرّك المؤثّرات الصوتيّة
   initMicRecorder();     // v0.13.0 — تَسجيل الميكروفون
+  initTTS();             // v0.13.1 — Edge TTS
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
   restoreAllSettings();
   restoreLogo();
@@ -741,7 +742,10 @@ function restartFreeText() {
 
 // ↺ زرّ "إعادة من البداية" في المشغّل — يُعيد كلّ شيء (نصّ + صوت + خلفية)
 function restartAll() {
-  if (!S.verses || !S.verses.length) {
+  // v0.13.1 — اِسمَح بالإعادة لمُجرَّد الصَوت بدون آيات
+  const hasCustomAudio = ge("free-audio-on") && S.bgAudioEl;
+  const recvidActive = ge("recvid-on") && S.recVidEl;
+  if (!S.verses.length && !hasCustomAudio && !recvidActive) {
     toast?.("⚠️ لا توجد آيات/شرائح للتشغيل", "warn", 1500);
     return;
   }
@@ -4795,6 +4799,221 @@ function initMicRecorder() {
   setupMicFXMirror();
 }
 
+// ══════════════════════════════════════════════════════
+//  v0.13.1 — TTS مُتعدّد المَصادر (StreamElements أساس + Web Speech احتياط)
+//  Edge TTS غَير مُتاح في الويب (يَحتاج headers مَخصّصة).
+// ══════════════════════════════════════════════════════
+const TTS_MAX_TEXT_LEN = 5000;
+
+S.ttsBlob = null;
+S.ttsGenerating = false;
+S.ttsAbortRef = { cancelled: false };
+
+async function _ttsGenerateBrowser(text, onProgress) {
+  if (!("speechSynthesis" in window)) throw new Error("المُتصفّح لا يَدعم Web Speech");
+  let voices = speechSynthesis.getVoices();
+  if (!voices.length) {
+    await new Promise(r => {
+      const t = setTimeout(r, 1500);
+      speechSynthesis.onvoiceschanged = () => { clearTimeout(t); r(); };
+    });
+    voices = speechSynthesis.getVoices();
+  }
+  const arVoices = voices.filter(v => v.lang.startsWith("ar"));
+  if (!arVoices.length) throw new Error("لا تَوجد أَصوات عَربيّة مُثبَّتة");
+  onProgress?.("🔊 Web Speech: يُسمَع فقط (المُتصفّح لا يَدعم تَصدير الصَوت)");
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.voice = arVoices[0];
+  utt.lang = arVoices[0].lang;
+  return new Promise((resolve, reject) => {
+    utt.onend = () => reject(new Error("Web Speech لا يَدعم تَصدير الصَوت — استَخدِم نُسخة سَطح المكتب لاستخدام Google/Edge TTS"));
+    utt.onerror = (e) => reject(new Error(`Web Speech: ${e.error}`));
+    speechSynthesis.speak(utt);
+  });
+}
+
+async function generateTTS(text, voice, rate, pitch, pauseMs, engine, onProgress) {
+  if (!text || !text.trim()) throw new Error("لا يوجد نَصّ");
+  if (text.length > TTS_MAX_TEXT_LEN) {
+    throw new Error(`النَصّ طَويل جدّاً (${text.length} حرف، الحدّ ${TTS_MAX_TEXT_LEN})`);
+  }
+  S.ttsAbortRef = { cancelled: false };
+  // الويب لا يَستطيع الوُصول لـGoogle/Edge بسَبب CORS
+  if (engine !== "auto" && engine !== "browser") {
+    throw new Error(`المَصدر "${engine}" غَير مُتاح في الويب — استَخدِم نُسخة سَطح المكتب`);
+  }
+  try {
+    return await _ttsGenerateBrowser(text, onProgress);
+  } catch (e) {
+    throw new Error(`browser: ${e.message}`);
+  }
+}
+
+function _ttsGetSourceText() {
+  const src = document.getElementById("tts-source")?.value;
+  if (src === "custom") return (document.getElementById("tts-custom-text")?.value || "").trim();
+  if (src === "freetext") return (document.getElementById("free-text-area")?.value || "").trim();
+  if (Array.isArray(S.verses) && S.verses.length && S.verses.every(v => v && (v.free || v.hadith))) {
+    return S.verses.map(v => v.text || "").filter(Boolean).join("\n");
+  }
+  return (document.getElementById("free-text-area")?.value || "").trim();
+}
+
+function _ttsUpdateSourcePreview() {
+  const text = _ttsGetSourceText();
+  const prev = document.getElementById("tts-source-preview");
+  if (!prev) return;
+  if (!text) { prev.textContent = "— لا يوجد نَصّ —"; return; }
+  prev.textContent = text.length > 200 ? text.slice(0, 200) + "..." : text;
+}
+
+async function startTTSGeneration() {
+  if (S.ttsGenerating) return;
+  const text = _ttsGetSourceText();
+  if (!text) { toast("⚠️ لا يوجد نَصّ للتَوليد", "warn", 2000); return; }
+  const voice = document.getElementById("tts-voice")?.value || "ar-SA-HamedNeural";
+  const rate = parseInt(document.getElementById("tts-rate")?.value || 0);
+  const pitch = parseInt(document.getElementById("tts-pitch")?.value || 0);
+  const pauseMs = parseInt(document.getElementById("tts-pause")?.value || 300);
+  const engine = document.getElementById("tts-engine")?.value || "auto";
+
+  S.ttsGenerating = true;
+  document.getElementById("tts-pre").style.display = "none";
+  document.getElementById("tts-during").style.display = "block";
+  document.getElementById("tts-post").style.display = "none";
+  document.getElementById("tts-progress").textContent = "📡 جارٍ الاتّصال...";
+  document.getElementById("tts-progress-bar").style.width = "10%";
+
+  try {
+    const blob = await generateTTS(text, voice, rate, pitch, pauseMs, engine, (msg, received) => {
+      const el = document.getElementById("tts-progress");
+      if (el) el.textContent = msg;
+      const bar = document.getElementById("tts-progress-bar");
+      if (bar && received) {
+        const pct = Math.min(90, 10 + (received / 1024) * 0.5);
+        bar.style.width = pct + "%";
+      }
+    });
+    if (S.ttsAbortRef.cancelled) {
+      document.getElementById("tts-during").style.display = "none";
+      document.getElementById("tts-pre").style.display = "block";
+      S.ttsGenerating = false;
+      return;
+    }
+    S.ttsBlob = blob;
+    const url = URL.createObjectURL(blob);
+    document.getElementById("tts-preview").src = url;
+    const sizeKB = (blob.size / 1024).toFixed(1);
+    document.getElementById("tts-info").textContent = `📊 الحجم: ${sizeKB} KB · ${text.length} حرف · صَوت: ${voice.replace("Neural", "")}`;
+    document.getElementById("tts-during").style.display = "none";
+    document.getElementById("tts-post").style.display = "block";
+    toast(`✅ تَمَّ توليد القِراءة (${sizeKB} KB)`, "success", 2500);
+  } catch (e) {
+    document.getElementById("tts-during").style.display = "none";
+    document.getElementById("tts-pre").style.display = "block";
+    toast(`❌ فَشِل التَوليد: ${e.message}`, "error", 4000);
+    console.warn("[tts] generate error:", e);
+  } finally {
+    S.ttsGenerating = false;
+  }
+}
+
+function cancelTTSGeneration() {
+  S.ttsAbortRef.cancelled = true;
+  toast("✕ إلغاء التَوليد", "info", 1500);
+}
+
+function redoTTS() {
+  if (S.ttsBlob) {
+    const audio = document.getElementById("tts-preview");
+    if (audio && audio.src) { try { URL.revokeObjectURL(audio.src); } catch (_) {} audio.src = ""; }
+    S.ttsBlob = null;
+  }
+  document.getElementById("tts-post").style.display = "none";
+  document.getElementById("tts-during").style.display = "none";
+  document.getElementById("tts-pre").style.display = "block";
+}
+
+function applyTTSAsRecitation() {
+  if (!S.ttsBlob) return;
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const file = new File([S.ttsBlob], `tts-${ts}.mp3`, { type: "audio/mpeg" });
+  const fauInput = document.getElementById("free-audio-file");
+  if (!fauInput) { toast("❌ مَيدان الصَوت المُخصّص غَير موجود", "error", 2500); return; }
+  try {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    fauInput.files = dt.files;
+    fauInput.dispatchEvent(new Event("change", { bubbles: true }));
+  } catch (e) {
+    if (typeof onFreeAudio === "function") onFreeAudio({ files: [file] });
+  }
+  const toggle = document.getElementById("free-audio-on");
+  if (toggle && !toggle.checked) {
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  toast(`✅ اُعتُمِد التَوليد (${file.name}) كصَوت قِراءة`, "success", 2500);
+}
+
+function downloadTTS() {
+  if (!S.ttsBlob) return;
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const url = URL.createObjectURL(S.ttsBlob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `tts-${ts}.mp3`;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+
+function _ttsUpdateEngineStatus() {
+  const el = document.getElementById("tts-engine-status");
+  const engine = document.getElementById("tts-engine")?.value || "auto";
+  if (!el) return;
+  const messages = {
+    auto: "🤖 الويب: Web Speech فقط (يُسمَع، لا يُصدِّر). للتَصدير: استَخدِم نُسخة سَطح المكتب",
+    google: "⚠️ غَير مُتاح في الويب — يَحتاج سَطح المكتب",
+    edge: "⚠️ غَير مُتاح في الويب — يَحتاج سَطح المكتب",
+    browser: "🔊 يُسمَع فقط — لا يَدعم تَصدير صَوت",
+  };
+  el.textContent = messages[engine] || "";
+}
+
+function initTTS() {
+  const ttsOn = document.getElementById("tts-on");
+  const ttsCtrl = document.getElementById("tts-ctrl");
+  ttsOn?.addEventListener("change", () => {
+    if (ttsCtrl) ttsCtrl.style.display = ttsOn.checked ? "block" : "none";
+    if (ttsOn.checked) { _ttsUpdateSourcePreview(); _ttsUpdateEngineStatus(); }
+  });
+  document.getElementById("tts-engine")?.addEventListener("change", _ttsUpdateEngineStatus);
+  _ttsUpdateEngineStatus();
+  const srcSel = document.getElementById("tts-source");
+  const customTA = document.getElementById("tts-custom-text");
+  srcSel?.addEventListener("change", () => {
+    if (customTA) customTA.style.display = srcSel.value === "custom" ? "block" : "none";
+    _ttsUpdateSourcePreview();
+  });
+  customTA?.addEventListener("input", _ttsUpdateSourcePreview);
+  ["tts-rate", "tts-pitch", "tts-pause"].forEach(id => {
+    const el = document.getElementById(id);
+    const out = document.getElementById(id + "-v");
+    if (!el || !out) return;
+    const suffix = id === "tts-pause" ? "ms" : "%";
+    const update = () => {
+      const v = el.value;
+      out.textContent = (v >= 0 && id !== "tts-pause" ? "+" : "") + v + suffix;
+    };
+    el.addEventListener("input", update);
+    update();
+  });
+  document.getElementById("tts-generate")?.addEventListener("click", startTTSGeneration);
+  document.getElementById("tts-cancel")?.addEventListener("click", cancelTTSGeneration);
+  document.getElementById("tts-apply")?.addEventListener("click", applyTTSAsRecitation);
+  document.getElementById("tts-download")?.addEventListener("click", downloadTTS);
+  document.getElementById("tts-redo")?.addEventListener("click", redoTTS);
+}
+
 function onBgAudio(input) {
   const file = input.files[0];
   if (!file) return;
@@ -5108,7 +5327,12 @@ function togglePlay() {
 
 function startPlayer() {
   const recvidActive = ge("recvid-on") && S.recVidEl;
-  if (!recvidActive && !S.verses.length) { toast("⚠️ لا توجد آيات مُحمَّلة", "error"); return; }
+  // v0.13.1 — السَماح بالتَشغيل لمُجرَّد ضَبط المؤثّرات إن وُجد صَوت مُخصّص بدون آيات
+  const hasCustomAudio = ge("free-audio-on") && S.bgAudioEl;
+  if (!recvidActive && !S.verses.length && !hasCustomAudio) {
+    toast("⚠️ لا توجد آيات مُحمَّلة", "error");
+    return;
+  }
   S.playing = true;
   $("btn-play").textContent = "⏸️";
   resumeAudioCtx().catch(console.warn);
@@ -5117,7 +5341,8 @@ function startPlayer() {
   else if (S.bgAudioEl && recvidActive) { try { S.bgAudioEl.pause(); } catch (_) {} }
   if (S.bgVid) { try { S.bgVid.play().catch(() => {}); } catch (_) {} }
   if (recvidActive) { try { S.recVidEl.play().catch(() => {}); } catch (_) {} }
-  else playRecitationAudio();
+  else if (S.verses.length) playRecitationAudio();
+  // إن لم تَكن آيات → الـbgAudioEl يَكفي للتَشغيل + ضَبط المؤثّرات
 }
 
 function pausePlayer() {

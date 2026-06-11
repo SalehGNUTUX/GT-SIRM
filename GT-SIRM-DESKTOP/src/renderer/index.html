@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: file:; media-src 'self' blob: https: file:; connect-src 'self' blob: data: https://api.alquran.cloud https://everyayah.com https://fonts.googleapis.com https://fonts.gstatic.com;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: file:; media-src 'self' blob: https: file:; connect-src 'self' blob: data: https://api.alquran.cloud https://everyayah.com https://fonts.googleapis.com https://fonts.gstatic.com wss://speech.platform.bing.com https://api.streamelements.com;">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
 <meta name="description" content="GT-SIRM — GnuTux Short Islamic Reels Maker — صانع ريلز إسلاميّة احترافيّة">
 <meta name="application-name" content="GT-SIRM">
@@ -533,13 +533,13 @@ body.offline .offline-badge{display:block}
   <div id="panel">
     <div id="panel-handle"></div>
     <div class="tabs">
-      <button class="tab-btn on" data-tab="rec"><span class="ti">📖</span><span>التلاوة</span></button>
+      <button class="tab-btn" data-tab="rec"><span class="ti">📖</span><span>التلاوة</span></button>
       <button class="tab-btn" data-tab="scene"><span class="ti">🎬</span><span>المشهد</span></button>
       <button class="tab-btn" data-tab="txt"><span class="ti">✍️</span><span>النصوص</span></button>
       <button class="tab-btn" data-tab="mix"><span class="ti">🎵</span><span>المزج</span></button>
       <button class="tab-btn" data-tab="fx"><span class="ti">⚡</span><span>التأثيرات</span></button>
       <button class="tab-btn" data-tab="tpl"><span class="ti">📂</span><span>القوالب</span></button>
-      <button class="tab-btn" data-tab="settings"><span class="ti">⚙️</span><span>إعدادات</span></button>
+      <button class="tab-btn on" data-tab="settings"><span class="ti">⚙️</span><span>إعدادات</span></button>
       <button class="tab-btn" data-tab="about"><span class="ti">ℹ️</span><span>حول</span></button>
       <button class="tab-btn desktop-only" data-tab="batch" data-module="quran"><span class="ti">📦</span><span>دفعي</span></button>
     </div>
@@ -547,7 +547,7 @@ body.offline .offline-badge{display:block}
     <div class="tc">
 
       <!-- RECITATION -->
-      <div class="tp on" id="tab-rec">
+      <div class="tp" id="tab-rec">
 
 
         <!-- ═══ ✍️ النصّ الحرّ — قسم أداة مرئيّ دائماً (v0.8.16) ═══ -->
@@ -1012,6 +1012,138 @@ body.offline .offline-badge{display:block}
                 </div>
               </div>
             </details>
+
+          </div>
+        </details>
+
+        <!-- ═══ v0.13.1 — 🤖 توليد القِراءة من النصّ (TTS — لِنُصوص الحَديث والذِكر والدعاء فقط) ═══ -->
+        <details class="sec">
+          <summary class="sec-t">🤖 توليد القِراءة من النصّ (TTS) <span class="badge-new" style="background:var(--danger);color:#fff">تَجريبيّة</span></summary>
+          <div class="note" style="background:rgba(220,80,80,0.08);border:1px solid var(--danger);padding:8px;border-radius:var(--r);color:var(--t1)"><strong style="color:var(--danger)">⚠️ مَخصَّصة لقِراءة:</strong> الحَديث الشَريف، الأذكار، الأدعية، الحِكَم، والنُصوص الحُرّة فقط. <strong style="color:var(--danger)">لا تَستعمل أبداً لتَلاوة القرآن الكَريم</strong> — التَلاوة عبادة لها أَحكام تَجويد، استَخدِم القُرّاء الحَقيقيّين من قسم القرآن.</div>
+
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px;margin-top:6px">
+            <span class="tgl">🤖 تَفعيل قسم توليد القِراءة<br><small style="color:var(--t3)">يَحتاج اتّصالاً بالإنترنت لإتمام التَوليد</small></span>
+            <label class="tg"><input type="checkbox" id="tts-on"><span class="tgs"></span></label>
+          </div>
+
+          <div id="tts-ctrl" style="display:none;margin-top:6px;padding:8px;background:var(--bg2);border:1px dashed var(--b1);border-radius:var(--r)">
+
+            <!-- v0.13.1+ — مَصدر التَوليد (مَنصّة) -->
+            <div class="fg"><label class="fl">🌐 مَصدر التَوليد</label>
+              <select class="fc" id="tts-engine">
+                <option value="auto" selected>تلقائيّ (الأفضل المُتاح)</option>
+                <option value="google">Google Translate TTS — سَحابيّ، مَوثوق</option>
+                <option value="espeak" class="desktop-only-opt">eSpeak-NG — مَفتوح المَصدر، مَحلّيّ</option>
+                <option value="custom" class="desktop-only-opt">API مُخصّص (مَضبوط في الإعدادات)</option>
+              </select>
+            </div>
+            <div id="tts-engine-status" style="font-size:10px;color:var(--t3);margin-bottom:6px"></div>
+
+            <!-- جنس الصَوت لـGoogle (pitch shift عَبر ffmpeg) -->
+            <div class="fg" id="tts-gender-wrap"><label class="fl">🚻 جنس الصَوت</label>
+              <div class="rcg">
+                <input type="radio" name="tts-gender" id="tts-gender-female" value="female" checked><label for="tts-gender-female">👩 أنثَوي (افتراضيّ)</label>
+                <input type="radio" name="tts-gender" id="tts-gender-male" value="male"><label for="tts-gender-male">👨 ذَكوريّ (pitch shift)</label>
+              </div>
+            </div>
+
+            <!-- مَصدر النَصّ -->
+            <div class="fg"><label class="fl">📝 المَصدر</label>
+              <select class="fc" id="tts-source">
+                <option value="active" selected>النَصّ النَشط (من المَصدر المُطبَّق)</option>
+                <option value="freetext">حقل النَصّ الحرّ</option>
+                <option value="custom">نَصّ مُخصّص ↓</option>
+              </select>
+            </div>
+            <textarea id="tts-custom-text" class="fc" rows="4" style="display:none;width:100%;direction:rtl;font-size:13px;line-height:1.8;margin-bottom:6px" placeholder="اكتب النَصّ هُنا..."></textarea>
+            <div id="tts-source-preview" style="font-size:10px;color:var(--t3);background:var(--bg1);padding:5px 8px;border-radius:var(--r);max-height:60px;overflow:auto;direction:rtl;margin-bottom:6px">—</div>
+
+            <!-- اختيار الصَوت — Edge فقط، Google له صَوت عَربيّ واحد افتراضيّ -->
+            <div class="fg" id="tts-voice-wrap"><label class="fl">🔊 الصَوت <small style="color:var(--t3)">(يَنطبق فقط مع Edge TTS)</small></label>
+              <select class="fc" id="tts-voice">
+                <optgroup label="🇸🇦 السَعوديّة (فُصحى)">
+                  <option value="ar-SA-HamedNeural" selected>حامد — ذَكر فُصحى</option>
+                  <option value="ar-SA-ZariyahNeural">زَريا — أنثى فُصحى</option>
+                </optgroup>
+                <optgroup label="🇪🇬 مصر">
+                  <option value="ar-EG-ShakirNeural">شاكر — ذَكر مصريّ</option>
+                  <option value="ar-EG-SalmaNeural">سَلمى — أنثى مصريّة</option>
+                </optgroup>
+                <optgroup label="🇦🇪 الإمارات">
+                  <option value="ar-AE-HamdanNeural">حَمدان — ذَكر</option>
+                  <option value="ar-AE-FatimaNeural">فاطمة — أنثى</option>
+                </optgroup>
+                <optgroup label="🇲🇦 المغرب">
+                  <option value="ar-MA-JamalNeural">جَمال — ذَكر</option>
+                  <option value="ar-MA-MounaNeural">منى — أنثى</option>
+                </optgroup>
+                <optgroup label="🇰🇼 الكويت">
+                  <option value="ar-KW-FahedNeural">فَهد — ذَكر</option>
+                  <option value="ar-KW-NouraNeural">نورة — أنثى</option>
+                </optgroup>
+                <optgroup label="🇯🇴 الأردن">
+                  <option value="ar-JO-TaimNeural">تَيم — ذَكر</option>
+                  <option value="ar-JO-SanaNeural">سَنا — أنثى</option>
+                </optgroup>
+                <optgroup label="🌍 أصوات أخرى">
+                  <option value="ar-BH-AliNeural">عَلي — البحرين</option>
+                  <option value="ar-DZ-IsmaelNeural">إسماعيل — الجزائر</option>
+                  <option value="ar-IQ-BasselNeural">باسل — العراق</option>
+                  <option value="ar-LB-RamiNeural">رامي — لبنان</option>
+                  <option value="ar-LY-OmarNeural">عُمَر — ليبيا</option>
+                  <option value="ar-OM-AbdullahNeural">عبدالله — عُمان</option>
+                  <option value="ar-QA-MoazNeural">مُعاذ — قطر</option>
+                  <option value="ar-SY-LaithNeural">لَيث — سوريا</option>
+                  <option value="ar-TN-HediNeural">الهادي — تونس</option>
+                  <option value="ar-YE-SalehNeural">صالح — اليمن</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <!-- التَّحكّمات -->
+            <div class="grid2">
+              <div class="fg"><label class="fl">⚡ السُرعة</label><div class="sg"><input type="range" min="-50" max="100" step="5" value="0" id="tts-rate"><span class="sv" id="tts-rate-v">0%</span></div></div>
+              <div class="fg"><label class="fl">🎵 النَبرة</label><div class="sg"><input type="range" min="-50" max="50" step="5" value="0" id="tts-pitch"><span class="sv" id="tts-pitch-v">0%</span></div></div>
+            </div>
+            <div class="fg"><label class="fl">🤫 فاصل صَمت بَين الجُمَل (ms)</label><div class="sg"><input type="range" min="0" max="2000" step="50" value="300" id="tts-pause"><span class="sv" id="tts-pause-v">300ms</span></div></div>
+
+            <!-- قبل التَوليد -->
+            <div id="tts-pre" style="margin-top:8px">
+              <button class="btn btn-p bsm bfw" id="tts-generate" style="font-weight:700">🎙️ توليد القِراءة</button>
+              <div style="font-size:10px;color:var(--t3);margin-top:4px">يَستغرق التَوليد 5-30 ثانية حسب طول النَصّ والاتّصال.</div>
+            </div>
+
+            <!-- أثناء التَوليد -->
+            <div id="tts-during" style="display:none;margin-top:8px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="color:var(--p);font-weight:700">🤖</span>
+                <span id="tts-progress" style="flex:1;font-size:11px;color:var(--t2)">جارٍ الاتّصال...</span>
+                <button class="btn btn-g bsm" id="tts-cancel" style="padding:3px 10px;color:var(--danger)">✕ إلغاء</button>
+              </div>
+              <div style="height:6px;background:var(--bg1);border-radius:3px;overflow:hidden;margin-top:4px">
+                <div id="tts-progress-bar" style="height:100%;width:0%;background:var(--p);transition:width 0.2s"></div>
+              </div>
+            </div>
+
+            <!-- بَعد التَوليد -->
+            <div id="tts-post" style="display:none;margin-top:8px">
+              <audio id="tts-preview" controls style="width:100%;margin-bottom:5px"></audio>
+              <div id="tts-info" style="font-size:10px;color:var(--t3);margin-bottom:5px"></div>
+
+              <!-- v0.13.1+ — توگل عَرض النَصّ في المعاينة (للنَصّ المُخصّص) -->
+              <div class="tgg" style="margin-bottom:8px;background:var(--bg1);padding:5px 8px;border-radius:var(--r);border:1px solid var(--b1)">
+                <span class="tgl">📺 اعرض النَصّ في المعاينة<br><small style="color:var(--t3)">يُكتَب النَصّ المُولَّد في حقل النَصّ الحرّ ويَظهَر مَع الصَوت</small></span>
+                <label class="tg"><input type="checkbox" id="tts-show-text" checked><span class="tgs"></span></label>
+              </div>
+
+              <div style="display:flex;gap:5px;flex-wrap:wrap">
+                <button class="btn btn-p bsm" id="tts-apply" style="flex:1;min-width:140px">✅ اعتماد كقِراءة</button>
+                <button class="btn btn-g bsm desktop-only blk" id="tts-save-workdir" style="padding:3px 10px" title="حِفظ نُسخة في مجلّد العَمل">💾 حِفظ</button>
+                <button class="btn btn-g bsm" id="tts-download" style="padding:3px 10px" title="تَنزيل MP3">⬇️</button>
+                <button class="btn btn-g bsm" id="tts-redo" style="padding:3px 10px" title="إعادة التَوليد">↻</button>
+              </div>
+              <div class="note" style="margin-top:6px;font-size:10px">💡 الصَوت المُولَّد يُعامَل كصَوت مُخصّص — يَستفيد تلقائيّاً من المؤثّرات الصَوتيّة + التَوقيت التَفصيليّ + المَزامنة.</div>
+            </div>
 
           </div>
         </details>
@@ -1666,42 +1798,6 @@ body.offline .offline-badge{display:block}
       <!-- FX -->
       <div class="tp" id="tab-fx">
         <details class="sec" open>
-          <summary class="sec-t">🎭 التأثيرات البصرية</summary>
-          <div class="tgg"><span class="tgl">نتوء (Vignette)</span><label class="tg"><input type="checkbox" id="fx-vig"><span class="tgs"></span></label></div>
-          <div class="fg" style="padding-top:3px"><div class="sg"><input type="range" min="0" max="100" value="55" id="vig-str"><span class="sv" id="vig-str-v">55%</span></div></div>
-          <div class="tgg"><span class="tgl">حبوب فيلم (Grain)</span><label class="tg"><input type="checkbox" id="fx-grain"><span class="tgs"></span></label></div>
-          <div class="tgg"><span class="tgl">إطار ذهبي متوهج</span><label class="tg"><input type="checkbox" id="fx-gold"><span class="tgs"></span></label></div>
-          <div class="fg" id="gold-col-row" style="padding-top:3px"><label class="fl">لون الإطار</label><div class="cpg"><input type="color" id="gold-col" value="#f0c842"></div></div>
-          <div class="tgg"><span class="tgl">نجوم متلألئة</span><label class="tg"><input type="checkbox" id="fx-stars"><span class="tgs"></span></label></div>
-          <div class="tgg"><span class="tgl">أشعة نورانية</span><label class="tg"><input type="checkbox" id="fx-rays"><span class="tgs"></span></label></div>
-          <div class="tgg"><span class="tgl">ضبابية بوكيه</span><label class="tg"><input type="checkbox" id="fx-bokeh"><span class="tgs"></span></label></div>
-
-          <!-- تأثيرات إضافية جديدة -->
-          <div class="sec-t" style="margin-top:10px">🆕 تأثيرات إضافية</div>
-          <div class="tgg"><span class="tgl">Pixelate (تقطيع)</span><label class="tg"><input type="checkbox" id="fx-pixel"><span class="tgs"></span></label></div>
-          <div class="sg" style="margin-bottom:5px"><input type="range" min="2" max="20" value="8" id="pixel-size"><span class="sv" id="pixel-size-v">8</span></div>
-
-          <div class="tgg"><span class="tgl">Mosaic (فسيفساء)</span><label class="tg"><input type="checkbox" id="fx-mosaic"><span class="tgs"></span></label></div>
-          <div class="sg" style="margin-bottom:5px"><input type="range" min="2" max="30" value="10" id="mosaic-size"><span class="sv" id="mosaic-size-v">10</span></div>
-
-          <div class="tgg"><span class="tgl">Ripple (تموج)</span><label class="tg"><input type="checkbox" id="fx-ripple"><span class="tgs"></span></label></div>
-          <div class="sg" style="margin-bottom:5px"><input type="range" min="1" max="20" value="5" id="ripple-amp"><span class="sv" id="ripple-amp-v">5</span></div>
-
-          <div class="tgg"><span class="tgl">Wave (موجة)</span><label class="tg"><input type="checkbox" id="fx-wave"><span class="tgs"></span></label></div>
-          <div class="sg" style="margin-bottom:5px"><input type="range" min="1" max="30" value="10" id="wave-amp"><span class="sv" id="wave-amp-v">10</span></div>
-
-          <div class="tgg"><span class="tgl">Swirl (دوامة)</span><label class="tg"><input type="checkbox" id="fx-swirl"><span class="tgs"></span></label></div>
-          <div class="sg" style="margin-bottom:5px"><input type="range" min="0" max="10" value="3" step="0.1" id="swirl-factor"><span class="sv" id="swirl-factor-v">3.0</span></div>
-
-          <div class="tgg"><span class="tgl">Kaleidoscope (مشكال)</span><label class="tg"><input type="checkbox" id="fx-kaleido"><span class="tgs"></span></label></div>
-          <div class="sg" style="margin-bottom:5px"><input type="range" min="2" max="12" value="6" id="kaleido-segments"><span class="sv" id="kaleido-segments-v">6</span></div>
-
-          <div class="tgg"><span class="tgl">Glitch (تشويش)</span><label class="tg"><input type="checkbox" id="fx-glitch"><span class="tgs"></span></label></div>
-          <div class="sg" style="margin-bottom:5px"><input type="range" min="1" max="20" value="5" id="glitch-intensity"><span class="sv" id="glitch-intensity-v">5</span></div>
-
-          <div class="tgg"><span class="tgl">Old Film (فيلم قديم)</span><label class="tg"><input type="checkbox" id="fx-oldfilm"><span class="tgs"></span></label></div>
-        </details>
-        <details class="sec">
           <summary class="sec-t">🔄 انتقالات الآيات <span class="note" style="font-weight:normal">(مرتبط بـ "ظهور الآيات" في تبويب النصوص)</span></summary>
           <div class="rg c2">
             <div class="rc"><input type="radio" name="tanim" id="ta0b" value="none"><label for="ta0b"><span class="ri">⚡</span><span>مباشر</span></label></div>
@@ -1736,6 +1832,42 @@ body.offline .offline-badge{display:block}
             <div class="fg"><label class="fl">اللون</label><div class="cpg"><input type="color" id="ov-col" value="#000000"></div></div>
             <div class="fg"><label class="fl">الشفافية</label><div class="sg"><input type="range" min="0" max="70" value="0" id="ov-op"><span class="sv" id="ov-op-v">0%</span></div></div>
           </div>
+        </details>
+        <details class="sec">
+          <summary class="sec-t">🎭 التأثيرات البصرية</summary>
+          <div class="tgg"><span class="tgl">نتوء (Vignette)</span><label class="tg"><input type="checkbox" id="fx-vig"><span class="tgs"></span></label></div>
+          <div class="fg" style="padding-top:3px"><div class="sg"><input type="range" min="0" max="100" value="55" id="vig-str"><span class="sv" id="vig-str-v">55%</span></div></div>
+          <div class="tgg"><span class="tgl">حبوب فيلم (Grain)</span><label class="tg"><input type="checkbox" id="fx-grain"><span class="tgs"></span></label></div>
+          <div class="tgg"><span class="tgl">إطار ذهبي متوهج</span><label class="tg"><input type="checkbox" id="fx-gold"><span class="tgs"></span></label></div>
+          <div class="fg" id="gold-col-row" style="padding-top:3px"><label class="fl">لون الإطار</label><div class="cpg"><input type="color" id="gold-col" value="#f0c842"></div></div>
+          <div class="tgg"><span class="tgl">نجوم متلألئة</span><label class="tg"><input type="checkbox" id="fx-stars"><span class="tgs"></span></label></div>
+          <div class="tgg"><span class="tgl">أشعة نورانية</span><label class="tg"><input type="checkbox" id="fx-rays"><span class="tgs"></span></label></div>
+          <div class="tgg"><span class="tgl">ضبابية بوكيه</span><label class="tg"><input type="checkbox" id="fx-bokeh"><span class="tgs"></span></label></div>
+
+          <!-- تأثيرات إضافية جديدة -->
+          <div class="sec-t" style="margin-top:10px">🆕 تأثيرات إضافية</div>
+          <div class="tgg"><span class="tgl">Pixelate (تقطيع)</span><label class="tg"><input type="checkbox" id="fx-pixel"><span class="tgs"></span></label></div>
+          <div class="sg" style="margin-bottom:5px"><input type="range" min="2" max="20" value="8" id="pixel-size"><span class="sv" id="pixel-size-v">8</span></div>
+
+          <div class="tgg"><span class="tgl">Mosaic (فسيفساء)</span><label class="tg"><input type="checkbox" id="fx-mosaic"><span class="tgs"></span></label></div>
+          <div class="sg" style="margin-bottom:5px"><input type="range" min="2" max="30" value="10" id="mosaic-size"><span class="sv" id="mosaic-size-v">10</span></div>
+
+          <div class="tgg"><span class="tgl">Ripple (تموج)</span><label class="tg"><input type="checkbox" id="fx-ripple"><span class="tgs"></span></label></div>
+          <div class="sg" style="margin-bottom:5px"><input type="range" min="1" max="20" value="5" id="ripple-amp"><span class="sv" id="ripple-amp-v">5</span></div>
+
+          <div class="tgg"><span class="tgl">Wave (موجة)</span><label class="tg"><input type="checkbox" id="fx-wave"><span class="tgs"></span></label></div>
+          <div class="sg" style="margin-bottom:5px"><input type="range" min="1" max="30" value="10" id="wave-amp"><span class="sv" id="wave-amp-v">10</span></div>
+
+          <div class="tgg"><span class="tgl">Swirl (دوامة)</span><label class="tg"><input type="checkbox" id="fx-swirl"><span class="tgs"></span></label></div>
+          <div class="sg" style="margin-bottom:5px"><input type="range" min="0" max="10" value="3" step="0.1" id="swirl-factor"><span class="sv" id="swirl-factor-v">3.0</span></div>
+
+          <div class="tgg"><span class="tgl">Kaleidoscope (مشكال)</span><label class="tg"><input type="checkbox" id="fx-kaleido"><span class="tgs"></span></label></div>
+          <div class="sg" style="margin-bottom:5px"><input type="range" min="2" max="12" value="6" id="kaleido-segments"><span class="sv" id="kaleido-segments-v">6</span></div>
+
+          <div class="tgg"><span class="tgl">Glitch (تشويش)</span><label class="tg"><input type="checkbox" id="fx-glitch"><span class="tgs"></span></label></div>
+          <div class="sg" style="margin-bottom:5px"><input type="range" min="1" max="20" value="5" id="glitch-intensity"><span class="sv" id="glitch-intensity-v">5</span></div>
+
+          <div class="tgg"><span class="tgl">Old Film (فيلم قديم)</span><label class="tg"><input type="checkbox" id="fx-oldfilm"><span class="tgs"></span></label></div>
         </details>
       </div>
 
@@ -1788,7 +1920,7 @@ body.offline .offline-badge{display:block}
       </div>
 
       <!-- SETTINGS -->
-      <div class="tp" id="tab-settings">
+      <div class="tp on" id="tab-settings">
 
         <!-- v0.12.1 — كلّ قسم في "جيب" (details) قابل للطيّ -->
 
@@ -1855,7 +1987,7 @@ body.offline .offline-badge{display:block}
 
         <!-- 4) وحدات المحتوى -->
         <details class="sec">
-          <summary class="sec-t">📦 وحدات المحتوى</summary>
+          <summary class="sec-t">📦 وحدات المحتوى <span class="badge-new" style="background:linear-gradient(135deg,#ffd700,#ff9500);color:#3a2700;font-weight:800;text-shadow:0 1px 0 rgba(255,255,255,.4)">⭐ رَئيسيّ</span></summary>
           <div class="note">فعّل/ألغِ كلّ وحدة محتوى حسب حاجتك. التغييرات تُحفظ تلقائياً وتُطبَّق فوراً.</div>
           <div class="tgg">
             <span class="tgl">📖 وحدة القرآن الكريم<br><small style="color:var(--t3)">السور · القرّاء · الترجمات · صوت التلاوة</small></span>
@@ -2020,6 +2152,42 @@ body.offline .offline-badge{display:block}
           <div id="sys-info-row"></div>
         </details>
 
+        <!-- v0.13.1+ — إعدادات TTS -->
+        <details class="sec">
+          <summary class="sec-t">🤖 إعدادات TTS (توليد القِراءة من النصّ) <span class="badge-new" style="background:var(--danger);color:#fff">تَجريبيّة</span></summary>
+          <div class="note" style="background:rgba(220,80,80,0.08);border:1px solid var(--danger);padding:8px;border-radius:var(--r);color:var(--t1)"><strong style="color:var(--danger)">⚠️ ميزة تَجريبيّة غَير مُستقرّة:</strong> الـAPIs الخارجيّة قد تَتوقّف فَجأة، الأَصوات مَحدودة، ولا تُستَعمل أبداً لتَلاوة القرآن الكَريم. مُخصَّصة لقِراءة الحَديث الشَريف/الأذكار/الأدعية/الحِكَم/النُصوص الحُرّة فقط.</div>
+
+          <div class="tgg" style="margin-top:6px">
+            <span class="tgl">👁️ إظهار قسم TTS في تَبويب التَلاوة<br><small style="color:var(--t3)">افتراضيّاً مَخفيّ. عند الإلغاء يَختفي القسم وتُلغى الميزة تلقائيّاً.</small></span>
+            <label class="tg"><input type="checkbox" id="tts-section-visible"><span class="tgs"></span></label>
+          </div>
+
+          <div style="font-size:11px;color:var(--al);font-weight:700;margin:10px 0 4px 0">🔗 API مُخصّص (اختياريّ)</div>
+          <div class="note" style="font-size:10px">يَسمح بإضافة خِدمة TTS خاصّة بك. استَعمِل <code style="background:var(--bg1);padding:1px 4px">{text}</code> لمَوضع النَصّ في الـURL/body.</div>
+          <div class="fg" style="margin-top:6px"><label class="fl">URL Template</label>
+            <input type="text" class="fc" id="tts-custom-url" placeholder="https://api.example.com/tts?text={text}&voice=ar" style="font-family:monospace;font-size:11px">
+          </div>
+          <div class="grid2">
+            <div class="fg"><label class="fl">الطَريقة</label>
+              <select class="fc" id="tts-custom-method">
+                <option value="GET" selected>GET</option>
+                <option value="POST">POST</option>
+              </select>
+            </div>
+            <div class="fg"><label class="fl">Headers (JSON اختياريّ)</label>
+              <input type="text" class="fc" id="tts-custom-headers" placeholder='{"Authorization":"Bearer ..."}' style="font-family:monospace;font-size:10px">
+            </div>
+          </div>
+          <div class="fg" id="tts-custom-body-wrap" style="display:none"><label class="fl">Body (POST، JSON أو نَصّ — استَعمِل {text})</label>
+            <textarea class="fc" id="tts-custom-body" rows="3" placeholder='{"text":"{text}","voice":"ar-male"}' style="font-family:monospace;font-size:11px"></textarea>
+          </div>
+          <div class="note" style="font-size:10px;margin-top:6px">⚠️ الـAPI يَجب أن يُرجع MP3/WAV/OGG مُباشَرةً في الـbody (Content-Type: audio/*). أمثلة مُتوافِقة:
+            <br>• <strong>edge-tts-rest</strong> (مَفتوح المَصدر، تَستضيفه بنَفسك)
+            <br>• <strong>Coqui-TTS server</strong>
+            <br>• <strong>Piper</strong> عَبر HTTP wrapper
+          </div>
+        </details>
+
         <!-- 12) إعادة الضبط -->
         <details class="sec">
           <summary class="sec-t">🗑️ إعادة الضبط</summary>
@@ -2037,7 +2205,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.13.0</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.13.1</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

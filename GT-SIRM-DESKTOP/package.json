@@ -1,6 +1,6 @@
 {
   "name": "gt-sirm",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "GnuTux Short Islamic Reels Maker — صانع ريلز إسلاميّة بجودة احترافيّة لـ GNU/Linux: قرآن، حديث، أذكار، أدعية، أسماء الله الحسنى، حِكَم",
   "author": "SalehGNUTUX <https://github.com/SalehGNUTUX>",
   "license": "GPL-3.0",
@@ -22,7 +22,8 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
-    "fluent-ffmpeg": "^2.1.3"
+    "fluent-ffmpeg": "^2.1.3",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "electron": "^29.0.0",
