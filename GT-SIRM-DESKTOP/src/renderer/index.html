@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: file:; media-src 'self' blob: https: file:; connect-src 'self' blob: data: https://api.alquran.cloud https://everyayah.com https://fonts.googleapis.com https://fonts.gstatic.com wss://speech.platform.bing.com https://api.streamelements.com;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https: file:; media-src 'self' blob: https: file:; connect-src 'self' blob: data: https://api.alquran.cloud https://everyayah.com wss://speech.platform.bing.com;">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
 <meta name="description" content="GT-SIRM — GnuTux Short Islamic Reels Maker — صانع ريلز إسلاميّة احترافيّة">
 <meta name="application-name" content="GT-SIRM">
@@ -27,9 +27,7 @@
 <link rel="apple-touch-icon" sizes="167x167" href="../../GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="../../GT-SIRM-icons/all/192x192/GT-SIRM-icon.png">
 <!-- خطوط جوجل -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link id="gfonts" href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Reem+Kufi:wght@400;700&family=Scheherazade+New:wght@400;700&family=Cairo:wght@300;400;600;700;900&family=Noto+Naskh+Arabic:wght@400;700&family=Lateef:wght@400;700&family=Harmattan:wght@400;700&family=Markazi+Text:ital,wght@0,400;0,700&family=Aref+Ruqaa&display=swap" rel="stylesheet">
+<!-- v0.13.2 — الخُطوط مَحلّيّة كاملاً (بدون CDN) — loadLocalFonts يَحمِّلها من fonts/ -->
 <style>
 :root{
   --p:#0a5c36;--pl:#1a8a52;--pd:#063d24;
@@ -2205,7 +2203,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.13.1</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.13.2</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

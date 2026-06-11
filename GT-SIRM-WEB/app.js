@@ -4869,6 +4869,8 @@ function _ttsUpdateSourcePreview() {
 
 async function startTTSGeneration() {
   if (S.ttsGenerating) return;
+  // v0.13.2 — تَحذير شَرعيّ مَرّة لكلّ جَلسة
+  _showTTSQuranWarning();
   const text = _ttsGetSourceText();
   if (!text) { toast("⚠️ لا يوجد نَصّ للتَوليد", "warn", 2000); return; }
   const voice = document.getElementById("tts-voice")?.value || "ar-SA-HamedNeural";
@@ -4953,7 +4955,27 @@ function applyTTSAsRecitation() {
     toggle.checked = true;
     toggle.dispatchEvent(new Event("change", { bubbles: true }));
   }
-  toast(`✅ اُعتُمِد التَوليد (${file.name}) كصَوت قِراءة`, "success", 2500);
+  // v0.13.2 — عَرض النَصّ في المعاينة (toggle)
+  const showText = !!document.getElementById("tts-show-text")?.checked;
+  if (showText) {
+    const text = _ttsGetSourceText();
+    const freeTextArea = document.getElementById("free-text-area");
+    const freeTextOn = document.getElementById("free-text-on");
+    if (freeTextArea && text) {
+      freeTextArea.value = text;
+      freeTextArea.dispatchEvent(new Event("input", { bubbles: true }));
+      if (freeTextOn && !freeTextOn.checked) {
+        freeTextOn.checked = true;
+        freeTextOn.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      setTimeout(() => {
+        if (typeof applyFreeText === "function") {
+          try { applyFreeText(); } catch (e) { console.warn("[tts] applyFreeText:", e); }
+        }
+      }, 300);
+    }
+  }
+  toast(`✅ اُعتُمِد التَوليد كصَوت قِراءة${showText ? " مع النَصّ" : ""}`, "success", 2500);
 }
 
 function downloadTTS() {
@@ -4977,6 +4999,81 @@ function _ttsUpdateEngineStatus() {
     browser: "🔊 يُسمَع فقط — لا يَدعم تَصدير صَوت",
   };
   el.textContent = messages[engine] || "";
+}
+
+// v0.13.2 — تَحذير شَرعيّ مَركَزيّ (مَرّة لكلّ جَلسة)
+function _showTTSQuranWarning() {
+  if (sessionStorage.getItem("gt_sirm_tts_quran_warn_shown") === "1") return;
+  try { sessionStorage.setItem("gt_sirm_tts_quran_warn_shown", "1"); } catch (_) {}
+  const old = document.getElementById("tts-quran-warning");
+  if (old) old.remove();
+  const modal = document.createElement("div");
+  modal.id = "tts-quran-warning";
+  modal.style.cssText = "position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center";
+  modal.innerHTML = `
+    <div style="background:var(--bg0);border:2px solid var(--danger);border-radius:var(--r);padding:24px;max-width:500px;width:92%;direction:rtl;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.7)">
+      <div style="font-size:54px;margin-bottom:14px">⚠️</div>
+      <h3 style="margin:0 0 14px 0;color:var(--danger);font-size:18px;font-weight:800">تَحذير شَرعيّ</h3>
+      <p style="font-size:14px;color:var(--t1);line-height:1.9;margin:0 0 16px 0;text-align:justify">
+        <strong style="color:var(--al)">لا تَستعمل ميزة تَوليد الصَوت (TTS) لتَلاوة القرآن الكَريم.</strong>
+        التَلاوة المُتقَنة عبادة لها أَحكام تَجويد لا تُحاكيها الأَصوات المُولَّدة آليّاً.
+        خَصِّص هذه الميزة للحَديث الشَريف، الأذكار، الأدعية، الحِكَم، والنُصوص الحُرّة.
+      </p>
+      <p style="font-size:11px;color:var(--t3);margin:0 0 18px 0;background:var(--bg1);padding:8px;border-radius:var(--r)">
+        📖 للقرآن الكَريم: استَخدِم قسم "<strong>القرآن الكَريم</strong>" في تَبويب التَلاوة مع قارئ حَقيقيّ.
+      </p>
+      <button class="btn btn-p bfw" id="tts-warn-ok" style="font-weight:700;padding:10px">✅ فَهمت — مُتابعة</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.querySelector("#tts-warn-ok").addEventListener("click", () => { modal.remove(); });
+}
+
+function _ttsApplyVisibilitySetting() {
+  let visible = false;
+  try { visible = localStorage.getItem("gt_sirm_tts_section_visible") === "1"; } catch (_) {}
+  const sec = document.querySelector('[id="tts-on"]')?.closest("details.sec");
+  if (sec) sec.style.display = visible ? "" : "none";
+  if (!visible) {
+    const ttsOn = document.getElementById("tts-on");
+    if (ttsOn && ttsOn.checked) {
+      ttsOn.checked = false;
+      ttsOn.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+}
+
+function _initTTSSettingsTab() {
+  const vis = document.getElementById("tts-section-visible");
+  if (vis) {
+    try { vis.checked = localStorage.getItem("gt_sirm_tts_section_visible") === "1"; } catch (_) {}
+    vis.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_tts_section_visible", vis.checked ? "1" : "0"); } catch (_) {}
+      _ttsApplyVisibilitySetting();
+      toast?.(vis.checked ? "👁️ ظَهَر قسم توليد القِراءة التَجريبيّ" : "🙈 أُخفي قسم توليد القِراءة", "info", 1500);
+    });
+  }
+  const fields = ["url", "method", "body", "headers"];
+  for (const f of fields) {
+    const el = document.getElementById(`tts-custom-${f}`);
+    if (!el) continue;
+    try {
+      const saved = localStorage.getItem(`gt_sirm_tts_custom_${f}`);
+      if (saved !== null) el.value = saved;
+    } catch (_) {}
+    const save = () => {
+      try { localStorage.setItem(`gt_sirm_tts_custom_${f}`, el.value); } catch (_) {}
+    };
+    el.addEventListener("input", save);
+    el.addEventListener("change", save);
+  }
+  const methodEl = document.getElementById("tts-custom-method");
+  const bodyWrap = document.getElementById("tts-custom-body-wrap");
+  const updateBody = () => {
+    if (bodyWrap) bodyWrap.style.display = methodEl?.value === "POST" ? "" : "none";
+  };
+  methodEl?.addEventListener("change", updateBody);
+  updateBody();
 }
 
 function initTTS() {
@@ -5012,6 +5109,9 @@ function initTTS() {
   document.getElementById("tts-apply")?.addEventListener("click", applyTTSAsRecitation);
   document.getElementById("tts-download")?.addEventListener("click", downloadTTS);
   document.getElementById("tts-redo")?.addEventListener("click", redoTTS);
+  // v0.13.2 — إعدادات + إظهار/إخفاء
+  _initTTSSettingsTab();
+  _ttsApplyVisibilitySetting();
 }
 
 function onBgAudio(input) {

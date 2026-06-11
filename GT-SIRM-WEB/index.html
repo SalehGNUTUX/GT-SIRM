@@ -15,10 +15,7 @@
 <link rel="shortcut icon" href="GT-SIRM-icons/favicon.ico">
 <link rel="apple-touch-icon" sizes="192x192" href="GT-SIRM-icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="GT-SIRM-icons/icon-512.png">
-<!-- خطوط جوجل -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link id="gfonts" href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Reem+Kufi:wght@400;700&family=Scheherazade+New:wght@400;700&family=Cairo:wght@300;400;600;700;900&family=Noto+Naskh+Arabic:wght@400;700&family=Lateef:wght@400;700&family=Harmattan:wght@400;700&family=Markazi+Text:ital,wght@0,400;0,700;1,400&family=Aref+Ruqaa&display=swap" rel="stylesheet">
+<!-- v0.13.2 — الخُطوط مَحلّيّة كاملاً (يَعمل دون إنترنت) — loadLocalFonts يَحمِّلها من fonts/ -->
 <style>
 :root{
   --p:#0a5c36;--pl:#1a8a52;--pd:#063d24;
@@ -975,6 +972,13 @@ body.offline .offline-badge{display:block}
             <div id="tts-post" style="display:none;margin-top:8px">
               <audio id="tts-preview" controls style="width:100%;margin-bottom:5px"></audio>
               <div id="tts-info" style="font-size:10px;color:var(--t3);margin-bottom:5px"></div>
+
+              <!-- v0.13.2 — توگل عَرض النَصّ في المعاينة -->
+              <div class="tgg" style="margin-bottom:8px;background:var(--bg1);padding:5px 8px;border-radius:var(--r);border:1px solid var(--b1)">
+                <span class="tgl">📺 اعرض النَصّ في المعاينة<br><small style="color:var(--t3)">يُكتَب النَصّ المُولَّد في حقل النَصّ الحرّ ويَظهَر مَع الصَوت</small></span>
+                <label class="tg"><input type="checkbox" id="tts-show-text" checked><span class="tgs"></span></label>
+              </div>
+
               <div style="display:flex;gap:5px;flex-wrap:wrap">
                 <button class="btn btn-p bsm" id="tts-apply" style="flex:1;min-width:140px">✅ اعتماد كقِراءة</button>
                 <button class="btn btn-g bsm" id="tts-download" style="padding:3px 10px" title="تَنزيل MP3">⬇️</button>
@@ -1722,7 +1726,38 @@ body.offline .offline-badge{display:block}
           <div class="tgg"><span class="tgl">فتح الأدوات تلقائياً عند التشغيل</span><label class="tg"><input type="checkbox" id="auto-open-panel"><span class="tgs"></span></label></div>
         </details>
 
-        <!-- 8) إعادة الضبط -->
+        <!-- v0.13.1+ — إعدادات TTS -->
+        <details class="sec">
+          <summary class="sec-t">🤖 إعدادات TTS (توليد القِراءة من النصّ) <span class="badge-new" style="background:var(--danger);color:#fff">تَجريبيّة</span></summary>
+          <div class="note" style="background:rgba(220,80,80,0.08);border:1px solid var(--danger);padding:8px;border-radius:var(--r);color:var(--t1)"><strong style="color:var(--danger)">⚠️ ميزة تَجريبيّة غَير مُستقرّة:</strong> الـAPIs الخارجيّة قد تَتوقّف فَجأة، الأَصوات مَحدودة، ولا تُستَعمل أبداً لتَلاوة القرآن الكَريم. مُخصَّصة لقِراءة الحَديث الشَريف/الأذكار/الأدعية/الحِكَم/النُصوص الحُرّة فقط.</div>
+
+          <div class="tgg" style="margin-top:6px">
+            <span class="tgl">👁️ إظهار قسم TTS في تَبويب التَلاوة<br><small style="color:var(--t3)">افتراضيّاً مَخفيّ. عند الإلغاء يَختفي القسم وتُلغى الميزة تلقائيّاً.</small></span>
+            <label class="tg"><input type="checkbox" id="tts-section-visible"><span class="tgs"></span></label>
+          </div>
+
+          <div style="font-size:11px;color:var(--al);font-weight:700;margin:10px 0 4px 0">🔗 API مُخصّص (اختياريّ — يَحتاج سَطح المكتب)</div>
+          <div class="note" style="font-size:10px">يَسمح بإضافة خِدمة TTS خاصّة بك. استَعمِل <code style="background:var(--bg1);padding:1px 4px">{text}</code> لمَوضع النَصّ. <strong>⚠️ في الويب يَحتاج سَطح المكتب لتَجاوُز CORS.</strong></div>
+          <div class="fg" style="margin-top:6px"><label class="fl">URL Template</label>
+            <input type="text" class="fc" id="tts-custom-url" placeholder="https://api.example.com/tts?text={text}&voice=ar" style="font-family:monospace;font-size:11px">
+          </div>
+          <div class="grid2">
+            <div class="fg"><label class="fl">الطَريقة</label>
+              <select class="fc" id="tts-custom-method">
+                <option value="GET" selected>GET</option>
+                <option value="POST">POST</option>
+              </select>
+            </div>
+            <div class="fg"><label class="fl">Headers (JSON اختياريّ)</label>
+              <input type="text" class="fc" id="tts-custom-headers" placeholder='{"Authorization":"Bearer ..."}' style="font-family:monospace;font-size:10px">
+            </div>
+          </div>
+          <div class="fg" id="tts-custom-body-wrap" style="display:none"><label class="fl">Body (POST، JSON أو نَصّ — استَعمِل {text})</label>
+            <textarea class="fc" id="tts-custom-body" rows="3" placeholder='{"text":"{text}","voice":"ar-male"}' style="font-family:monospace;font-size:11px"></textarea>
+          </div>
+        </details>
+
+        <!-- 9) إعادة الضبط -->
         <details class="sec">
           <summary class="sec-t">🗑️ إعادة الضبط</summary>
           <button class="btn btn-d bfw" id="reset-settings-btn">⚠️ إعادة جميع الإعدادات للافتراضي</button>
@@ -1739,7 +1774,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.13.1</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.13.2</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>
