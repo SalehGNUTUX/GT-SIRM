@@ -781,6 +781,31 @@ body.offline .offline-badge{display:block}
           </div>
         </details>
 
+        <!-- ═══ v0.14 — 🤫 الوَضع الصامت ═══ -->
+        <details class="sec">
+          <summary class="sec-t">🤫 الوَضع الصامت <span class="badge-new">v0.14</span></summary>
+          <div class="note">للمَن يَرفض الموسيقى تَماماً: ريل احترافيّ بدون أيّ صَوت بَشريّ أو موسيقيّ — فَقط نَصّ + خَلفيّة (مَع أصوات طَبيعيّة اختياريّة كَالمَطر والرياح). مَناسب للحِكَم والآيات التَأمّليّة.</div>
+
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:6px 8px;margin-top:6px">
+            <span class="tgl">🤫 تَفعيل الوَضع الصامت<br><small style="color:var(--t3)">يَكتم كلّ مَصادر الصَوت الرَئيسيّة (قَارئ + ميكروفون + TTS + recvid). يَبقى صَوت الخَلفيّة لو وُجد.</small></span>
+            <label class="tg"><input type="checkbox" id="silent-mode"><span class="tgs"></span></label>
+          </div>
+
+          <div id="silent-mode-ctrl" style="display:none;margin-top:6px;padding:8px;background:var(--bg2);border:1px dashed var(--b1);border-radius:var(--r)">
+            <div class="fg"><label class="fl">⏱️ مدّة الـreel الإجماليّة (ثانية)</label>
+              <div class="sg"><input type="range" min="5" max="120" step="1" value="30" id="silent-total-dur"><span class="sv" id="silent-total-dur-v">30s</span></div>
+            </div>
+            <div class="note" style="font-size:10px;margin-top:6px">📐 المدّة تُوزَّع تلقائيّاً على شَرائح النَصّ (المُجمَّدة تَحترم مدّتها). فَعِّل "التَوقيت التَفصيليّ" لتَحكُّم يَدويّ كامِل.</div>
+
+            <div class="tgg" style="margin-top:8px">
+              <span class="tgl">🌊 السَماح بصَوت الخَلفيّة<br><small style="color:var(--t3)">مَطر / بَحر / رياح / طُيور / صَمت تامّ — حَسب ما تَرفعه في تَبويب المَزج</small></span>
+              <label class="tg"><input type="checkbox" id="silent-allow-bg-audio" checked><span class="tgs"></span></label>
+            </div>
+
+            <div class="note" style="font-size:10px;margin-top:6px;background:rgba(40,140,80,0.1);padding:8px;border-radius:var(--r);border:1px solid var(--p)">✅ <strong style="color:var(--al)">مَنفعة شَرعيّة:</strong> هذه الميزة لمَن يَرى أنّ الأَصوات البَشريّة لتَلاوة القرآن لا تَجوز في الفيديوهات، أو يَرفض كلّ ما يَشبه الموسيقى. التَأثير البَصريّ يَبقى كامِلاً.</div>
+          </div>
+        </details>
+
         <!-- ═══ v0.13.0 — 🎙️ تَسجيل الميكروفون ═══ -->
         <details class="sec">
           <summary class="sec-t">🎙️ تَسجيل الميكروفون <span class="badge-new">v0.13</span></summary>
@@ -1757,6 +1782,18 @@ body.offline .offline-badge{display:block}
           </div>
         </details>
 
+        <!-- v0.14 — مُشاركة التَطبيق -->
+        <details class="sec">
+          <summary class="sec-t">📤 مُشاركة التَطبيق <span class="badge-new">v0.14</span></summary>
+          <div class="note">شارك GT-SIRM مع إخوانك — لِيَنتفع به أكبر عَدد. الرابط يَحوي عُنواناً وتَعريفاً مُختصراً.</div>
+          <button class="btn btn-p bfw" id="share-app-btn" style="font-weight:700;margin-top:8px;padding:10px">📤 مُشاركة GT-SIRM</button>
+          <div style="font-size:10px;color:var(--t3);margin-top:6px;line-height:1.7">
+            <strong>🔗 الموقع:</strong> <a href="https://salehgnutux.github.io/GT-SIRM/" target="_blank">salehgnutux.github.io/GT-SIRM</a><br>
+            <strong>📁 المُستودع:</strong> <a href="https://github.com/SalehGNUTUX/GT-SIRM" target="_blank">github.com/SalehGNUTUX/GT-SIRM</a><br>
+            <strong>📦 الإصدارات:</strong> <a href="https://github.com/SalehGNUTUX/GT-SIRM/releases" target="_blank">GitHub Releases</a>
+          </div>
+        </details>
+
         <!-- 9) إعادة الضبط -->
         <details class="sec">
           <summary class="sec-t">🗑️ إعادة الضبط</summary>
@@ -1774,7 +1811,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.13.3</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">0.14.0</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>

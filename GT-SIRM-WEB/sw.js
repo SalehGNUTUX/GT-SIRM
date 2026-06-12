@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v60 — إصدار v0.13.3 (Android: أذونات + .gtsirm + زرّ الرُجوع) (مَزامنة TTS كاملاً + خُطوط مَحلّيّة بدون CDN + أَيقونات Android كاملة)
+// GT-SIRM Service Worker v61 — إصدار v0.14.0 (وَضع صامت + إصلاح ratio في الويب + زرّ مُشاركة + beforeunload مُحسَّن)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v60";
+const CACHE_VER = "gt-sirm-v61";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل

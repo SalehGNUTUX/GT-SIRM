@@ -184,6 +184,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   initAudioFXControls(); // v0.11.0 — محرّك المؤثّرات الصوتيّة
   initMicRecorder();     // v0.13.0 — تَسجيل الميكروفون
   initTTS();             // v0.13.1 — Edge TTS
+  initSilentMode();      // v0.14 — الوَضع الصامت
+  initShareButton();     // v0.14 — زرّ المُشاركة
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
   restoreAllSettings();
   restoreLogo();
@@ -366,6 +368,11 @@ function calcEffectiveSliceDuration(numSlices, baseDur) {
 
 // v0.8.5 — مصدر صوتيّ نشط مُوحَّد
 function getActiveAudioDuration() {
+  // v0.14 — الوَضع الصامت: المدّة من silent-total-dur
+  if (ge("silent-mode")) {
+    const dur = parseFloat(document.getElementById("silent-total-dur")?.value || 30);
+    return Math.max(1, dur);
+  }
   if (ge("recvid-on") && S.recVidEl && isFinite(S.recVidEl.duration) && S.recVidEl.duration > 0.5) {
     return S.recVidEl.duration;
   }
@@ -2073,6 +2080,15 @@ function initEventListeners() {
   // Radio buttons
   document.querySelectorAll('input[name="fmt"]').forEach(radio => {
     radio.addEventListener("change", onFmtChange);
+  });
+  // v0.14 — نسبة العرض في الإعدادات (name="ratio") تُحدِّث fmt + canvas
+  document.querySelectorAll('input[name="ratio"]').forEach(r => {
+    r.addEventListener("change", () => {
+      if (!r.checked) return;
+      const fmtRadios = document.querySelectorAll('input[name="fmt"]');
+      fmtRadios.forEach(f => { f.checked = f.value === r.value; });
+      if (typeof onFmtChange === "function") onFmtChange();
+    });
   });
   document.querySelectorAll('input[name="bgt"]').forEach(radio => {
     radio.addEventListener("change", onBgTypeChange);
@@ -5234,6 +5250,76 @@ function initTTS() {
   _ttsApplyVisibilitySetting();
 }
 
+// ══════════════════════════════════════════════════════
+//  v0.14 — الوَضع الصامت + زرّ المُشاركة (نُسخة الويب)
+// ══════════════════════════════════════════════════════
+function initSilentMode() {
+  const cb = document.getElementById("silent-mode");
+  const ctrl = document.getElementById("silent-mode-ctrl");
+  const slider = document.getElementById("silent-total-dur");
+  const out = document.getElementById("silent-total-dur-v");
+  if (!cb) return;
+  cb.addEventListener("change", () => {
+    if (ctrl) ctrl.style.display = cb.checked ? "block" : "none";
+    if (cb.checked) {
+      ["recvid-on", "tts-on"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el.checked) {
+          el.checked = false;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      });
+      if (S.micRecorder && S.micRecorder.state !== "inactive") {
+        try { S.micRecorder.stop(); } catch (_) {}
+      }
+      toast?.("🤫 الوَضع الصامت مُفَعَّل — لا تَلاوة، لا ميكروفون، لا TTS", "info", 2500);
+    }
+    if (typeof syncVersesToActiveAudio === "function") syncVersesToActiveAudio();
+    if (typeof renderPerSliceList === "function") renderPerSliceList();
+    if (typeof updateAyaInfo === "function") updateAyaInfo();
+  });
+  if (slider && out) {
+    const update = () => {
+      out.textContent = slider.value + "s";
+      if (cb.checked && typeof syncVersesToActiveAudio === "function") {
+        syncVersesToActiveAudio();
+        if (typeof renderPerSliceList === "function") renderPerSliceList();
+      }
+    };
+    slider.addEventListener("input", update);
+    update();
+  }
+}
+
+async function shareApp() {
+  const shareData = {
+    title: "GT-SIRM — صانع ريلز إسلاميّة",
+    text: "صانع ريلز إسلاميّة بجودة احترافيّة — قرآن، حديث، أذكار، أدعية، أسماء الله الحسنى، حِكَم. مَفتوح المَصدر (GPLv3)، يَعمل على لينُكس وأَندرويد والمُتصفّحات.",
+    url: "https://salehgnutux.github.io/GT-SIRM/",
+  };
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+      toast?.("✅ شُكراً لمُشاركة البَرنامج", "success", 2000);
+      return;
+    }
+  } catch (e) {
+    if (e.name === "AbortError") return;
+    console.warn("[share] error:", e);
+  }
+  try {
+    const text = `${shareData.title}\n\n${shareData.text}\n\nالمَوقع: ${shareData.url}\nالمُستودع: https://github.com/SalehGNUTUX/GT-SIRM`;
+    await navigator.clipboard.writeText(text);
+    toast?.("📋 نُسِخ نَصّ المُشاركة للحافظة — أَلصِقه أَيّ مَكان", "success", 2500);
+  } catch (e) {
+    toast?.(`❌ تَعذَّر النَسخ: ${e.message}`, "error", 3000);
+  }
+}
+
+function initShareButton() {
+  document.getElementById("share-app-btn")?.addEventListener("click", shareApp);
+}
+
 function onBgAudio(input) {
   const file = input.files[0];
   if (!file) return;
@@ -5547,22 +5633,29 @@ function togglePlay() {
 
 function startPlayer() {
   const recvidActive = ge("recvid-on") && S.recVidEl;
-  // v0.13.1 — السَماح بالتَشغيل لمُجرَّد ضَبط المؤثّرات إن وُجد صَوت مُخصّص بدون آيات
   const hasCustomAudio = ge("free-audio-on") && S.bgAudioEl;
-  if (!recvidActive && !S.verses.length && !hasCustomAudio) {
+  const silentMode = ge("silent-mode"); // v0.14
+  if (!recvidActive && !S.verses.length && !hasCustomAudio && !silentMode) {
     toast("⚠️ لا توجد آيات مُحمَّلة", "error");
     return;
   }
   S.playing = true;
   $("btn-play").textContent = "⏸️";
   resumeAudioCtx().catch(console.warn);
+  // v0.14 — الوَضع الصامت
+  if (silentMode) {
+    const allowBg = ge("silent-allow-bg-audio");
+    if (S.bgAudioEl && allowBg) { S.bgAudioEl.loop = ge("bg-loop"); S.bgAudioEl.play().catch(() => {}); }
+    else if (S.bgAudioEl) { try { S.bgAudioEl.pause(); } catch (_) {} }
+    if (S.bgVid) { try { S.bgVid.play().catch(() => {}); } catch (_) {} }
+    return;
+  }
   // v0.7.5 — في وضع recvid: لا تُشغّل صوت الخلفية
   if (S.bgAudioEl && !recvidActive) { S.bgAudioEl.loop = ge("bg-loop"); S.bgAudioEl.play().catch(() => { }); }
   else if (S.bgAudioEl && recvidActive) { try { S.bgAudioEl.pause(); } catch (_) {} }
   if (S.bgVid) { try { S.bgVid.play().catch(() => {}); } catch (_) {} }
   if (recvidActive) { try { S.recVidEl.play().catch(() => {}); } catch (_) {} }
   else if (S.verses.length) playRecitationAudio();
-  // إن لم تَكن آيات → الـbgAudioEl يَكفي للتَشغيل + ضَبط المؤثّرات
 }
 
 function pausePlayer() {
@@ -7365,13 +7458,40 @@ function initProjectSystem() {
     }
   } catch (_) {}
 
+  // v0.14 — مَعالَجة beforeunload المُحسَّنة:
+  // - في الـPWA (display:standalone)، beforeunload لا يَعمل دائماً → نَستعمل modal مَركَزيّ
+  // - في المُتصفّح العادي، نَستعمل beforeunload + modal كَاحتياط
+  // - مُهمّ: e.preventDefault() قَبل e.returnValue، وعَدم return string (يَكسر Chrome 119+)
+  const _isPWAStandalone = window.matchMedia && (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: fullscreen)").matches ||
+    window.navigator.standalone === true
+  );
   window.addEventListener("beforeunload", (e) => {
-    if (S.projectDirty) {
-      e.preventDefault();
-      e.returnValue = "لديك تغييرات غير محفوظة في المشروع. هل تريد الإغلاق؟";
-      return e.returnValue;
-    }
+    if (!S.projectDirty) return; // لا تَنبيه إن لا تَوجد تَغييرات
+    e.preventDefault();
+    e.returnValue = ""; // Chrome 119+ يَتطلّب سَلسلة فارغة
+    return ""; // backward compat للمُتصفّحات القَديمة
   });
+  // v0.14 — في الـPWA + الهاتف، beforeunload قد لا يَعمل. اعرض modal مَركَزيّ.
+  if (_isPWAStandalone || S.isNativeAndroid) {
+    // ضَع flag في الـsession كي لا نُكَرّر الـdialog
+    let _refreshGuardArmed = false;
+    document.addEventListener("keydown", (e) => {
+      if ((e.key === "F5" || (e.ctrlKey && e.key.toLowerCase() === "r")) && S.projectDirty) {
+        e.preventDefault();
+        if (!_refreshGuardArmed) {
+          _refreshGuardArmed = true;
+          if (confirm("⚠️ لديك تَغييرات غَير محفوظة. هل تُريد فِعلاً تَحديث الصَفحة؟ سَتَخسر كلّ ما لم تَحفظه.")) {
+            S.projectDirty = false;
+            location.reload();
+          } else {
+            setTimeout(() => { _refreshGuardArmed = false; }, 1000);
+          }
+        }
+      }
+    });
+  }
 
   const trackInputs = () => {
     document.querySelectorAll("input, select, textarea").forEach(el => {

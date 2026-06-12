@@ -142,6 +142,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   initAudioFXControls(); // v0.11.0 — محرّك المؤثّرات الصوتيّة
   initMicRecorder();     // v0.13.0 — تَسجيل الميكروفون
   initTTS();             // v0.13.1 — Edge TTS
+  initSilentMode();      // v0.14 — الوَضع الصامت
+  initShareButton();     // v0.14 — زرّ المُشاركة
   initWorkDir();         // v0.12.0 — مجلّد العمل الافتراضيّ
   setTimeout(installWorkdirInputInterceptor, 500);  // v0.12.6 — بعد تَحميل مجلّد العمل
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
@@ -354,6 +356,11 @@ function calcEffectiveSliceDuration(numSlices, baseDur) {
 
 // v0.8.5 — مصدر صوتيّ نشط مُوحَّد (recvid أو bgAudio أو trim)
 function getActiveAudioDuration() {
+  // v0.14 — الوَضع الصامت: المدّة من silent-total-dur (أولويّة عُليا)
+  if (ge("silent-mode")) {
+    const dur = parseFloat(document.getElementById("silent-total-dur")?.value || 30);
+    return Math.max(1, dur);
+  }
   // 1) recvid (الأولويّة العليا)
   if (ge("recvid-on") && S.recVidEl && isFinite(S.recVidEl.duration) && S.recVidEl.duration > 0.5) {
     return S.recVidEl.duration;
@@ -5877,6 +5884,88 @@ function initTTS() {
 }
 
 // ══════════════════════════════════════════════════════
+//  v0.14 — الوَضع الصامت
+//  يَكتم كلّ مَصادر الصَوت الرَئيسيّة (قَارئ، ميكروفون، TTS، recvid)
+//  مع إبقاء صَوت الخَلفيّة (لو مُفعَّل). المدّة يَدويّة من slider.
+// ══════════════════════════════════════════════════════
+function initSilentMode() {
+  const cb = document.getElementById("silent-mode");
+  const ctrl = document.getElementById("silent-mode-ctrl");
+  const slider = document.getElementById("silent-total-dur");
+  const out = document.getElementById("silent-total-dur-v");
+  if (!cb) return;
+  cb.addEventListener("change", () => {
+    if (ctrl) ctrl.style.display = cb.checked ? "block" : "none";
+    if (cb.checked) {
+      // عَطِّل كلّ المَصادر الأخرى
+      ["recvid-on", "tts-on"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el.checked) {
+          el.checked = false;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      });
+      // أوقف الميكروفون لو يَعمل
+      if (S.micRecorder && S.micRecorder.state !== "inactive") {
+        try { S.micRecorder.stop(); } catch (_) {}
+      }
+      toast?.("🤫 الوَضع الصامت مُفَعَّل — لا تَلاوة، لا ميكروفون، لا TTS", "info", 2500);
+    }
+    // أَعِد توزيع مدّة الشَرائح
+    if (typeof syncVersesToActiveAudio === "function") syncVersesToActiveAudio();
+    if (typeof renderPerSliceList === "function") renderPerSliceList();
+    if (typeof updateAyaInfo === "function") updateAyaInfo();
+  });
+  if (slider && out) {
+    const update = () => {
+      out.textContent = slider.value + "s";
+      // مَزامنة مدّة الشَرائح إن كان الوَضع مُفعَّلاً
+      if (cb.checked && typeof syncVersesToActiveAudio === "function") {
+        syncVersesToActiveAudio();
+        if (typeof renderPerSliceList === "function") renderPerSliceList();
+      }
+    };
+    slider.addEventListener("input", update);
+    update();
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  v0.14 — زرّ مُشاركة التَطبيق
+//  يَستعمل Web Share API (مُتوفّر في الهاتف + بَعض المُتصفّحات)
+//  مع fallback لـclipboard.
+// ══════════════════════════════════════════════════════
+async function shareApp() {
+  const shareData = {
+    title: "GT-SIRM — صانع ريلز إسلاميّة",
+    text: "صانع ريلز إسلاميّة بجودة احترافيّة — قرآن، حديث، أذكار، أدعية، أسماء الله الحسنى، حِكَم. مَفتوح المَصدر (GPLv3)، يَعمل على لينُكس وأَندرويد والمُتصفّحات.",
+    url: "https://salehgnutux.github.io/GT-SIRM/",
+  };
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+      toast?.("✅ شُكراً لمُشاركة البَرنامج", "success", 2000);
+      return;
+    }
+  } catch (e) {
+    if (e.name === "AbortError") return;
+    console.warn("[share] error:", e);
+  }
+  // fallback: clipboard
+  try {
+    const text = `${shareData.title}\n\n${shareData.text}\n\nالمَوقع: ${shareData.url}\nالمُستودع: https://github.com/SalehGNUTUX/GT-SIRM`;
+    await navigator.clipboard.writeText(text);
+    toast?.("📋 نُسِخ نَصّ المُشاركة للحافظة — أَلصِقه أَيّ مَكان", "success", 2500);
+  } catch (e) {
+    toast?.(`❌ تَعذَّر النَسخ: ${e.message}`, "error", 3000);
+  }
+}
+
+function initShareButton() {
+  document.getElementById("share-app-btn")?.addEventListener("click", shareApp);
+}
+
+// ══════════════════════════════════════════════════════
 //  v0.12.6 — اعتراض النَقر على <input type="file"> لفَتح Electron dialog
 //  في مَسار مجلّد العمل المُختصّ حسب نوع المَلفّ.
 //  المَلفّ المُختار يُحوَّل لـFile object ويُسلَّم للـhandler الأصليّ.
@@ -6630,13 +6719,24 @@ function startPlayer() {
   const recvidActive = ge("recvid-on") && S.recVidEl;
   // v0.13.1 — السَماح بالتَشغيل لمُجرَّد ضَبط المؤثّرات إن وُجد صَوت مُخصّص بدون آيات
   const hasCustomAudio = ge("free-audio-on") && S.bgAudioEl;
-  if (!recvidActive && !S.verses.length && !hasCustomAudio) {
+  // v0.14 — الوَضع الصامت
+  const silentMode = ge("silent-mode");
+  if (!recvidActive && !S.verses.length && !hasCustomAudio && !silentMode) {
     toast("⚠️ لا توجد آيات مُحمَّلة", "error");
     return;
   }
   S.playing = true;
   $("btn-play").textContent = "⏸️";
   resumeAudioCtx().catch(console.warn);
+  // v0.14 — الوَضع الصامت يَكتم كلّ المَصادر الرَئيسيّة، يَسمح بـbgAudio لو "السَماح" مُفعَّل
+  if (silentMode) {
+    const allowBg = ge("silent-allow-bg-audio");
+    if (S.bgAudioEl && allowBg) { S.bgAudioEl.loop = ge("bg-loop"); S.bgAudioEl.play().catch(() => {}); }
+    else if (S.bgAudioEl) { try { S.bgAudioEl.pause(); } catch (_) {} }
+    if (S.bgVid) S.bgVid.play().catch(() => {});
+    // لا playRecitationAudio + لا recvid + لا ميكروفون
+    return;
+  }
   // v0.7.5 — في وضع recvid: لا تُشغّل صوت الخلفية (recvid هو مصدر الصوت)
   if (S.bgAudioEl && !recvidActive) { S.bgAudioEl.loop = ge("bg-loop"); S.bgAudioEl.play().catch(() => { }); }
   else if (S.bgAudioEl && recvidActive) { try { S.bgAudioEl.pause(); } catch (_) {} }
