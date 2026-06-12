@@ -1,6 +1,6 @@
 {
   "name": "gt-sirm-web",
-  "version": "0.14.0",
+  "version": "1.0.0",
   "description": "GT-SIRM Web (PWA) — GnuTux Short Islamic Reels Maker — قابل للتحزيم إلى APK عبر Capacitor",
   "author": "SalehGNUTUX <https://github.com/SalehGNUTUX>",
   "license": "GPL-3.0",
@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@capacitor/app": "^6.0.3",
-    "@capacitor/filesystem": "^6.0.4"
+    "@capacitor/filesystem": "^6.0.4",
+    "@capacitor/share": "^6.0.4"
   }
 }

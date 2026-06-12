@@ -144,6 +144,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initTTS();             // v0.13.1 — Edge TTS
   initSilentMode();      // v0.14 — الوَضع الصامت
   initShareButton();     // v0.14 — زرّ المُشاركة
+  initInputEnhancements(); // v1.0 — select-all + paste/clear buttons
   initWorkDir();         // v0.12.0 — مجلّد العمل الافتراضيّ
   setTimeout(installWorkdirInputInterceptor, 500);  // v0.12.6 — بعد تَحميل مجلّد العمل
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
@@ -5936,26 +5937,49 @@ function initSilentMode() {
 //  مع fallback لـclipboard.
 // ══════════════════════════════════════════════════════
 async function shareApp() {
+  const fullText = `🌙 GT-SIRM — صانع ريلز إسلاميّة
+
+صانع ريلز إسلاميّة بجودة احترافيّة لخدمة الإسلام والمسلمين.
+
+📚 6 وَحدات محتوى مُكتمَلة (6557 عُنصراً):
+• القرآن الكريم (114 سورة + قُرّاء + ترجمات)
+• الحديث الشَريف (90 حَديثاً مع التصحيح)
+• الأذكار (267 ذكراً في 132 فئة)
+• أسماء الله الحسنى (100 اسماً)
+• الأدعية المأثورة (32 دعاءً)
+• الحِكَم والمواعظ (32 قولاً)
+
+🎨 مَزايا تقنيّة:
+• يَعمل بدون إنترنت
+• مَفتوح المَصدر (GPLv3)
+• 3 منصّات: Linux + Android + المُتصفّحات
+• وَضع صامت لمَن يَرفض الموسيقى
+
+🔗 الموقع: https://salehgnutux.github.io/GT-SIRM/
+📁 المُستودع: https://github.com/SalehGNUTUX/GT-SIRM
+📦 الإصدارات: https://github.com/SalehGNUTUX/GT-SIRM/releases
+
+#GT_SIRM #ريلز_إسلامية #إسلام #برمجيات_مفتوحة`;
+
   const shareData = {
     title: "GT-SIRM — صانع ريلز إسلاميّة",
-    text: "صانع ريلز إسلاميّة بجودة احترافيّة — قرآن، حديث، أذكار، أدعية، أسماء الله الحسنى، حِكَم. مَفتوح المَصدر (GPLv3)، يَعمل على لينُكس وأَندرويد والمُتصفّحات.",
+    text: fullText,
     url: "https://salehgnutux.github.io/GT-SIRM/",
   };
   try {
     if (navigator.share) {
       await navigator.share(shareData);
+      try { await navigator.clipboard.writeText(fullText); } catch (_) {}
       toast?.("✅ شُكراً لمُشاركة البَرنامج", "success", 2000);
       return;
     }
   } catch (e) {
     if (e.name === "AbortError") return;
-    console.warn("[share] error:", e);
+    console.warn("[share]", e);
   }
-  // fallback: clipboard
   try {
-    const text = `${shareData.title}\n\n${shareData.text}\n\nالمَوقع: ${shareData.url}\nالمُستودع: https://github.com/SalehGNUTUX/GT-SIRM`;
-    await navigator.clipboard.writeText(text);
-    toast?.("📋 نُسِخ نَصّ المُشاركة للحافظة — أَلصِقه أَيّ مَكان", "success", 2500);
+    await navigator.clipboard.writeText(fullText);
+    toast?.("📋 نُسِخ مَنشور المُشاركة الكامِل — أَلصِقه في أيّ تَطبيق", "success", 3000);
   } catch (e) {
     toast?.(`❌ تَعذَّر النَسخ: ${e.message}`, "error", 3000);
   }
@@ -5963,6 +5987,141 @@ async function shareApp() {
 
 function initShareButton() {
   document.getElementById("share-app-btn")?.addEventListener("click", shareApp);
+  document.getElementById("share-app-btn-about")?.addEventListener("click", shareApp);
+}
+
+// ══════════════════════════════════════════════════════
+//  v1.0 — تَحسينات الـinputs: select-all عَلى النَقر + paste/clear buttons
+// ══════════════════════════════════════════════════════
+function _installInputSelectAll() {
+  const sel = 'input[type="text"], input[type="number"], input[type="search"], input[type="tel"], input[type="url"], input[type="email"], input:not([type])';
+  const handler = (e) => {
+    const t = e.target;
+    if (!t.matches(sel)) return;
+    if (t.readOnly || t.disabled) return;
+    setTimeout(() => { try { t.select(); } catch (_) {} }, 0);
+  };
+  document.addEventListener("focus", handler, true);
+}
+
+// يَفحَص parent للـinput عن أزرار paste/clear مَوجودة مُسبقاً ويُضيف فَقط الناقِص.
+function _hasPasteClearBtns(parent) {
+  if (!parent) return { paste: false, clear: false };
+  const buttons = parent.querySelectorAll("button");
+  let paste = false, clear = false;
+  for (const b of buttons) {
+    const id = (b.id || "").toLowerCase();
+    const title = (b.title || "").toLowerCase();
+    const text = (b.textContent || "").toLowerCase();
+    if (id.includes("paste") || text.includes("📋") || title.includes("لصق")) paste = true;
+    if (id.includes("clear") || text.includes("✕") || text.includes("🗑") || title.includes("مسح") || title.includes("حذف") || title.includes("إلغاء")) clear = true;
+  }
+  return { paste, clear };
+}
+
+function _addPasteClearButtons(elementId) {
+  const el = document.getElementById(elementId);
+  if (!el || el._pasteClearAdded) return;
+  el._pasteClearAdded = true;
+
+  // v1.0 — تَجاوَز حُقول النَصّ داخل .cpg (لون hex مع color picker — التَداخُل البَصريّ)
+  if (el.parentNode?.classList?.contains("cpg")) return;
+
+  // اِفحَص parent على عدّة مَستويات للأَزرار الموجودة
+  const parents = [el.parentNode, el.parentNode?.parentNode].filter(Boolean);
+  let existing = { paste: false, clear: false };
+  for (const p of parents) {
+    const e = _hasPasteClearBtns(p);
+    existing.paste = existing.paste || e.paste;
+    existing.clear = existing.clear || e.clear;
+  }
+  if (existing.paste && existing.clear) return; // الاثنان موجودان
+
+  // أَنشِئ wrapper inline تَحت الـinput
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "display:flex;gap:3px;margin-top:3px;align-items:center";
+
+  if (!existing.paste) {
+    const pasteBtn = document.createElement("button");
+    pasteBtn.type = "button";
+    pasteBtn.className = "btn btn-g bsm";
+    pasteBtn.style.cssText = "padding:3px 8px;font-size:11px;flex:1";
+    pasteBtn.innerHTML = "📋 لصق";
+    pasteBtn.addEventListener("click", async () => {
+      try {
+        const txt = await navigator.clipboard.readText();
+        el.value = txt;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        el.focus();
+        toast?.("📋 تَمَّ اللصق", "success", 1200);
+      } catch (e) { toast?.(`❌ تَعذَّر اللصق: ${e.message}`, "error", 2000); }
+    });
+    wrap.appendChild(pasteBtn);
+  }
+
+  if (!existing.clear) {
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "btn btn-g bsm";
+    clearBtn.style.cssText = "padding:3px 8px;font-size:11px;color:var(--danger);flex:1";
+    clearBtn.innerHTML = "✕ حذف";
+    clearBtn.addEventListener("click", () => {
+      el.value = "";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      el.focus();
+    });
+    wrap.appendChild(clearBtn);
+  }
+
+  if (wrap.children.length > 0) el.parentNode.insertBefore(wrap, el.nextSibling);
+}
+
+function _installPasteClearButtons() {
+  // قائمة شامِلة لكلّ حُقول النَصّ المُهمّة
+  const targets = [
+    // محرّر النَصّ
+    "free-text-area",
+    "free-source",
+    // TTS
+    "tts-custom-text",
+    "tts-custom-url",
+    "tts-custom-headers",
+    "tts-custom-body",
+    // حُقول البحث في الوَحدات
+    "verse-search-inp",
+    "surah-search",
+    "hadith-search",
+    "azkar-search",
+    "asma-search",
+    "duas-search",
+    "hikam-search",
+    // الـURL للتَنزيلات
+    "recvid-dl-url",
+    "bgdl-url",
+    "free-audio-dl-url",
+    "ytdlp-url",
+    "dl-save-path",
+    "bgdl-path",
+    "recvid-dl-path",
+    "free-audio-dl-path",
+    // العَلامة المائيّة وعُنوان المَقطع وأسماء الأَلوان وقَوالب
+    "wm-text",
+    "vtitle-text",
+    "ar-name",
+    "ar-folder",
+    "gc1t",
+    "gc2t",
+    "free-tpl-name",
+    "tpl-name-inp",
+  ];
+  for (const id of targets) _addPasteClearButtons(id);
+}
+
+function initInputEnhancements() {
+  _installInputSelectAll();
+  _installPasteClearButtons();
 }
 
 // ══════════════════════════════════════════════════════

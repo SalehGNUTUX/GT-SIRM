@@ -186,6 +186,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initTTS();             // v0.13.1 — Edge TTS
   initSilentMode();      // v0.14 — الوَضع الصامت
   initShareButton();     // v0.14 — زرّ المُشاركة
+  initInputEnhancements(); // v1.0 — select-all + paste/clear buttons
   initSmartDrop();       // v0.5.0 — drag-drop ذكيّ وlصق الحافظة
   restoreAllSettings();
   restoreLogo();
@@ -5292,25 +5293,69 @@ function initSilentMode() {
 }
 
 async function shareApp() {
+  // v0.14.1 — مَنشور المُشاركة الكامِل
+  const fullText = `🌙 GT-SIRM — صانع ريلز إسلاميّة
+
+صانع ريلز إسلاميّة بجودة احترافيّة لخدمة الإسلام والمسلمين.
+
+📚 6 وَحدات محتوى مُكتمَلة (6557 عُنصراً):
+• القرآن الكريم (114 سورة + قُرّاء + ترجمات)
+• الحديث الشَريف (90 حَديثاً مع التصحيح)
+• الأذكار (267 ذكراً في 132 فئة)
+• أسماء الله الحسنى (100 اسماً)
+• الأدعية المأثورة (32 دعاءً)
+• الحِكَم والمواعظ (32 قولاً)
+
+🎨 مَزايا تقنيّة:
+• يَعمل بدون إنترنت
+• مَفتوح المَصدر (GPLv3)
+• 3 منصّات: Linux + Android + المُتصفّحات
+• وَضع صامت لمَن يَرفض الموسيقى
+
+🔗 الموقع: https://salehgnutux.github.io/GT-SIRM/
+📁 المُستودع: https://github.com/SalehGNUTUX/GT-SIRM
+📦 الإصدارات: https://github.com/SalehGNUTUX/GT-SIRM/releases
+
+#GT_SIRM #ريلز_إسلامية #إسلام #برمجيات_مفتوحة`;
+
   const shareData = {
     title: "GT-SIRM — صانع ريلز إسلاميّة",
-    text: "صانع ريلز إسلاميّة بجودة احترافيّة — قرآن، حديث، أذكار، أدعية، أسماء الله الحسنى، حِكَم. مَفتوح المَصدر (GPLv3)، يَعمل على لينُكس وأَندرويد والمُتصفّحات.",
+    text: fullText,
     url: "https://salehgnutux.github.io/GT-SIRM/",
   };
+  // v0.14.1 — Capacitor Share على Android (يَفتح قائمة تَطبيقات التَواصل)
+  if (S.isNativeAndroid && window.Capacitor?.Plugins?.Share) {
+    try {
+      await window.Capacitor.Plugins.Share.share({
+        title: shareData.title,
+        text: fullText,
+        dialogTitle: "شارك GT-SIRM",
+      });
+      // نَنسخ أيضاً للحافظة كاحتياط
+      try { await navigator.clipboard.writeText(fullText); } catch (_) {}
+      toast?.("✅ شُكراً لمُشاركة البَرنامج", "success", 2000);
+      return;
+    } catch (e) {
+      if (e.message?.includes("canceled")) return;
+      console.warn("[share:capacitor]", e);
+    }
+  }
+  // المُتصفّحات الحَديثة + iOS
   try {
     if (navigator.share) {
       await navigator.share(shareData);
+      try { await navigator.clipboard.writeText(fullText); } catch (_) {}
       toast?.("✅ شُكراً لمُشاركة البَرنامج", "success", 2000);
       return;
     }
   } catch (e) {
     if (e.name === "AbortError") return;
-    console.warn("[share] error:", e);
+    console.warn("[share]", e);
   }
+  // fallback: clipboard
   try {
-    const text = `${shareData.title}\n\n${shareData.text}\n\nالمَوقع: ${shareData.url}\nالمُستودع: https://github.com/SalehGNUTUX/GT-SIRM`;
-    await navigator.clipboard.writeText(text);
-    toast?.("📋 نُسِخ نَصّ المُشاركة للحافظة — أَلصِقه أَيّ مَكان", "success", 2500);
+    await navigator.clipboard.writeText(fullText);
+    toast?.("📋 نُسِخ مَنشور المُشاركة الكامِل — أَلصِقه في أيّ تَطبيق", "success", 3000);
   } catch (e) {
     toast?.(`❌ تَعذَّر النَسخ: ${e.message}`, "error", 3000);
   }
@@ -5318,6 +5363,244 @@ async function shareApp() {
 
 function initShareButton() {
   document.getElementById("share-app-btn")?.addEventListener("click", shareApp);
+  document.getElementById("share-app-btn-about")?.addEventListener("click", shareApp);
+}
+
+// ══════════════════════════════════════════════════════
+//  v1.0 — تَحسينات الـinputs: select-all عَلى النَقر + paste/clear buttons
+// ══════════════════════════════════════════════════════
+function _installInputSelectAll() {
+  // عَلى focus لـtext/number/search: حَدِّد كلّ النَصّ.
+  // إن نَقَر المُستخدم مَرّة أخرى وَالـinput مُركَّز، يَضع المُتصفّح المُؤشّر تلقائيّاً.
+  const sel = 'input[type="text"], input[type="number"], input[type="search"], input[type="tel"], input[type="url"], input[type="email"], input:not([type])';
+  const handler = (e) => {
+    const t = e.target;
+    if (!t.matches(sel)) return;
+    // تَجاوَز ميكروفون/file/readonly
+    if (t.readOnly || t.disabled) return;
+    // تَأخير قَصير ليَنتهي default focus
+    setTimeout(() => { try { t.select(); } catch (_) {} }, 0);
+  };
+  document.addEventListener("focus", handler, true);
+}
+
+// يَفحَص parent للـinput عن أزرار paste/clear مَوجودة مُسبقاً ويُضيف فَقط الناقِص.
+function _hasPasteClearBtns(parent) {
+  if (!parent) return { paste: false, clear: false };
+  const buttons = parent.querySelectorAll("button");
+  let paste = false, clear = false;
+  for (const b of buttons) {
+    const id = (b.id || "").toLowerCase();
+    const title = (b.title || "").toLowerCase();
+    const text = (b.textContent || "").toLowerCase();
+    if (id.includes("paste") || text.includes("📋") || title.includes("لصق")) paste = true;
+    if (id.includes("clear") || text.includes("✕") || text.includes("🗑") || title.includes("مسح") || title.includes("حذف") || title.includes("إلغاء")) clear = true;
+  }
+  return { paste, clear };
+}
+
+function _addPasteClearButtons(elementId, opts = {}) {
+  const el = document.getElementById(elementId);
+  if (!el || el._pasteClearAdded) return;
+  el._pasteClearAdded = true;
+
+  // v1.0 — تَجاوَز حُقول النَصّ داخل .cpg (لون hex مع color picker — التَداخُل البَصريّ)
+  if (el.parentNode?.classList?.contains("cpg")) return;
+
+  const parents = [el.parentNode, el.parentNode?.parentNode].filter(Boolean);
+  let existing = { paste: false, clear: false };
+  for (const p of parents) {
+    const e = _hasPasteClearBtns(p);
+    existing.paste = existing.paste || e.paste;
+    existing.clear = existing.clear || e.clear;
+  }
+  if (existing.paste && existing.clear) return;
+
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "display:flex;gap:3px;margin-top:3px;align-items:center";
+
+  if (!existing.paste) {
+    const pasteBtn = document.createElement("button");
+    pasteBtn.type = "button";
+    pasteBtn.className = "btn btn-g bsm";
+    pasteBtn.style.cssText = "padding:3px 8px;font-size:11px;flex:1";
+    pasteBtn.innerHTML = "📋 لصق";
+    pasteBtn.addEventListener("click", async () => {
+      try {
+        const txt = await navigator.clipboard.readText();
+        el.value = txt;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        el.focus();
+        toast?.("📋 تَمَّ اللصق", "success", 1200);
+      } catch (e) { toast?.(`❌ تَعذَّر اللصق: ${e.message}`, "error", 2000); }
+    });
+    wrap.appendChild(pasteBtn);
+  }
+  if (!existing.clear) {
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "btn btn-g bsm";
+    clearBtn.style.cssText = "padding:3px 8px;font-size:11px;color:var(--danger);flex:1";
+    clearBtn.innerHTML = "✕ حذف";
+    clearBtn.addEventListener("click", () => {
+      el.value = "";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      el.focus();
+    });
+    wrap.appendChild(clearBtn);
+  }
+  if (wrap.children.length > 0) el.parentNode.insertBefore(wrap, el.nextSibling);
+}
+
+function _installPasteClearButtons() {
+  const targets = [
+    "free-text-area",
+    "free-source",
+    "tts-custom-text",
+    "tts-custom-url",
+    "tts-custom-headers",
+    "tts-custom-body",
+    "verse-search-inp",
+    "surah-search",
+    "hadith-search",
+    "azkar-search",
+    "asma-search",
+    "duas-search",
+    "hikam-search",
+    "recvid-dl-url",
+    "bgdl-url",
+    "free-audio-dl-url",
+    "ytdlp-url",
+    "dl-save-path",
+    "bgdl-path",
+    "recvid-dl-path",
+    "free-audio-dl-path",
+    "wm-text",
+    "vtitle-text",
+    "ar-name",
+    "ar-folder",
+    "gc1t",
+    "gc2t",
+    "free-tpl-name",
+    "tpl-name-inp",
+  ];
+  for (const id of targets) _addPasteClearButtons(id);
+}
+
+function initInputEnhancements() {
+  _installInputSelectAll();
+  _installPasteClearButtons();
+  _installCustomColorPicker(); // v1.0 — يُلغي مُشكلة overflow في الويب/الـPWA
+}
+
+// ══════════════════════════════════════════════════════
+//  v1.0 — Custom Color Picker للويب
+//  المُشكلة: <input type="color"> النَّاتج يَخرج خارج إطار الشاشة في PWA/ملء الشاشة.
+//  الحلّ: نَعرض modal مَركَزيّ يَحوي native picker — مَوضِعه دائماً مَرئيّ.
+// ══════════════════════════════════════════════════════
+const PRESET_COLORS = [
+  "#000000", "#ffffff", "#7f7f7f", "#c0c0c0",
+  "#0a2e1e", "#020d06", "#0a5c36", "#1ba360",
+  "#3ddc84", "#f0c842", "#ff9500", "#ffd700",
+  "#e85d8a", "#9c5cd4", "#4a9fd5", "#00b140",
+  "#d4a017", "#2a1a00", "#1a0a2e", "#050a1e",
+  "#ff0000", "#00ff00", "#0000ff", "#ffff00",
+];
+
+function _showCustomColorPicker(targetInput) {
+  const oldModal = document.getElementById("ccp-modal");
+  if (oldModal) oldModal.remove();
+  const initial = targetInput.value || "#000000";
+  const modal = document.createElement("div");
+  modal.id = "ccp-modal";
+  modal.style.cssText = "position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center";
+  modal.innerHTML = `
+    <div style="background:var(--bg0);border:1px solid var(--p);border-radius:var(--r);padding:18px;max-width:340px;width:92%;direction:rtl;box-shadow:0 8px 32px rgba(0,0,0,.6)">
+      <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--al)">🎨 اختر اللَون</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+        <input type="color" id="ccp-native" value="${initial}" style="width:50px;height:50px;border:1px solid var(--b1);border-radius:6px;cursor:pointer;background:none;padding:2px">
+        <input type="text" id="ccp-hex" class="fc" value="${initial}" maxlength="7" style="flex:1;font-family:monospace;font-size:13px;text-align:center">
+      </div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:6px">ألوان جاهزة:</div>
+      <div id="ccp-palette" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-bottom:14px"></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-p" id="ccp-ok" style="flex:1;padding:8px;font-weight:700">✅ تَطبيق</button>
+        <button class="btn btn-g" id="ccp-cancel" style="padding:8px">✕ إلغاء</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  const native = modal.querySelector("#ccp-native");
+  const hex = modal.querySelector("#ccp-hex");
+  const palette = modal.querySelector("#ccp-palette");
+  // ألوان جاهزة
+  for (const c of PRESET_COLORS) {
+    const sw = document.createElement("button");
+    sw.type = "button";
+    sw.style.cssText = `background:${c};border:1px solid var(--b1);border-radius:4px;width:100%;aspect-ratio:1;cursor:pointer;padding:0`;
+    sw.title = c;
+    sw.addEventListener("click", () => {
+      native.value = c;
+      hex.value = c;
+    });
+    palette.appendChild(sw);
+  }
+  native.addEventListener("input", () => { hex.value = native.value; });
+  hex.addEventListener("input", () => {
+    let v = hex.value.trim();
+    if (!v.startsWith("#")) v = "#" + v;
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) native.value = v;
+  });
+  const close = () => modal.remove();
+  modal.querySelector("#ccp-cancel").addEventListener("click", close);
+  modal.querySelector("#ccp-ok").addEventListener("click", () => {
+    const finalColor = native.value;
+    targetInput.value = finalColor;
+    targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+    targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+    // أَيضاً حدِّث الـhex text المُجاوِر إن وُجد
+    const sibling = targetInput.parentNode?.querySelector('input[type="text"]');
+    if (sibling) {
+      sibling.value = finalColor;
+      sibling.dispatchEvent(new Event("input", { bubbles: true }));
+      sibling.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    close();
+  });
+  // إغلاق عند النقر خارج الـcard
+  modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+}
+
+function _installCustomColorPicker() {
+  // يَعمل في الويب والأَندرويد — يَحلّ مُشكلة overflow عند fullscreen/PWA.
+  // أَطبَق عَلى كلّ color inputs الموجودة (والمُستقبَليّة عَبر MutationObserver)
+  const apply = (input) => {
+    if (input._customPickerHooked) return;
+    input._customPickerHooked = true;
+    input.addEventListener("click", (e) => {
+      e.preventDefault();
+      _showCustomColorPicker(input);
+    });
+    // اِلتَقِط أيضاً touchstart للـsafari/mobile
+    input.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      _showCustomColorPicker(input);
+    }, { passive: false });
+  };
+  document.querySelectorAll('input[type="color"]').forEach(apply);
+  // مُراقبة العَناصر المُضافة لاحقاً
+  const obs = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      m.addedNodes.forEach(n => {
+        if (n.nodeType !== 1) return;
+        if (n.matches?.('input[type="color"]')) apply(n);
+        n.querySelectorAll?.('input[type="color"]').forEach(apply);
+      });
+    }
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
 }
 
 function onBgAudio(input) {

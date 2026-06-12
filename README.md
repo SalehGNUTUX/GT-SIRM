@@ -9,9 +9,9 @@
 
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
 [![Platform: Linux + Web + Android](https://img.shields.io/badge/Platform-Linux%20%7C%20Web%20%7C%20Android-orange?logo=linux)](#)
-[![Status](https://img.shields.io/badge/Status-Beta-blueviolet)](#)
-[![Version](https://img.shields.io/badge/Version-0.13.3-brightgreen)](./CHANGELOG.md)
-[![Releases](https://img.shields.io/github/v/release/SalehGNUTUX/GT-SIRM?include_prereleases&label=Latest%20Release)](https://github.com/SalehGNUTUX/GT-SIRM/releases)
+[![Status](https://img.shields.io/badge/Status-Stable-brightgreen)](#)
+[![Version](https://img.shields.io/badge/Version-1.0.0-success)](./CHANGELOG.md)
+[![Releases](https://img.shields.io/github/v/release/SalehGNUTUX/GT-SIRM?label=Latest%20Release)](https://github.com/SalehGNUTUX/GT-SIRM/releases)
 
 </div>
 
