@@ -2,22 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project state (2026-06-11)
+## Project state (2026-06-12)
 
-**GT-SIRM (GnuTux Short Islamic Reels Maker)** — at **v0.13.3** (Beta). Triple-platform Electron+PWA+Capacitor Islamic reels maker forked from GT-SQRM/GT-SQR v3.0.
+**GT-SIRM (GnuTux Short Islamic Reels Maker)** — at **v1.0.0 STABLE** 🎉. Triple-platform Electron+PWA+Capacitor Islamic reels maker forked from GT-SQRM/GT-SQR v3.0.
 
 ### Current state
-- آخر commit: `d2083c7` — v0.13.3 (Android: أذونات + .gtsirm + زرّ الرُجوع)
-- آخر release مَنشور: **v0.13.3 Beta** (AppImage + DEB + RPM + APK)
-- جميع الوَحدات الستّ مُكتمَلة: قرآن + 90 حديثاً + 267 ذكراً + 100 اسماً + 32 دعاءً + 32 حكمة
-- v0.14 (الوَضع الصامت + Workdir للهاتف) هي الخُطوة الموالية المُقترحة
+- آخر commit: `25b9f7d` — v1.0.0 STABLE
+- آخر release مَنشور: **v1.0.0 STABLE** (AppImage + DEB + RPM + APK) — مَوسوم `--latest`
+- جميع الوَحدات الستّ مُكتمَلة: 6557 عُنصراً (قرآن + 90 حديث + 267 ذكر + 100 اسم + 32 دعاء + 32 حكمة)
+- الإصدار المُستقرّ — لا تَطوير جَوهريّ مُخطَّط؛ فقط صيانة وإصلاحات
 
 ### Latest versions
 | Platform | Version | Tag |
 |---|---|---|
-| **Desktop (AppImage/DEB/RPM)** | 0.13.3 | `v0.13.3` |
-| **Web (PWA)** | 0.13.3 | sw cache `gt-sirm-v60` |
-| **Android (APK)** | 0.13.3 | Capacitor 6 |
+| **Desktop (AppImage/DEB/RPM)** | 1.0.0 | `v1.0.0` |
+| **Web (PWA)** | 1.0.0 | sw cache `gt-sirm-v62` |
+| **Android (APK)** | 1.0.0 | Capacitor 6 (with Share + App + Filesystem plugins) |
 
 ### Sibling repos (kept in sync for portable features)
 GT-SIRM features that are portable (chromakey, vtitle, project save, recvid, restart-all-btn) get backported to GT-SQRM/GT-SQR. Features tied to GT-SIRM's architecture (Module Manager, free text, per-slice timing+lock, content modules, work dir, collapsible UI, mic recorder, TTS, Android wrapping) are NOT ported.
@@ -163,13 +163,43 @@ UI flow:
 - App opens on settings tab by default (v0.13.1).
 - Settings → Content modules has gold "⭐ رَئيسيّ" badge.
 
-### Android APK (v0.13.3, Capacitor 6)
-- `@capacitor/app` + `@capacitor/filesystem` installed.
+### Android APK (v0.13.3 → v1.0.0, Capacitor 6)
+- `@capacitor/app` + `@capacitor/filesystem` + `@capacitor/share` installed.
 - `initCapacitor()` runs only if `window.Capacitor.isNativePlatform()`.
 - `App.addListener('backButton')` shows save/quit/cancel modal if dirty.
 - `App.addListener('appUrlOpen')` + `App.getLaunchUrl()` handle .gtsirm file opens via Filesystem.readFile.
+- `Share.share()` on Android opens native social/messaging app picker. Falls back to clipboard.
 - AndroidManifest.xml: RECORD_AUDIO + storage + media + microphone feature + intent-filter for .gtsirm.
-- `gen-android-icons.py` regenerates icons after `cap sync` to override Capacitor defaults.
+- `gen-android-icons.py` regenerates icons + **splash screens** after `cap sync` to override Capacitor defaults. Generates 3 mipmap files per density (legacy + round + adaptive foreground) + 2 splash PNGs per density (portrait + landscape) + drawable/splash.png default.
+
+### Silent mode (v0.14)
+- Toggle in tab-rec → mutes all primary audio sources (recvid + TTS + mic + reciter).
+- Custom duration via `silent-total-dur` slider (5-120s).
+- Optional bg audio (rain/sea/wind) via `silent-allow-bg-audio` toggle.
+- `getActiveAudioDuration()` returns silent-total-dur when silent-mode active (highest priority).
+- `startPlayer()` short-circuits audio playback when silent — only bg media plays.
+- Religious benefit: for users who reject music entirely or human voices for Quran in videos.
+
+### Share button (v0.14+)
+- Two locations: Settings tab + About tab (both call `shareApp()`).
+- Android: `Capacitor.Plugins.Share.share()` opens native social/messaging app picker.
+- Web/Desktop: `navigator.share` if available, else `navigator.clipboard.writeText`.
+- Always writes full share post to clipboard as backup.
+- Post includes: title + description + 6557 element count + 5 audio source list + 3 platform list + hashtags.
+
+### Input enhancements (v1.0)
+- `_installInputSelectAll()` — focus on text/number/search inputs auto-selects. Second click positions cursor (default browser).
+- `_installPasteClearButtons()` — 28 fields get inline 📋 paste + ✕ clear buttons.
+- `_hasPasteClearBtns(parent)` checks 2 parent levels for existing buttons (id contains paste/clear, text 📋/✕/🗑, title لصق/مسح). Only adds missing.
+- **Skip rule**: inputs inside `.cpg` (color picker group) are skipped — color picker is enough.
+
+### Custom Color Picker (v1.0, web/APK only)
+- Native `<input type="color">` dialog overflows screen in PWA fullscreen / RTL panels near edge.
+- `_installCustomColorPicker()` hooks click on all color inputs → opens centered modal.
+- Modal: native input + hex field + 24-color palette + apply/cancel.
+- MutationObserver catches dynamically added color inputs.
+- Apply: sets `input.value`, dispatches events, syncs sibling hex text input.
+- Desktop Electron NOT affected (native picker bound to app window).
 
 ## Commands
 
@@ -359,6 +389,8 @@ git clone --depth 3 https://github.com/SalehGNUTUX/GT-SQR.git GT-SQR-port
 
 ## Memory entries to read
 
+- `project-gt-sirm-state-v100` — current state (v1.0.0 STABLE)
+- `project-gt-sirm-state-v0133` — earlier state (v0.13.3)
 - `project-gt-sirm-state-v01212` — earlier state (v0.12.12)
 - `project-gt-sirm-plan` — overall plan
 - `project-gt-sirm-disclaimer` — Arabic disclaimer variants
@@ -369,9 +401,15 @@ git clone --depth 3 https://github.com/SalehGNUTUX/GT-SQR.git GT-SQR-port
 
 ## Next session priorities
 
-1. **Visual test of v0.13.3** on actual Android device — confirm file association, back button, microphone permission flow.
-2. **v0.14 — مَصادر الصَوت المُتَبقّية** (per ROADMAP):
-   - الوَضع الصامت (silent mode — bg sounds only for إيقاع without effects)
-3. **(Optional) Work dir for mobile** — use Capacitor Filesystem → Documents/GT-SIRM/.
-4. **(Optional) Edge TTS fix** — investigate if Microsoft's DRM can be worked around (low priority since Google works).
-5. **Landing page (`index.html` root)** — refresh for v0.13.3 highlights including APK.
+**v1.0.0 is the stable release.** No major features planned. Future work is maintenance + small QoL.
+
+1. **Bug reports from real users** — fix as they come.
+2. **(Optional) Work dir for mobile** — Capacitor Filesystem → Documents/GT-SIRM/.
+3. **(Optional) Edge TTS DRM workaround** — Google works fine, low priority.
+4. **(Optional) Expand Hadith corpus** — Bukhari/Muslim full collections.
+5. **(Optional) Multi-language UI** — currently Arabic-only.
+
+## v1.0 release notes location
+- Release notes: `/tmp/release-v1.0.0.md` (cleared on reboot)
+- Canonical GitHub Release: https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.0.0
+- README badge + landing badge: "Stable" green
