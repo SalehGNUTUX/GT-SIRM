@@ -5953,7 +5953,7 @@ async function shareApp() {
 • يَعمل بدون إنترنت
 • مَفتوح المَصدر (GPLv3)
 • 3 منصّات: Linux + Android + المُتصفّحات
-• وَضع صامت لمَن يَرفض الموسيقى
+• وَضع صامت يَجتنب الموسيقى — لِمَحتوى مُوافِق لِضَوابط الشَّرع
 
 🔗 الموقع: https://salehgnutux.github.io/GT-SIRM/
 📁 المُستودع: https://github.com/SalehGNUTUX/GT-SIRM
