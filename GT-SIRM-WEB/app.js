@@ -5316,7 +5316,7 @@ async function shareApp() {
 📁 المُستودع: https://github.com/SalehGNUTUX/GT-SIRM
 📦 الإصدارات: https://github.com/SalehGNUTUX/GT-SIRM/releases
 
-#GT_SIRM #ريلز_إسلامية #إسلام #برمجيات_مفتوحة`;
+#GT_SIRM #GNUTUX #ريلز_إسلامية #إسلام #برمجيات_مفتوحة`;
 
   const shareData = {
     title: "GT-SIRM — صانع ريلز إسلاميّة",
