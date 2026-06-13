@@ -73,10 +73,18 @@ Built for the sake of Allah, in service of Islam. Every contribution must align:
 | `gt_sqrm_` / `gt_sqr_` (in GT-SIRM) | `gt_sirm_` | Single unified prefix |
 | `window.SQRM` | `window.SIRM` | Renamed IPC namespace |
 | `تَلاوة` in TTS context | `قِراءة` | TTS NOT for Quran (v0.13.1) |
+| `لِمَن يَرفض الموسيقى` / `لمن يرى ...` | `يَجتنب الموسيقى` / `الموسيقى مُحرَّمة شَرعاً` | **Sharia rulings are NOT personal preferences** (v1.0 fix) |
+
+### CRITICAL: Sharia framing rule (v1.0 lesson)
+Religious rulings must be stated as fact, NEVER as personal taste. Avoid framing:
+- ❌ "for those who reject music" / "for those who see..." / "if you don't like..."
+- ✅ "avoids music" / "music is religiously prohibited" / "compliant with Sharia"
+
+Music is **forbidden in Islam** (مُحرَّمة شَرعاً), not a "taste". Same for any other ruling. This applies to: feature descriptions, share text, marketing copy, UI strings, comments — everywhere.
 
 Verify with:
 ```bash
-grep -rn "موسيق\|الأسماء الحسنى\|أسماء حسنى\|gt_sqrm_\|gt_sqr_\|SQRM" . \
+grep -rn "موسيق\|الأسماء الحسنى\|أسماء حسنى\|gt_sqrm_\|gt_sqr_\|SQRM\|لمَن يَرفض\|لمن يرى" . \
   --include="*.md" --include="*.html" --include="*.js" --include="*.json" \
   | grep -v node_modules
 ```
@@ -353,6 +361,47 @@ Per-slice section reads from `S.freePerSlice` when rendering. If user applies Ha
 
 ### RPM build picks stale DEB (alien fallback)
 `alien -r -g <newest-deb>`. If older versioned DEB is in `dist/`, alien may pick wrong. **Always delete old version artifacts before building.**
+
+### Hotfix without bumping version: replace assets on the same release
+For small post-release fixes (wording, version-string typos in UI) that don't warrant a new version, **replace assets on the same release tag** without creating a new release:
+
+```bash
+# 1. Fix code → commit + push
+git add ... && git commit -m "fix: ..." && git push
+
+# 2. Rebuild affected artifacts (clean old first to avoid alien picking wrong DEB)
+cd GT-SIRM-DESKTOP && rm -f dist/*.AppImage dist/*.deb dist/*.rpm
+bash scripts/build-all.sh all &
+cd ../GT-SIRM-WEB && rm -f dist-apk/*.apk
+bash scripts/build-apk.sh debug &
+wait
+
+# 3. Rename APK + replace assets on existing release
+cp GT-SIRM-WEB/dist-apk/GT-SIRM-debug.apk GT-SIRM-WEB/dist-apk/GT-SIRM-{VER}-debug.apk
+for asset in "GT-SIRM-{VER}.AppImage" "gt-sirm_{VER}_amd64.deb" "gt-sirm-{VER}-2.x86_64.rpm" "GT-SIRM-{VER}-debug.apk"; do
+  gh release delete-asset v{VER} "$asset" --yes
+done
+gh release upload v{VER} \
+  "GT-SIRM-DESKTOP/dist/GT-SIRM-{VER}.AppImage" \
+  "GT-SIRM-DESKTOP/dist/gt-sirm_{VER}_amd64.deb" \
+  "GT-SIRM-DESKTOP/dist/gt-sirm-{VER}-2.x86_64.rpm" \
+  "GT-SIRM-WEB/dist-apk/GT-SIRM-{VER}-debug.apk"
+```
+
+Same tag, same release notes, same `--latest` flag — only the four binary assets get replaced. Used for v1.0.0 wording fixes (587833b, 164ec75).
+
+### Version strings live in many places — easy to miss one
+Bumping version requires updating ALL of:
+1. `GT-SIRM-DESKTOP/package.json` — `"version"`
+2. `GT-SIRM-WEB/package.json` — `"version"`
+3. `GT-SIRM-WEB/manifest.json` — `"version"`
+4. `GT-SIRM-WEB/sw.js` — `CACHE_VER` + header comment
+5. `GT-SIRM-DESKTOP/src/renderer/index.html` — `<span class="info-v">{ver}</span>` AND `<small id="app-subtitle">GnuTux Short Islamic Reels Maker v{ver}</small>`
+6. `GT-SIRM-WEB/index.html` — `<span class="info-v">{ver}</span>` AND `<small>...v{ver}</small>` AND `<p>...v{ver}</p>` (BOTH about-tab occurrences)
+
+The `app-subtitle` and small/p in about-tab were missed in earlier version bumps (still showed "v0.4" at v1.0.0). Always grep both `GnuTux Short Islamic Reels` and `info-v` after bumping.
+
+**Note:** The `v0.4` badge next to "✍️ النصّ الحرّ" in tab-rec is a historical marker (when the feature was introduced), NOT current version. Don't change it.
 
 ### Inherited gotchas from GT-SQRM
 All gotchas in `../CLAUDE.md` apply: surah name prefix handling, CSP blocks `fetch("blob:")`, fonts must `FontFace.load()`, ffmpeg progress IPC throttling, render loop must yield during V2 export, web AAC codec fallback chain, web works under file://, electron-builder cache corruption.
