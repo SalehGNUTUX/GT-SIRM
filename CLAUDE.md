@@ -455,7 +455,11 @@ git clone --depth 3 https://github.com/SalehGNUTUX/GT-SQR.git GT-SQR-port
 1. **Bug reports from real users** — fix as they come.
 2. **(Optional) Work dir for mobile** — Capacitor Filesystem → Documents/GT-SIRM/.
 3. **(Optional) Edge TTS DRM workaround** — Google works fine, low priority.
-4. **(Optional) Expand Hadith corpus** — Bukhari/Muslim full collections.
+4. **🌟 Hadith expansion (v1.1+)** — Use **[AhmedBaset/hadith-json](https://github.com/AhmedBaset/hadith-json)** (50,884 hadiths in 17 collections incl. Six Books). See `ROADMAP.md` § "📚 خُطّة تَوسيع وَحدة الحديث الشريف" for the full plan. Key constraints:
+   - **Grading is mandatory** (project rule). The source has NO grading — must supplement manually or from another source (al-Albani, al-Arnaut).
+   - Pin to a specific tag (data format may change on `main`).
+   - Lazy-load per book to avoid 35MB bundle.
+   - Attribution in About tab.
 5. **(Optional) Multi-language UI** — currently Arabic-only.
 
 ## v1.0 release notes location
