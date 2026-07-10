@@ -786,6 +786,10 @@ function restartAll() {
       if (it.vid) { try { it.vid.pause(); it.vid.currentTime = 0; } catch (_) {} }
     });
   }
+  // v1.1.0 — فيديو التِلاوة الجاهز (نُعيده صَراحةً هُنا لأنّ pausePlayer لَم يَعُد يُعيده)
+  if (S.recVidEl) {
+    try { S.recVidEl.pause(); S.recVidEl.currentTime = 0; } catch (_) {}
+  }
 
   if (typeof updateAyaInfo === "function") updateAyaInfo();
   if (typeof updateAyaUI === "function") updateAyaUI();
@@ -2136,6 +2140,15 @@ function initEventListeners() {
       try { S.recVidEl.pause(); } catch (_) {}
     }
   });
+  // v1.1.0 — توگل إظهار النَصّ فَوق الفيديو
+  const recvidShowText = $("recvid-showtext");
+  if (recvidShowText) recvidShowText.addEventListener("change", (e) => {
+    if (e.target.checked) {
+      toast("📝 سَيُعرَض النَصّ فَوق الفيديو — أعِد تَحميل الفيديو بعد اختيار النَصّ", "info", 2600);
+    } else {
+      toast("🎬 الفيديو يَحلّ محلّ النَصّ — أعِد تَحميل الفيديو لِمَسح النَصّ", "info", 2600);
+    }
+  });
   const recvidFile = $("recvid-file");
   if (recvidFile) recvidFile.addEventListener("change", (e) => onRecVidFile(e.target));
   $("recvid-remove")?.addEventListener("click", () => {
@@ -2661,8 +2674,19 @@ function drawFrame(ts) {
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
 
+  // v0.7.0 — فيديو التلاوة الجاهز؛ v1.1.0 — إظهار النَصّ فَوقه + تَطبيق تَأثيرات المَشهد عليه اختياريّاً
+  const recvidActive = ge("recvid-on") && S.recVidEl;
+  const recvidShowText = recvidActive && ge("recvid-showtext");
+  const recvidApplyColor = recvidActive && ge("recvid-apply-color");
+  const recvidApplyLight = recvidActive && ge("recvid-apply-light");
+  const recvidPos = recvidActive
+    ? (recvidApplyColor ? "early" : (recvidApplyLight ? "mid" : "late"))
+    : "none";
+
   drawBg(ctx, W, H, ts);
+  if (recvidPos === "early") drawRecitationVideo(ctx, W, H);
   applyColorFilter(ctx, W, H);
+  if (recvidPos === "mid") drawRecitationVideo(ctx, W, H);
   if (ge("fx-bokeh")) drawBokeh(ctx, W, H, ts);
   applyDim(ctx, W, H);
   applyOvColor(ctx, W, H);
@@ -2678,10 +2702,9 @@ function drawFrame(ts) {
   if (ge("fx-kaleido")) applyKaleido(ctx, W, H);
   if (ge("fx-glitch"))  applyGlitch(ctx, W, H);
   if (ge("fx-oldfilm")) applyOldFilm(ctx, W, H, ts);
-  // v0.7.0 — فيديو التلاوة الجاهز يستبدل النصّ/الآيات
-  const recvidActive = ge("recvid-on") && S.recVidEl;
-  if (recvidActive) drawRecitationVideo(ctx, W, H);
-  else if (S.verses.length) drawVerse(ctx, W, H, ts);
+  if (recvidPos === "late") drawRecitationVideo(ctx, W, H);
+  // اِرسِم النَصّ إن لَم يَكُن الفيديو فَعّالاً، أَو كان فَعّالاً مع تَوگل "إظهار النَصّ فَوق الفيديو"
+  if (S.verses.length && (!recvidActive || recvidShowText) && !(S.verses.length === 1 && S.verses[0]?.recvid)) drawVerse(ctx, W, H, ts);
   drawSurahName(ctx, W, H);
   drawVideoTitle(ctx, W, H);
   drawWave(ctx, W, H, ts);
@@ -3552,8 +3575,16 @@ function onRecVidFile(input) {
         if (typeof applyRecVidFXLive === "function") applyRecVidFXLive();
       } catch (_) {}
     }).catch(console.warn);
-    S.verses = [{ text: "", numberInSurah: 1, number: 1, audio: null, audioSecondary: [], manualDuration: sec, free: true, recvid: true }];
-    S.ayaDurations = [sec];
+    // v1.1.0 — إن كان توگل "إظهار النَصّ فوق الفيديو" مُفعَّلاً ولَدَينا آيات مُحمَّلة، احفَظها ووَزِّع مُدّة الفيديو
+    const keepText = ge("recvid-showtext") && S.verses.length && !(S.verses.length === 1 && S.verses[0]?.recvid);
+    if (keepText) {
+      const perVerse = sec / S.verses.length;
+      S.verses = S.verses.map(v => ({ ...v, manualDuration: perVerse, audio: null, audioSecondary: [] }));
+      S.ayaDurations = S.verses.map(() => perVerse);
+    } else {
+      S.verses = [{ text: "", numberInSurah: 1, number: 1, audio: null, audioSecondary: [], manualDuration: sec, free: true, recvid: true }];
+      S.ayaDurations = [sec];
+    }
     S.currentAya = 0; S.elapsed = 0;
     if (typeof updateAyaUI === "function") updateAyaUI();
     toast(`🎥 تمّ تحميل فيديو التلاوة (${sec.toFixed(1)}s)`, "success", 2200);
@@ -5947,12 +5978,47 @@ function pausePlayer() {
   stopRecitationAudio();
   if (S.bgAudioEl) S.bgAudioEl.pause();
   if (S.bgVid) { try { S.bgVid.pause(); } catch (_) {} }
-  // v0.7.0
-  if (S.recVidEl) { try { S.recVidEl.pause(); S.recVidEl.currentTime = 0; } catch (_) {} }
+  // v1.1.0 — أوقف فيديو التِلاوة فقط دون إعادة لِلبداية (لِيَستأنِف من موضعه)
+  if (S.recVidEl) { try { S.recVidEl.pause(); } catch (_) {} }
 }
 
-function prevAya() { if (S.currentAya > 0) { S.currentAya--; S.elapsed = 0; updateAyaUI(); if (S.playing) playRecitationAudio(); } }
-function nextAya() { if (S.currentAya < S.verses.length - 1) { S.currentAya++; S.elapsed = 0; updateAyaUI(); if (S.playing) playRecitationAudio(); } }
+// v1.1.0 — مَجموع تَوقيتات الآيات السابقة (+ الفَجَوات) لِمُزامَنة مَوضِع فيديو التِلاوة
+function getCumulativeAyaTime(idx) {
+  let t = 0;
+  const gap = typeof getAyaGap === "function" ? getAyaGap() : 0;
+  for (let i = 0; i < idx && i < S.ayaDurations.length; i++) {
+    t += (S.ayaDurations[i] || 6) + gap;
+  }
+  return t;
+}
+
+// v1.1.0 — يُزامِن مَوضِع فيديو التِلاوة مع الآية الحاليّة
+function syncRecVidToCurrentAya() {
+  if (!S.recVidEl) return;
+  const recvidActive = ge("recvid-on") && S.recVidEl;
+  if (!recvidActive) return;
+  try {
+    const t = getCumulativeAyaTime(S.currentAya) + (S.elapsed || 0);
+    S.recVidEl.currentTime = Math.max(0, Math.min(t, S.recVidEl.duration || t));
+  } catch (_) {}
+}
+
+function prevAya() {
+  if (S.currentAya > 0) {
+    S.currentAya--; S.elapsed = 0;
+    syncRecVidToCurrentAya();
+    updateAyaUI();
+    if (S.playing) playRecitationAudio();
+  }
+}
+function nextAya() {
+  if (S.currentAya < S.verses.length - 1) {
+    S.currentAya++; S.elapsed = 0;
+    syncRecVidToCurrentAya();
+    updateAyaUI();
+    if (S.playing) playRecitationAudio();
+  }
+}
 
 function seekClick(e) {
   const bar = $("pbar"), ratio = e.offsetX / bar.offsetWidth;
@@ -5963,6 +6029,7 @@ function seekClick(e) {
     if (acc + d >= ratio * total) { S.currentAya = i; S.elapsed = (ratio * total - acc); break; }
     acc += d;
   }
+  syncRecVidToCurrentAya();
   updateAyaUI();
   if (S.playing) playRecitationAudio();
 }
@@ -7512,7 +7579,7 @@ async function deserializeProject(proj) {
   if (proj.freeText) {
     const ta = document.getElementById("free-text-area");
     if (ta && proj.freeText.text) ta.value = proj.freeText.text;
-    S.freePerSlice = proj.freeText.perSlice || [];
+    S.freePerSlice = proj.freeText.perSlice ? JSON.parse(JSON.stringify(proj.freeText.perSlice)) : [];
     if (proj.freeText.audioTrim) S.freeAudioTrim = proj.freeText.audioTrim;
     if (typeof renderPerSliceList === "function") renderPerSliceList();
   }
@@ -7526,6 +7593,21 @@ async function deserializeProject(proj) {
     }
   }
   if (missing.length) showMissingAssetsModal(missing);
+
+  // v1.1.0 — إعادة تَطبيق النَصّ الحرّ إن كان مَحفوظاً (يُعيد بناء S.verses ويَستخدم S.freePerSlice المُستَعادة)
+  const savedText = proj.freeText?.text?.trim();
+  if (savedText && typeof applyFreeText === "function") {
+    setTimeout(() => {
+      try {
+        applyFreeText();
+        if (proj.freeText.perSlice) {
+          S.freePerSlice = JSON.parse(JSON.stringify(proj.freeText.perSlice));
+          if (typeof syncPerSliceToPlayback === "function") syncPerSliceToPlayback();
+          if (typeof renderPerSliceList === "function") renderPerSliceList();
+        }
+      } catch (_) {}
+    }, 400);
+  }
 
   clearProjectDirty();
   return { restored: (proj.assets || []).length - missing.length, missing: missing.length };
@@ -7610,6 +7692,25 @@ function showMissingAssetsModal(missing) {
 async function saveProjectToPath(_filePath) {
   const proj = await serializeProject();
   const json = JSON.stringify(proj, null, 2);
+  // v1.1.0 — إن كان لَدَينا FSA handle، اِكتُب مُباشرةً بلا حِوار (حَفظ صامِت)
+  if (typeof HAS_FSA !== "undefined" && HAS_FSA && S.projectFileHandle) {
+    try {
+      const perm = await S.projectFileHandle.queryPermission?.({ mode: "readwrite" });
+      if (perm !== "granted") {
+        const req = await S.projectFileHandle.requestPermission?.({ mode: "readwrite" });
+        if (req !== "granted") throw new Error("permission denied");
+      }
+      const writable = await S.projectFileHandle.createWritable();
+      await writable.write(json);
+      await writable.close();
+      S.projectFileName = S.projectFileHandle.name || S.projectFileName;
+      clearProjectDirty();
+      return true;
+    } catch (e) {
+      console.warn("FSA write failed, falling back to download:", e);
+      S.projectFileHandle = null; // handle expired أو مَرفوض — أَعِد للـfallback
+    }
+  }
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -7621,19 +7722,81 @@ async function saveProjectToPath(_filePath) {
   return true;
 }
 
-async function saveProjectInteractive() {
+// v1.1.0 — كَشف File System Access API (يُتيح الحَفظ الصامِت المُباشِر في نَفس المَلفّ)
+const HAS_FSA = typeof window !== "undefined" && typeof window.showSaveFilePicker === "function";
+
+async function saveProjectInteractive(forcePrompt = false) {
+  // v1.1.0 — إن كان لَدَينا FSA handle مَعروف، احفَظ فيه مُباشرةً بلا حِوار
+  if (!forcePrompt && HAS_FSA && S.projectFileHandle) {
+    const ok = await saveProjectToPath(null);
+    if (ok) {
+      toast(`💾 حُفظ: ${S.projectFileName}`, "success", 1500);
+      _ensureAutoSaveOn();
+    }
+    return;
+  }
+
+  // FSA save-as (يَحفَظ handle لِلاستخدام لاحِقاً)
+  if (HAS_FSA) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: S.projectFileName || "GT-SIRM-Project.gtsirm",
+        types: [{ description: "GT-SIRM Project", accept: { "application/json": [".gtsirm"] } }]
+      });
+      S.projectFileHandle = handle;
+      S.projectFileName = handle.name;
+      const ok = await saveProjectToPath(null);
+      if (ok) {
+        toast(`💾 تمّ الحَفظ: ${handle.name}`, "success", 2200);
+        _ensureAutoSaveOn();
+      }
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      console.warn("FSA save failed:", e);
+    }
+  }
+
+  // Fallback: تَنزيل blob (السُلوك القَديم — لا يُتيح حَفظاً تلقائيّاً صامتاً)
   const ok = await saveProjectToPath(null);
   if (ok) toast("💾 تمّ تنزيل ملفّ المشروع", "success", 2200);
+}
+
+// v1.1.0 — يُفعِّل الحَفظ التلقائيّ بَعد أوّل حَفظ ناجِح
+function _ensureAutoSaveOn() {
+  S._autoSavePromptDismissed = false;
+  const cb = document.getElementById("autosave-on");
+  if (cb && !cb.checked) {
+    cb.checked = true;
+    cb.dispatchEvent(new Event("change"));
+  } else if (cb && cb.checked) {
+    startAutoSave();
+  }
 }
 
 async function openProjectInteractive() {
   if (S.projectDirty) {
     if (!confirm("لديك تغييرات غير محفوظة. متابعة؟")) return;
   }
+  // v1.1.0 — استخدم FSA لِلحُصول عَلى handle قابِل لِلكتابة (لاحِقاً)
+  if (HAS_FSA) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: "GT-SIRM Project", accept: { "application/json": [".gtsirm"] } }],
+        multiple: false
+      });
+      const file = await handle.getFile();
+      await openProjectFromBlob(file, handle);
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      console.warn("FSA open failed, fallback to input:", e);
+    }
+  }
   document.getElementById("proj-open-input")?.click();
 }
 
-async function openProjectFromBlob(file) {
+async function openProjectFromBlob(file, handle = null) {
   if (S.projectDirty) {
     if (!confirm("لديك تغييرات غير محفوظة. متابعة؟")) return;
   }
@@ -7642,8 +7805,12 @@ async function openProjectFromBlob(file) {
     const proj = JSON.parse(text);
     const result = await deserializeProject(proj);
     S.projectFileName = file.name;
+    // v1.1.0 — احفَظ الـFSA handle إن تَوفَّر (لِلحَفظ التلقائيّ الصامِت)
+    if (handle) S.projectFileHandle = handle;
     updateProjectTitle();
-    toast(`📂 ${file.name} (${result.restored} مصدر${result.missing ? ` · ⚠️ ${result.missing} مفقود` : ""})`, result.missing ? "warn" : "success", 2800);
+    if (handle && typeof _ensureAutoSaveOn === "function") _ensureAutoSaveOn();
+    const suffix = handle ? " — الحَفظ التلقائيّ فَعّال" : "";
+    toast(`📂 ${file.name} (${result.restored} مصدر${result.missing ? ` · ⚠️ ${result.missing} مفقود` : ""})${suffix}`, result.missing ? "warn" : "success", 2800);
   } catch (e) {
     toast(`❌ ملفّ غير صالح: ${e.message}`, "error", 3000);
   }
@@ -7667,15 +7834,25 @@ function startAutoSave() {
   if (status) status.textContent = `🟢 مُفعَّل — كلّ ${intervalMin} دقيقة (المتصفّح)`;
   _autoSaveTimer = setInterval(async () => {
     if (!S.projectDirty) return;
+    // v1.1.0 — إن كان FSA handle مَعروفاً، احفَظ صامِتاً إلى نَفس المَلفّ
+    if (typeof HAS_FSA !== "undefined" && HAS_FSA && S.projectFileHandle) {
+      try {
+        const ok = await saveProjectToPath(null);
+        if (ok) { toast(`💾 حفظ تلقائيّ — ${new Date().toLocaleTimeString("ar")}`, "info", 1500); return; }
+      } catch (_) {}
+    }
+    // v1.1.0 — لا handle بَعد. توگَل نَبِّه المُستخدم مَرّة واحدة (المُتَصفّح لا يَسمَح بِطلَب FSA مِن setInterval)
+    if (typeof HAS_FSA !== "undefined" && HAS_FSA && !S._autoSavePromptDismissed) {
+      S._autoSavePromptDismissed = true;
+      toast("💡 اضغط زرّ 💾 لِحَفظ المَشروع أَوّل مَرّة — بَعدها يَعمَل الحَفظ التلقائيّ صامِتاً", "warn", 4000);
+    }
+    // Fallback / إضافيّ: نَسخة احتياطيّة في localStorage
     try {
       const proj = await serializeProject();
       const json = JSON.stringify(proj);
       if (json.length < 4_500_000) {
         localStorage.setItem("gt_sirm_autosave_blob", json);
-        // v0.13.0 — localStorage backup فقط، ليس حِفظاً حَقيقيّاً للمَلفّ.
-        // لا نَمسَح dirty — يَجب أن يَظهر تَنبيه "تَغييرات غَير محفوظة" عند الإغلاق
-        // حتى يُصدّر المُستخدم المَلفّ يدوياً إلى .gtsirm.
-        toast(`💾 نَسخة احتياطيّة في المتصفّح (صدّر .gtsirm للحفظ الدائم) — ${new Date().toLocaleTimeString("ar")}`, "info", 1800);
+        toast(`💾 نَسخة احتياطيّة في المتصفّح — ${new Date().toLocaleTimeString("ar")}`, "info", 1800);
       } else {
         toast("⚠️ المشروع كبير جداً للحفظ في المتصفّح — صدّر يدوياً", "warn", 2200);
       }

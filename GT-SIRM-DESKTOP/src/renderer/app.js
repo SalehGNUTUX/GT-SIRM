@@ -825,6 +825,10 @@ function restartAll() {
       if (it.vid) { try { it.vid.pause(); it.vid.currentTime = 0; } catch (_) {} }
     });
   }
+  // 5) v1.1.0 — فيديو التِلاوة الجاهز (نُعيده صَراحةً هُنا لأنّ pausePlayer لَم يَعُد يُعيده)
+  if (S.recVidEl) {
+    try { S.recVidEl.pause(); S.recVidEl.currentTime = 0; } catch (_) {}
+  }
 
   if (typeof updateAyaInfo === "function") updateAyaInfo();
   if (typeof updateAyaUI === "function") updateAyaUI();
@@ -2496,6 +2500,15 @@ function initEventListeners() {
       try { S.recVidEl.pause(); } catch (_) {}
     }
   });
+  // v1.1.0 — توگل إظهار النَصّ فَوق الفيديو
+  const recvidShowText = $("recvid-showtext");
+  if (recvidShowText) recvidShowText.addEventListener("change", (e) => {
+    if (e.target.checked) {
+      toast("📝 سَيُعرَض النَصّ فَوق الفيديو — أعِد تَحميل الفيديو بعد اختيار النَصّ", "info", 2600);
+    } else {
+      toast("🎬 الفيديو يَحلّ محلّ النَصّ — أعِد تَحميل الفيديو لِمَسح النَصّ", "info", 2600);
+    }
+  });
   const recvidFile = $("recvid-file");
   if (recvidFile) recvidFile.addEventListener("change", (e) => onRecVidFile(e.target));
   $("recvid-remove")?.addEventListener("click", () => {
@@ -2980,8 +2993,23 @@ function drawFrame(ts) {
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
 
+  // v0.7.0 — فيديو التلاوة الجاهز؛ v1.1.0 — إظهار النَصّ فَوقه + تَطبيق تَأثيرات المَشهد عليه اختياريّاً
+  const recvidActive = ge("recvid-on") && S.recVidEl;
+  const recvidShowText = recvidActive && ge("recvid-showtext");
+  const recvidApplyColor = recvidActive && ge("recvid-apply-color");
+  const recvidApplyLight = recvidActive && ge("recvid-apply-light");
+  // مَوضِع رَسم recvid داخل خَطّ أنابيب المُرشِّحات:
+  //   • قَبل applyColorFilter إن كان "أنماط اللون" مُفعَّلاً
+  //   • قَبل applyDim إن كان "الإضاءة/التَعتيم" مُفعَّلاً فَقط
+  //   • في المَوضِع الأَصليّ (بَعد كُلّ المُرشِّحات) إن لَم يُفعَّل أَيّهما
+  const recvidPos = recvidActive
+    ? (recvidApplyColor ? "early" : (recvidApplyLight ? "mid" : "late"))
+    : "none";
+
   drawBg(ctx, W, H, ts);
+  if (recvidPos === "early") drawRecitationVideo(ctx, W, H);
   applyColorFilter(ctx, W, H);
+  if (recvidPos === "mid") drawRecitationVideo(ctx, W, H);
   if (ge("fx-bokeh")) drawBokeh(ctx, W, H, ts);
   applyDim(ctx, W, H);
   applyOvColor(ctx, W, H);
@@ -2996,10 +3024,9 @@ function drawFrame(ts) {
   if (ge("fx-kaleido")) applyKaleido(ctx, W, H);
   if (ge("fx-glitch")) applyGlitch(ctx, W, H);
   if (ge("fx-oldfilm")) applyOldFilm(ctx, W, H, ts);
-  // v0.7.0 — فيديو التلاوة الجاهز يستبدل النصّ/الآيات
-  const recvidActive = ge("recvid-on") && S.recVidEl;
-  if (recvidActive) drawRecitationVideo(ctx, W, H);
-  else if (S.verses.length) drawVerse(ctx, W, H, ts);
+  if (recvidPos === "late") drawRecitationVideo(ctx, W, H);
+  // اِرسِم النَصّ إن لَم يَكُن الفيديو فَعّالاً، أَو كان فَعّالاً مع تَوگل "إظهار النَصّ فَوق الفيديو"
+  if (S.verses.length && (!recvidActive || recvidShowText) && !(S.verses.length === 1 && S.verses[0]?.recvid)) drawVerse(ctx, W, H, ts);
   drawSurahName(ctx, W, H);
   drawVideoTitle(ctx, W, H);
   drawWave(ctx, W, H, ts);
@@ -3950,9 +3977,17 @@ function onRecVidFile(input) {
         if (typeof applyRecVidFXLive === "function") applyRecVidFXLive();
       } catch (_) {}
     }).catch(console.warn);
-    // مدّة الفيديو هي مدّة المقطع — verses = شريحة واحدة
-    S.verses = [{ text: "", numberInSurah: 1, number: 1, audio: null, audioSecondary: [], manualDuration: sec, free: true, recvid: true }];
-    S.ayaDurations = [sec];
+    // v1.1.0 — إن كان توگل "إظهار النَصّ فوق الفيديو" مُفعَّلاً ولَدَينا آيات مُحمَّلة، احفَظها ووَزِّع مُدّة الفيديو
+    const keepText = ge("recvid-showtext") && S.verses.length && !(S.verses.length === 1 && S.verses[0]?.recvid);
+    if (keepText) {
+      const perVerse = sec / S.verses.length;
+      S.verses = S.verses.map(v => ({ ...v, manualDuration: perVerse, audio: null, audioSecondary: [] }));
+      S.ayaDurations = S.verses.map(() => perVerse);
+    } else {
+      // السُلوك الأَصليّ — الفيديو يَحلّ محلّ النَصّ (شريحة واحدة)
+      S.verses = [{ text: "", numberInSurah: 1, number: 1, audio: null, audioSecondary: [], manualDuration: sec, free: true, recvid: true }];
+      S.ayaDurations = [sec];
+    }
     S.currentAya = 0; S.elapsed = 0;
     if (typeof updateAyaUI === "function") updateAyaUI();
     toast(`🎥 تمّ تحميل فيديو التلاوة (${sec.toFixed(1)}s)`, "success", 2200);
@@ -6913,17 +6948,49 @@ function pausePlayer() {
   $("btn-play").textContent = "▶️";
   stopRecitationAudio();
   if (S.bgAudioEl) S.bgAudioEl.pause();
-  // v0.7.0 — أوقف فيديو التلاوة وأعِده إلى البداية
-  if (S.recVidEl) { try { S.recVidEl.pause(); S.recVidEl.currentTime = 0; } catch (_) {} }
-  // إعادة فيديو الخلفية للبداية تحضيراً للتصدير
-  if (S.bgVid) {
-    S.bgVid.pause();
-    S.bgVid.currentTime = 0;
-  }
+  // v1.1.0 — أوقف فيديو التِلاوة فقط دون إعادة لِلبداية (لِيَستأنِف من موضعه)
+  if (S.recVidEl) { try { S.recVidEl.pause(); } catch (_) {} }
+  // v1.1.0 — أوقف فيديو الخَلفيّة فقط دون إعادة لِلبداية
+  if (S.bgVid) { try { S.bgVid.pause(); } catch (_) {} }
 }
 
-function prevAya() { if (S.currentAya > 0) { S.currentAya--; S.elapsed = 0; updateAyaUI(); if (S.playing) playRecitationAudio(); } }
-function nextAya() { if (S.currentAya < S.verses.length - 1) { S.currentAya++; S.elapsed = 0; updateAyaUI(); if (S.playing) playRecitationAudio(); } }
+// v1.1.0 — يُحسَب مَجموع تَوقيت الآيات السابقة (بالإضافة لِلفَجَوات) لِمُزامَنة مَوضِع فيديو التِلاوة
+function getCumulativeAyaTime(idx) {
+  let t = 0;
+  const gap = getAyaGap ? getAyaGap() : 0;
+  for (let i = 0; i < idx && i < S.ayaDurations.length; i++) {
+    t += (S.ayaDurations[i] || 6) + gap;
+  }
+  return t;
+}
+
+// v1.1.0 — يُزامِن مَوضِع فيديو التِلاوة مع الآية الحاليّة (يُستدعى بَعد تَغيير S.currentAya يَدويّاً)
+function syncRecVidToCurrentAya() {
+  if (!S.recVidEl) return;
+  const recvidActive = ge("recvid-on") && S.recVidEl;
+  if (!recvidActive) return;
+  try {
+    const t = getCumulativeAyaTime(S.currentAya) + (S.elapsed || 0);
+    S.recVidEl.currentTime = Math.max(0, Math.min(t, S.recVidEl.duration || t));
+  } catch (_) {}
+}
+
+function prevAya() {
+  if (S.currentAya > 0) {
+    S.currentAya--; S.elapsed = 0;
+    syncRecVidToCurrentAya();
+    updateAyaUI();
+    if (S.playing) playRecitationAudio();
+  }
+}
+function nextAya() {
+  if (S.currentAya < S.verses.length - 1) {
+    S.currentAya++; S.elapsed = 0;
+    syncRecVidToCurrentAya();
+    updateAyaUI();
+    if (S.playing) playRecitationAudio();
+  }
+}
 
 function seekClick(e) {
   const bar = $("pbar"), ratio = e.offsetX / bar.offsetWidth;
@@ -6934,6 +7001,7 @@ function seekClick(e) {
     if (acc + d >= ratio * total) { S.currentAya = i; S.elapsed = (ratio * total - acc); break; }
     acc += d;
   }
+  syncRecVidToCurrentAya();
   updateAyaUI();
   if (S.playing) playRecitationAudio();
 }
@@ -9540,7 +9608,7 @@ async function deserializeProject(proj) {
   if (proj.freeText) {
     const ta = document.getElementById("free-text-area");
     if (ta && proj.freeText.text) ta.value = proj.freeText.text;
-    S.freePerSlice = proj.freeText.perSlice || [];
+    S.freePerSlice = proj.freeText.perSlice ? JSON.parse(JSON.stringify(proj.freeText.perSlice)) : [];
     if (proj.freeText.audioTrim) S.freeAudioTrim = proj.freeText.audioTrim;
     if (typeof renderPerSliceList === "function") renderPerSliceList();
   }
@@ -9556,6 +9624,23 @@ async function deserializeProject(proj) {
   }
   if (missing.length) {
     showMissingAssetsModal(missing);
+  }
+
+  // v1.1.0 — إعادة تَطبيق النَصّ الحرّ إن كان مَحفوظاً (يُعيد بناء S.verses ويَستخدم S.freePerSlice المُستَعادة)
+  const savedText = proj.freeText?.text?.trim();
+  if (savedText && typeof applyFreeText === "function") {
+    // تَأخير قَصير حتى تَكتمِل استعادة المُصادر (خاصّةً الصوت الذي يُشغّل syncVersesToActiveAudio)
+    setTimeout(() => {
+      try {
+        applyFreeText();
+        // أَعِد تَعيين freePerSlice بَعد applyFreeText تَحسّباً لأيّ سِباق داخِل applyFreeText
+        if (proj.freeText.perSlice) {
+          S.freePerSlice = JSON.parse(JSON.stringify(proj.freeText.perSlice));
+          if (typeof syncPerSliceToPlayback === "function") syncPerSliceToPlayback();
+          if (typeof renderPerSliceList === "function") renderPerSliceList();
+        }
+      } catch (_) {}
+    }, 400);
   }
 
   clearProjectDirty();
@@ -9672,16 +9757,41 @@ async function saveProjectToPath(filePath) {
   return true;
 }
 
-async function saveProjectInteractive() {
+async function saveProjectInteractive(forcePrompt = false) {
   if (IS_DESKTOP_BUILD) {
+    // v1.1.0 — إن كان لَدَينا مَسار مَعروف، احفَظ فيه مُباشرةً بلا حِوار
+    if (!forcePrompt && S.projectFilePath) {
+      const ok = await saveProjectToPath(S.projectFilePath);
+      if (ok) {
+        toast(`💾 حُفظ: ${S.projectFileName}`, "success", 1500);
+        _ensureAutoSaveOn();
+      }
+      return;
+    }
     const fp = await window.SIRM.projectSaveDialog(S.projectFileName || null);
     if (!fp) return;
     const fixed = fp.endsWith(".gtsirm") ? fp : fp + ".gtsirm";
     const ok = await saveProjectToPath(fixed);
-    if (ok) toast(`💾 تمّ الحفظ: ${fixed.split(/[\\/]/).pop()}`, "success", 2200);
+    if (ok) {
+      toast(`💾 تمّ الحفظ: ${fixed.split(/[\\/]/).pop()}`, "success", 2200);
+      _ensureAutoSaveOn();
+    }
   } else {
     const ok = await saveProjectToPath(null);
     if (ok) toast("💾 تمّ تنزيل ملفّ المشروع", "success", 2200);
+  }
+}
+
+// v1.1.0 — يُفعِّل الحَفظ التلقائيّ بَعد أوّل حَفظ ناجِح لِمشروع جَديد
+function _ensureAutoSaveOn() {
+  S._autoSavePromptDismissed = false;
+  const cb = document.getElementById("autosave-on");
+  if (cb && !cb.checked) {
+    cb.checked = true;
+    cb.dispatchEvent(new Event("change"));
+  } else if (cb && cb.checked) {
+    // مُفعَّل بالفعل — أَعِد تَشغيل المُوقِّت لِيَستَخدم المَسار الجَديد
+    startAutoSave();
   }
 }
 
@@ -9709,7 +9819,9 @@ async function openProjectFromPath(filePath) {
     S.projectFileName = filePath.split(/[\\/]/).pop();
     try { localStorage.setItem("gt_sirm_last_project", filePath); } catch (_) {}
     updateProjectTitle();
-    toast(`📂 ${S.projectFileName} (${result.restored} مصدر${result.missing ? ` · ⚠️ ${result.missing} مفقود` : ""})`, result.missing ? "warn" : "success", 2800);
+    // v1.1.0 — فَعِّل الحَفظ التلقائيّ عَلى نَفس المَلفّ المَفتوح
+    if (typeof _ensureAutoSaveOn === "function") _ensureAutoSaveOn();
+    toast(`📂 ${S.projectFileName} (${result.restored} مصدر${result.missing ? ` · ⚠️ ${result.missing} مفقود` : ""}) — الحَفظ التلقائيّ فَعّال`, result.missing ? "warn" : "success", 2800);
   } catch (e) {
     toast(`❌ ملفّ غير صالح: ${e.message}`, "error", 3000);
   }
@@ -9758,23 +9870,44 @@ function startAutoSave() {
   _autoSaveTimer = setInterval(async () => {
     if (!S.projectDirty) return;
     if (IS_DESKTOP_BUILD && S.projectFilePath) {
-      // حِفظ حَقيقيّ على القُرص — يَمسَح dirty ضِمن saveProjectToPath
+      // حَفظ حَقيقيّ على القُرص — يَمسَح dirty ضِمن saveProjectToPath
       const ok = await saveProjectToPath(S.projectFilePath);
       if (ok) toast(`💾 حفظ تلقائيّ — ${new Date().toLocaleTimeString("ar")}`, "info", 1500);
+    } else if (IS_DESKTOP_BUILD && !S._autoSavePromptInFlight && !S._autoSavePromptDismissed) {
+      // v1.1.0 — مَشروع جَديد + dirty + بدون مَسار → اِطلُب مَوضِع الحَفظ مَرّة واحِدة
+      S._autoSavePromptInFlight = true;
+      try {
+        toast("💡 يَحتاج الحَفظ التلقائيّ إلى تَحديد مَوضِع الحَفظ...", "info", 2000);
+        const fp = await window.SIRM.projectSaveDialog(S.projectFileName || "GT-SIRM-Project.gtsirm");
+        if (fp) {
+          const fixed = fp.endsWith(".gtsirm") ? fp : fp + ".gtsirm";
+          const ok = await saveProjectToPath(fixed);
+          if (ok) toast(`💾 الحَفظ الأَوّل — الحَفظ التلقائيّ فَعّال الآن على: ${fixed.split(/[\\/]/).pop()}`, "success", 3000);
+        } else {
+          // المُستخدم أَلغى الحِوار — لا تُزعِجه ثانيةً هذه الجَلسة
+          S._autoSavePromptDismissed = true;
+          toast("💡 يُمكِنك الضَغط على زرّ 💾 لاحِقاً لِتَفعيل الحَفظ التلقائيّ", "warn", 3500);
+          // اِحفَظ نَسخة احتياطيّة في الذاكرة المحلّيّة
+          try {
+            const proj = await serializeProject();
+            const json = JSON.stringify(proj);
+            if (json.length < 4_500_000) localStorage.setItem("gt_sirm_autosave_blob", json);
+          } catch (_) {}
+        }
+      } finally {
+        S._autoSavePromptInFlight = false;
+      }
     } else {
-      // v0.13.0 — لا مَسار حَقيقيّ بَعد → localStorage كـbackup فقط (لا يَمسَح dirty)
-      // المُستخدم يَجب أن يَحفظ يدوياً مَرّة لتَخصيص مَسار، وإلّا يَجب أن يَظهر
-      // تَنبيه "تَغييرات غَير محفوظة" عند الإغلاق.
+      // (web أَو dismissed) — نَسخة احتياطيّة في localStorage فَقط (لا يَمسَح dirty)
       try {
         const proj = await serializeProject();
         const json = JSON.stringify(proj);
         if (json.length < 4_500_000) {
           localStorage.setItem("gt_sirm_autosave_blob", json);
-          // ⚠️ لا نَستدعي clearProjectDirty() هُنا — لم يُحفَظ المَلفّ بَعد على القُرص
-          const where = IS_DESKTOP_BUILD ? "في الذاكرة المحلّيّة (احفظ يدوياً لـ.gtsirm)" : "في المتصفّح";
+          const where = IS_DESKTOP_BUILD ? "في الذاكرة المحلّيّة" : "في المتصفّح";
           toast(`💾 نَسخة احتياطيّة ${where} — ${new Date().toLocaleTimeString("ar")}`, "info", 1800);
         } else {
-          toast(`⚠️ المشروع كبير جدّاً للحفظ في الذاكرة المحلّيّة (${(json.length/1e6).toFixed(1)}MB) — احفظ يدوياً`, "warn", 3000);
+          toast(`⚠️ المشروع كبير جدّاً للحفظ المحلّيّ (${(json.length/1e6).toFixed(1)}MB) — احفظ يدوياً`, "warn", 3000);
         }
       } catch (e) {
         console.warn("auto-save failed:", e);

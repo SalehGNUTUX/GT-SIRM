@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v62 — إصدار v1.0.0 STABLE 🎉 (تَلميع نِهائيّ + select-all + paste/clear + Capacitor Share)
+// GT-SIRM Service Worker v63 — إصدار v1.1.0 (إظهار النَصّ فَوق فيديو التِلاوة الجاهز)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v62";
+const CACHE_VER = "gt-sirm-v63";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل
