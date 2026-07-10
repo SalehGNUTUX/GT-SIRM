@@ -2,22 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project state (2026-06-12)
+## Project state (2026-07-10)
 
-**GT-SIRM (GnuTux Short Islamic Reels Maker)** — at **v1.0.0 STABLE** 🎉. Triple-platform Electron+PWA+Capacitor Islamic reels maker forked from GT-SQRM/GT-SQR v3.0.
+**GT-SIRM (GnuTux Short Islamic Reels Maker)** — at **v1.1.0 STABLE**. Triple-platform Electron+PWA+Capacitor Islamic reels maker forked from GT-SQRM/GT-SQR v3.0.
 
 ### Current state
-- آخر commit: `25b9f7d` — v1.0.0 STABLE
-- آخر release مَنشور: **v1.0.0 STABLE** (AppImage + DEB + RPM + APK) — مَوسوم `--latest`
+- آخر release مَنشور: **v1.1.0** — https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.1.0 (AppImage + DEB + RPM + APK)
+- آخر commits: `71c5098` (landing links) → `43a1ca9` (v1.1.0 core) → `179e3bb` (hadith source docs)
 - جميع الوَحدات الستّ مُكتمَلة: 6557 عُنصراً (قرآن + 90 حديث + 267 ذكر + 100 اسم + 32 دعاء + 32 حكمة)
-- الإصدار المُستقرّ — لا تَطوير جَوهريّ مُخطَّط؛ فقط صيانة وإصلاحات
+- الإصدار مُستقرّ — إضافات v1.1: النَصّ فَوق فيديو التِلاوة + تَطبيق تَأثيرات المَشهد عَلى recvid + إصلاحات مُشغّل + حَفظ تلقائيّ ذَكيّ
 
 ### Latest versions
 | Platform | Version | Tag |
 |---|---|---|
-| **Desktop (AppImage/DEB/RPM)** | 1.0.0 | `v1.0.0` |
-| **Web (PWA)** | 1.0.0 | sw cache `gt-sirm-v62` |
-| **Android (APK)** | 1.0.0 | Capacitor 6 (with Share + App + Filesystem plugins) |
+| **Desktop (AppImage/DEB/RPM)** | 1.1.0 | `v1.1.0` |
+| **Web (PWA)** | 1.1.0 | sw cache `gt-sirm-v63` |
+| **Android (APK)** | 1.1.0 | Capacitor 6 (with Share + App + Filesystem plugins) |
 
 ### Sibling repos (kept in sync for portable features)
 GT-SIRM features that are portable (chromakey, vtitle, project save, recvid, restart-all-btn) get backported to GT-SQRM/GT-SQR. Features tied to GT-SIRM's architecture (Module Manager, free text, per-slice timing+lock, content modules, work dir, collapsible UI, mic recorder, TTS, Android wrapping) are NOT ported.
@@ -209,6 +209,33 @@ UI flow:
 - Apply: sets `input.value`, dispatches events, syncs sibling hex text input.
 - Desktop Electron NOT affected (native picker bound to app window).
 
+### Text over recitation video (v1.1)
+Three new toggles inside "🎥 فيديو تلاوة جاهز" (in addition to `#recvid-on`):
+- **`#recvid-showtext`** — keep verse/free-text overlay drawn ON TOP of recvid. Default OFF (v1.0 backward compat: recvid replaces text).
+  - When ON at `onRecVidFile` time, `S.verses` is NOT wiped; instead each verse's `manualDuration = recVidDuration / verseCount` (even distribution).
+- **`#recvid-apply-color`** — draw recvid EARLY (before `applyColorFilter`) so 9 color modes apply to recvid too.
+- **`#recvid-apply-light`** — draw recvid MID (after color filter but before `applyDim`/`applyOvColor`) so lighting/dim overlays apply.
+- Position calculation in `drawFrame`: `recvidPos = applyColor ? "early" : (applyLight ? "mid" : "late")`. Both toggles use the earliest position.
+- Works with all six modules (Quran, Hadith, Free Text, Azkar, Asma, Duas, Hikam).
+
+### Recvid player fixes (v1.1)
+- `pausePlayer` no longer resets `S.recVidEl.currentTime = 0` (which was causing every pause to restart the video). Only `pause()`. `restartAll` explicitly resets currentTime.
+- `syncRecVidToCurrentAya()` + `getCumulativeAyaTime(idx)` — computes cumulative time from `S.ayaDurations` + `getAyaGap()`, seeks recvid to that position. Called from `prevAya`, `nextAya`, `seekClick` so player navigation moves the video in sync.
+
+### Smart auto-save (v1.1)
+- **Save button click** with known path → silent save-in-place, no dialog.
+- **Auto-save timer** with dirty state:
+  - Known path → silent write + toast.
+  - Desktop no path → **prompts once via `showSaveDialog`**. On cancel, sets `S._autoSavePromptDismissed = true` for this session.
+  - Web/PWA with FSA → uses stored `S.projectFileHandle` for silent write. Without handle, shows one-time toast (browsers block `showSaveFilePicker` from `setInterval` — no user gesture).
+  - Android/no-FSA → localStorage backup only.
+- `_ensureAutoSaveOn()` helper: forcibly enables `#autosave-on` checkbox + restarts timer. Called from `openProjectFromPath` (desktop) and `openProjectFromBlob` when FSA handle captured (web).
+- `HAS_FSA = typeof window.showSaveFilePicker === "function"` — feature detection guard on web.
+- `S.projectFileHandle` — FileSystemFileHandle on web. Persists across saves within session.
+
+### Free-text restore (v1.1 fix)
+`deserializeProject` now auto-invokes `applyFreeText()` (400ms after asset load) when `proj.freeText.text` is non-empty. Also re-clones `S.freePerSlice` from JSON after applyFreeText to defeat any race in `syncVersesToActiveAudio`. Before v1.1, per-slice timing was correctly saved+restored but invisible because `S.verses` stayed empty until user clicked "apply".
+
 ## Commands
 
 ### Desktop (`GT-SIRM-DESKTOP/`)
@@ -341,6 +368,23 @@ For `.gtsirm` to appear in "Open with" on Android, intent-filter needs multiple 
 ### V2 export and HTMLVideoElement (recvid)
 V2 deterministic export iterates frames at fixed timestamps. HTMLVideoElement needs explicit `currentTime = t` + wait for `seeked` event via `seekVideoToTime(S.recVidEl, t)` (800ms timeout).
 
+### recvid draw position depends on toggles (v1.1)
+`drawFrame` chooses one of three positions to call `drawRecitationVideo`:
+- `"early"` (right after `drawBg`, before `applyColorFilter`) — if `#recvid-apply-color` is on
+- `"mid"` (after color filter, before dim/overlay) — if `#recvid-apply-light` only
+- `"late"` (after all effects) — default, no toggle on
+
+Enabling color also implies light (since dim/overlay come after color and will affect recvid pixels once they're on canvas). This is intentional: the toggles are additive, not orthogonal — turning color on = "everything post-drawBg applies to recvid".
+
+### `S.projectFileHandle` needs permission re-grant (v1.1 web)
+FSA `FileSystemFileHandle` can lose write permission across page reloads or long idle. Before every write, `saveProjectToPath` calls `queryPermission({mode:'readwrite'})`; if not granted, `requestPermission()`. If both fail, resets `S.projectFileHandle = null` and falls back to blob download. Never assume the handle is still writable.
+
+### Auto-save prompt in setInterval — desktop only
+`showSaveDialog` (Electron IPC) works from any context. `showSaveFilePicker` (browser FSA) throws SecurityError from `setInterval` — no transient user activation. On web + no handle, the timer can only show a toast asking the user to click the save button. **Never try to prompt for a save location from `setInterval` on web.**
+
+### Free-text auto-apply on project load (v1.1)
+Restoring `S.freePerSlice` from a saved project is not enough — the timing UI won't render because `S.verses` is empty. `deserializeProject` now schedules `applyFreeText()` 400ms after assets finish (allowing audio metadata to load, since `syncVersesToActiveAudio` may rebuild verses). Then re-clones `S.freePerSlice` from the JSON to defeat any race inside `applyFreeText`/`syncVersesToActiveAudio` that could overwrite the restored per-slice durations.
+
 ### Beforeunload + file uploads
 `beforeunload` only fires if `S.projectDirty=true`. Dirty-tracker hooks DOM inputs but skips `type=file`. Call `markProjectDirty()` explicitly in `onBgMedia`, `onBgAudio`, `addBgVidItem`, `onRecVidFile`.
 
@@ -438,7 +482,7 @@ git clone --depth 3 https://github.com/SalehGNUTUX/GT-SQR.git GT-SQR-port
 
 ## Memory entries to read
 
-- `project-gt-sirm-state-v100` — current state (v1.0.0 STABLE)
+- `project-gt-sirm-state-v100` — current state (v1.0.0 baseline + v1.1 additions logged)
 - `project-gt-sirm-state-v0133` — earlier state (v0.13.3)
 - `project-gt-sirm-state-v01212` — earlier state (v0.12.12)
 - `project-gt-sirm-plan` — overall plan
@@ -450,19 +494,19 @@ git clone --depth 3 https://github.com/SalehGNUTUX/GT-SQR.git GT-SQR-port
 
 ## Next session priorities
 
-**v1.0.0 is the stable release.** No major features planned. Future work is maintenance + small QoL.
+**v1.1.0 is the current stable release.** Focus is on stabilization + selective enhancements.
 
 1. **Bug reports from real users** — fix as they come.
 2. **(Optional) Work dir for mobile** — Capacitor Filesystem → Documents/GT-SIRM/.
 3. **(Optional) Edge TTS DRM workaround** — Google works fine, low priority.
-4. **🌟 Hadith expansion (v1.1+)** — Use **[AhmedBaset/hadith-json](https://github.com/AhmedBaset/hadith-json)** (50,884 hadiths in 17 collections incl. Six Books). See `ROADMAP.md` § "📚 خُطّة تَوسيع وَحدة الحديث الشريف" for the full plan. Key constraints:
+4. **🌟 Hadith expansion (v1.2+)** — Use **[AhmedBaset/hadith-json](https://github.com/AhmedBaset/hadith-json)** (50,884 hadiths in 17 collections incl. Six Books). See `ROADMAP.md` § "📚 خُطّة تَوسيع وَحدة الحديث الشريف" for the full plan. Key constraints:
    - **Grading is mandatory** (project rule). The source has NO grading — must supplement manually or from another source (al-Albani, al-Arnaut).
    - Pin to a specific tag (data format may change on `main`).
    - Lazy-load per book to avoid 35MB bundle.
    - Attribution in About tab.
 5. **(Optional) Multi-language UI** — currently Arabic-only.
 
-## v1.0 release notes location
-- Release notes: `/tmp/release-v1.0.0.md` (cleared on reboot)
-- Canonical GitHub Release: https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.0.0
-- README badge + landing badge: "Stable" green
+## Release notes locations
+- v1.1.0 (current): https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.1.0
+- v1.0.0: https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.0.0
+- README badge + landing badge: "Stable" green — always tracks the `--latest` release
