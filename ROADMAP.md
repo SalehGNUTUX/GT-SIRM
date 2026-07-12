@@ -90,7 +90,112 @@
 
 ---
 
-## 🔮 ما بعد v1.0
+## 🐛 v1.1.1 — إصلاح مقاطع الخَلفيّة المُتعدّدة (قيد التَنفيذ)
+
+**التاريخ:** 2026-07-12 — **التَحقيق مُكتَمِل، الإصلاح مُؤجَّل لِلجَلسة القادمة**
+
+### الأَعراض المُبلَّغ عنها من المُستخدم
+1. عند تَحميل أَكثر من مَقطع خَلفيّة: تَصدير غير سَلِس بَين المقاطع
+2. أَحياناً حتى في المُعاينة لا يَنتقِل بسَلاسة
+3. المقاطع تَظهر وكأنّها في وَضع تَسريع
+4. المقاطع تَمُرّ واحدة فَوق الأُخرى بشَكل غَريب
+
+### الأَعطاب الأَربعة المُكتَشَفة
+
+#### 🔴 عَطَب #1 — تَصدير الويب/APK يَعبَث بـplaybackRate حتى 16×
+**المَوقِع:** `GT-SIRM-WEB/export-engine-web.js:378-391` (`syncBgVidPlayback`)
+
+```js
+const ratio = wallClockSec > 0 ? (ourClockSec / wallClockSec) : 1;
+const newRate = Math.max(0.25, Math.min(16, ratio));
+vid.playbackRate = newRate;  // ← حتى 16× سُرعة!
+```
+- يُطبَّق فَقط على `S.bgVid` وليس على `S.bgVidNext` (القادم في الـcrossfade)
+- خلال الـcrossfade: الحاليّ 16× والقادِم 1× → يَظهران "يَمُرّان فَوق بَعض"
+- الـencoder أَسرع من realtime دائماً → دائم التَسريع
+- **لا يوجَد في سَطح المكتب** (يَستَخدِم استخراج frames مُسبَق من ffmpeg)
+
+**الإصلاح المُقترَح:** استبدال `syncBgVidPlayback` بـ**deterministic seek** — لكُلّ إطار `t` نَحسب `(clipIndex, localTime)` من `clipDurations + xf` ونَستَدعي `seekVideoToTimeWeb` (نَفس نَمط recvid).
+
+#### 🔴 عَطَب #2 — قُفل التَقليم في المُعاينة (trim deadlock)
+**المَوقِع:** `app.js:4878-4895` (كِلا النُسختَين)
+
+```js
+S.bgVid._trimHandler = () => {
+  if (S.bgVid.currentTime >= tt.end - 0.05) {
+    S.bgVid.currentTime = tt.start;  // ← يَعود للبداية دائماً، ended لا يُطلَق
+  }
+};
+```
+- عند تَفعيل تَقليم الخَلفيّة مَع playlist: المقطع الأَوّل يَدور بَين trim.start و trim.end إلى الأَبد
+- `ended` لا يُطلَق → `switchToNextBgVid` لا يَعمَل → يَبقى المقطع الأَوّل فَقط
+- الـarrow يَلتَقِط `S.bgVid` المُتحوّل عالمياً → cross-clip corruption مُحتَمَل
+
+**الإصلاح المُقترَح:** إمّا (أ) تَعطيل الـtrim handler عند `bgVidItems.length >= 2`، أَو (ب) استدعاء `switchToNextBgVid()` بَدَل الرُجوع لـtrim.start. + إصلاح الـarrow لِيَلتَقِط `vid` مُحدَّداً.
+
+#### ⚠️ عَطَب #3 — بَذرة playlist بلا crossfade في تَصدير سَطح المكتب
+**المَوقِع:** `GT-SIRM-DESKTOP/src/main/main.js:1107` (`-stream_loop -1`)
+
+- xfade مُطبَّق بَين المقاطع بشَكل صَحيح
+- لكن عند إعادة الحَلقة (إن كانت المُدّة الكُلّيّة > مَجموع المقاطع): يَعود للأَوّل بـ**قَطع حادّ**
+
+**الإصلاح المُقترَح:** إمّا (أ) إضافة xfade يَلُفّ من آخر مَقطع لأوَّله، أَو (ب) قَبول القَطع مَع تَوثيق.
+
+#### 🟡 عَطَب #4 — مقاطع مَنسيّة تُشغَّل في الخَلفيّة
+**المَوقِع:** `switchToNextBgVid` (كِلا النُسختَين، ~app.js:6540/5758)
+
+- المقطع القَديم لا يُوقَف بَعد التَبديل → تَتراكَم عناصر `HTMLVideoElement` تُشغَّل دون داعٍ
+
+**الإصلاح المُقترَح:** إضافة `oldVid.pause()` في `switchToNextBgVid`.
+
+### حالة التَفكير في التَنفيذ
+
+قَرارات مُعلَّقة للجَلسة القادمة:
+1. أَربعة إصلاحات في v1.1.1 أَم فَقط #1 + #4 مُركَّز؟
+2. لِـ#2: (أ) تَعطيل trim مَع multi-bg (أَبسَط)، أَم (ب) switch عند نِهاية trim (أَقوى)؟
+3. لِـ#3: xfade يَلُفّ أَم تَوثيق فَقط؟
+4. رَقم الإصدار: v1.1.1 (patch) أَم v1.2.0 (فَرعيّ)؟
+
+### تَخطيط تَقنيّ للـdeterministic seek (عَطَب #1)
+
+```js
+// خُطوط عَريضة لِلدالّة المُقترحة في export-engine-web.js
+function getBgClipAtTime(t, clipDurations, xf) {
+  let cum = 0;
+  for (let i = 0; i < clipDurations.length; i++) {
+    const clipEnd = cum + clipDurations[i];
+    if (t < clipEnd) {
+      const localTime = t - cum;
+      const remaining = clipEnd - t;
+      const inXfade = (remaining <= xf && i < clipDurations.length - 1);
+      return { clipIndex: i, localTime, inXfade, xfadeAlpha: inXfade ? (1 - remaining / xf) : 0 };
+    }
+    cum += clipDurations[i] - xf; // نَفس رياضيّات ffmpeg xfade
+  }
+  // Loop back
+  const cycleDur = cum + xf; // + last clip's xf overlap accounted for
+  return getBgClipAtTime(t % cycleDur, clipDurations, xf);
+}
+```
+
+ثُمّ في حَلقة الإطارات:
+```js
+const {clipIndex, localTime, inXfade, xfadeAlpha} = getBgClipAtTime(t, clipDurations, xf);
+await seekVideoToTimeWeb(S.bgVidItems[clipIndex].vid, localTime);
+S.bgVid = S.bgVidItems[clipIndex].vid;
+if (inXfade) {
+  await seekVideoToTimeWeb(S.bgVidItems[(clipIndex + 1) % N].vid, 0 /* or matching offset */);
+  S.bgVidNext = S.bgVidItems[(clipIndex + 1) % N].vid;
+  S.bgVidFadeProgress = easeInOutCubic(xfadeAlpha);
+} else {
+  S.bgVidNext = null;
+  S.bgVidFadeProgress = 0;
+}
+```
+
+---
+
+## 🔮 ما بعد v1.1.x
 
 | الفكرة | الوصف |
 |---|---|
