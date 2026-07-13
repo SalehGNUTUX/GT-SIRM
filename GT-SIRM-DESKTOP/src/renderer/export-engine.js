@@ -503,13 +503,17 @@ async function startDesktopExportV2(opts) {
   const globalMute = (typeof document !== "undefined")
     && document.getElementById("bg-vid-mute-audio")?.checked;
   // v1.2 — تَجاهُل المُعمّاة (hidden). Feature#2 — trim per-clip (dur الفَعّالة + start أَصليّ)
+  // v1.2 fix — لا نُصَفّي بحَسب audioEnabled هُنا. المَقاطع الصامِتة تُبقي مَواضِعها في
+  //   timeline (starts + cycleDur)، لكنّ buffer=null فتَتَخَطّاها الحَلقة الداخِليّة.
+  //   قَبل الإصلاح: تَصفية audioEnabled كانت تَجعَل الحَلقة تَعتَقِد أنّ playlist أَقصر،
+  //   فتُكَرِّر المَقطع النَاطِق لِمَلء totalDuration (مِثل: 30ث مَطر مُستَمِرّ).
   const _getEff = typeof getBgClipEffectiveDur === "function" ? getBgClipEffectiveDur : (it => it.dur || 0);
   const _getTs  = typeof getBgClipTrimStart    === "function" ? getBgClipTrimStart    : (_  => 0);
   const bgVidAudioItems = (typeof S !== "undefined" && Array.isArray(S.bgVidItems) && !globalMute)
     ? S.bgVidItems
-        .filter(it => !it.hidden && it.audioEnabled && it.audioBuffer)
+        .filter(it => !it.hidden)
         .map(it => ({
-          buffer: it.audioBuffer,
+          buffer: (it.audioEnabled && it.audioBuffer) ? it.audioBuffer : null,
           gain: it.audioGain,
           dur: _getEff(it),
           trimStart: _getTs(it),

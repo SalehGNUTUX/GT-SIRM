@@ -515,12 +515,15 @@ async function startWebExportV2(opts) {
   // v0.5.0 — يحترم توگل "كتم صوت الفيديو" العام
   const globalMute = document.getElementById("bg-vid-mute-audio")?.checked;
   // v1.2 — تَجاهُل المُعمّاة (hidden). Feature#2 — trim per-clip
+  // v1.2 fix — لا نُصَفّي بحَسب audioEnabled: المَقاطع الصامِتة تُبقي مَواضِعها في
+  //   timeline (starts + cycleDur)، لكنّ buffer=null فتَتَخَطّاها الحَلقة.
+  //   يُصلِح: صَوت مَقطع واحد يَستَمِرّ عَلى طول الفيديو المُصَدَّر.
   const _getEff = typeof getBgClipEffectiveDur === "function" ? getBgClipEffectiveDur : (it => it.dur || 0);
   const _getTs  = typeof getBgClipTrimStart    === "function" ? getBgClipTrimStart    : (_  => 0);
   const bgVidAudioItems = globalMute ? [] : (S.bgVidItems || [])
-    .filter(it => !it.hidden && it.audioEnabled && it.audioBuffer)
+    .filter(it => !it.hidden)
     .map(it => ({
-      buffer: it.audioBuffer,
+      buffer: (it.audioEnabled && it.audioBuffer) ? it.audioBuffer : null,
       gain: it.audioGain,
       dur: _getEff(it),
       trimStart: _getTs(it),
