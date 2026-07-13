@@ -780,11 +780,22 @@ function restartAll() {
   if (S.bgVid) {
     try { S.bgVid.pause(); S.bgVid.currentTime = 0; } catch (_) {}
   }
-  if (Array.isArray(S.bgVidItems)) {
+  if (Array.isArray(S.bgVidItems) && S.bgVidItems.length) {
     S.bgVidActiveIdx = 0;
     S.bgVidItems.forEach(it => {
-      if (it.vid) { try { it.vid.pause(); it.vid.currentTime = 0; } catch (_) {} }
+      if (it.vid) {
+        try {
+          it.vid.pause();
+          it.vid.currentTime = (typeof getBgClipTrimStart === "function") ? getBgClipTrimStart(it) : 0;
+        } catch (_) {}
+      }
     });
+    // v1.2 fix — S.bgVid يَجِب أن يُشير لِلمَقطع الأَوّل بَعد restart
+    S.bgVid = S.bgVidItems[0].vid;
+    S.bgVidNext = null;
+    S.bgVidFadeProgress = 0;
+    const prev = $("bg-vid-preview");
+    if (prev) prev.src = S.bgVidItems[0].url;
   }
   // v1.1.0 — فيديو التِلاوة الجاهز (نُعيده صَراحةً هُنا لأنّ pausePlayer لَم يَعُد يُعيده)
   if (S.recVidEl) {
@@ -4369,7 +4380,9 @@ async function playRecitationAudio() {
     source.connect(gainNode);
     gainNode.connect(ctx.destination);
     gainNode.connect(S.analyser);
-    source.start(0);
+    // v1.2 — استَأنِف من مَوضِع التوقّف داخِل الآية (S.elapsed) بَدَل البِداية دائماً
+    const resumeOffset = Math.max(0, Math.min(S.elapsed || 0, audioBuf.duration - 0.05));
+    source.start(0, resumeOffset);
     source.onended = onEnded;
     S.recAudioSource = source;
     S.recGainNode = gainNode;
@@ -4381,7 +4394,12 @@ async function playRecitationAudio() {
     a.crossOrigin = null;
     a.volume = gv("rec-vol") / 100;
     a.onloadedmetadata = () => {
-      if (myGen === _recGen) S.ayaDurations[S.currentAya] = a.duration || 6;
+      if (myGen === _recGen) {
+        S.ayaDurations[S.currentAya] = a.duration || 6;
+        // v1.2 — استَأنِف من مَوضِع التوقّف
+        const off = Math.max(0, Math.min(S.elapsed || 0, (a.duration || 0) - 0.05));
+        if (off > 0.05) { try { a.currentTime = off; } catch (_) {} }
+      }
     };
       a.onended = onEnded;
       a.onerror = () => {
@@ -6249,6 +6267,8 @@ function startPlayer() {
   if (S.bgAudioEl && !recvidActive) { S.bgAudioEl.loop = ge("bg-loop"); S.bgAudioEl.play().catch(() => { }); }
   else if (S.bgAudioEl && recvidActive) { try { S.bgAudioEl.pause(); } catch (_) {} }
   if (S.bgVid) { try { S.bgVid.play().catch(() => {}); } catch (_) {} }
+  // v1.2 — استَأنِف المَقطع القادِم في الـcrossfade (إن كان مُعَلَّقاً)
+  if (S.bgVidNext) { try { S.bgVidNext.play().catch(() => {}); } catch (_) {} }
   if (recvidActive) { try { S.recVidEl.play().catch(() => {}); } catch (_) {} }
   else if (S.verses.length) playRecitationAudio();
 }
@@ -6259,6 +6279,8 @@ function pausePlayer() {
   stopRecitationAudio();
   if (S.bgAudioEl) S.bgAudioEl.pause();
   if (S.bgVid) { try { S.bgVid.pause(); } catch (_) {} }
+  // v1.2 — أوقف أَيضاً المَقطع القادِم في الـcrossfade
+  if (S.bgVidNext) { try { S.bgVidNext.pause(); } catch (_) {} }
   // v1.1.0 — أوقف فيديو التِلاوة فقط دون إعادة لِلبداية (لِيَستأنِف من موضعه)
   if (S.recVidEl) { try { S.recVidEl.pause(); } catch (_) {} }
 }

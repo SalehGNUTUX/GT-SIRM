@@ -818,12 +818,24 @@ function restartAll() {
   if (S.bgVid) {
     try { S.bgVid.pause(); S.bgVid.currentTime = 0; } catch (_) {}
   }
-  // 4) قائمة فيديوهات الخلفية (إن وُجدت)
-  if (Array.isArray(S.bgVidItems)) {
+  // 4) قائمة فيديوهات الخلفية (إن وُجدت) — v1.2 fix: أَعِد S.bgVid لِلمَقطع الأَوّل
+  if (Array.isArray(S.bgVidItems) && S.bgVidItems.length) {
     S.bgVidActiveIdx = 0;
     S.bgVidItems.forEach(it => {
-      if (it.vid) { try { it.vid.pause(); it.vid.currentTime = 0; } catch (_) {} }
+      if (it.vid) {
+        try {
+          it.vid.pause();
+          it.vid.currentTime = (typeof getBgClipTrimStart === "function") ? getBgClipTrimStart(it) : 0;
+        } catch (_) {}
+      }
     });
+    // v1.2 fix — بَعد restart، S.bgVid يَجِب أن يُشير لِلمَقطع الأَوّل (كان يَبقى على المَقطع النَشِط السابِق)
+    S.bgVid = S.bgVidItems[0].vid;
+    S.bgVidFile = S.bgVidItems[0].file;
+    S.bgVidNext = null;
+    S.bgVidFadeProgress = 0;
+    const prev = $("bg-vid-preview");
+    if (prev) prev.src = S.bgVidItems[0].url;
   }
   // 5) v1.1.0 — فيديو التِلاوة الجاهز (نُعيده صَراحةً هُنا لأنّ pausePlayer لَم يَعُد يُعيده)
   if (S.recVidEl) {
@@ -4804,7 +4816,9 @@ async function playRecitationAudio() {
     gainNode.connect(ctx.destination);        // سماعات (يُكتم)
     source.connect(exportGain);
     exportGain.connect(S.analyser);           // تسجيل (لا يُكتم)
-    source.start(0);
+    // v1.2 — استَأنِف من مَوضِع التوقّف داخِل الآية (S.elapsed) بَدَل البِداية دائماً
+    const resumeOffset = Math.max(0, Math.min(S.elapsed || 0, audioBuf.duration - 0.05));
+    source.start(0, resumeOffset);
     source.onended = onEnded;
     S.recAudioSource = source;
     S.recGainNode    = gainNode;    // يُستخدم للكتم فقط
@@ -4817,7 +4831,12 @@ async function playRecitationAudio() {
     a.crossOrigin = null;
     a.volume = gv("rec-vol") / 100;
     a.onloadedmetadata = () => {
-      if (myGen === _recGen) S.ayaDurations[S.currentAya] = a.duration || 6;
+      if (myGen === _recGen) {
+        S.ayaDurations[S.currentAya] = a.duration || 6;
+        // v1.2 — استَأنِف من مَوضِع التوقّف
+        const off = Math.max(0, Math.min(S.elapsed || 0, (a.duration || 0) - 0.05));
+        if (off > 0.05) { try { a.currentTime = off; } catch (_) {} }
+      }
     };
       a.onended = onEnded;
       a.onerror = () => {
@@ -7245,6 +7264,8 @@ function startPlayer() {
   if (S.bgAudioEl && !recvidActive) { S.bgAudioEl.loop = ge("bg-loop"); S.bgAudioEl.play().catch(() => { }); }
   else if (S.bgAudioEl && recvidActive) { try { S.bgAudioEl.pause(); } catch (_) {} }
   if (S.bgVid) S.bgVid.play().catch(() => {});
+  // v1.2 — استَأنِف المَقطع القادِم في الـcrossfade (إن كان مُعَلَّقاً)
+  if (S.bgVidNext) { try { S.bgVidNext.play().catch(() => {}); } catch (_) {} }
   if (recvidActive) {
     S.recVidEl.play().catch(() => {});
   } else if (S.verses.length) {
@@ -7262,6 +7283,8 @@ function pausePlayer() {
   if (S.recVidEl) { try { S.recVidEl.pause(); } catch (_) {} }
   // v1.1.0 — أوقف فيديو الخَلفيّة فقط دون إعادة لِلبداية
   if (S.bgVid) { try { S.bgVid.pause(); } catch (_) {} }
+  // v1.2 — أوقف أَيضاً المَقطع القادِم في الـcrossfade (لَو كان مُشَغَّلاً)
+  if (S.bgVidNext) { try { S.bgVidNext.pause(); } catch (_) {} }
 }
 
 // v1.1.0 — يُحسَب مَجموع تَوقيت الآيات السابقة (بالإضافة لِلفَجَوات) لِمُزامَنة مَوضِع فيديو التِلاوة
