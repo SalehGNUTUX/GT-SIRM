@@ -7848,6 +7848,8 @@ function clearVerseSearch() {
 
 function onSurahChange() { loadVerses(); }
 async function loadVerses() {
+  // v1.2 — أثناء استعادة مَشروع، runtime snapshot سيَملأ S.verses مُباشَرةً
+  if (S._restoring) return;
   // حارس: لا تجلب أيّ شيء إن كانت وحدة القرآن مُلغاة
   if (typeof isModuleActive === "function" && !isModuleActive("quran")) {
     toast?.("⚠️ وحدة القرآن مُلغاة من الإعدادات — لا يمكن جلب الآيات", "warn", 2500);
@@ -9642,6 +9644,20 @@ async function serializeProject() {
   // v1.2 — حالة الأَقسام القابِلة للطَيّ (details) بحَسب التَرتيب
   const detailsOpen = Array.from(document.querySelectorAll("details")).map(d => !!d.open);
 
+  // v1.2 — لَقطة كامِلة من حالة المُحتوى (S.verses + الحُقول المُصاحِبة).
+  //   هذه هي المَصدر الأَوثَق: تُغَطّي القرآن، الحَديث، النَصّ الحرّ، الأذكار،
+  //   أسماء الله، الأدعية، الحِكَم — أَيّ ما وُضِع في S.verses. تُستَعاد بَعد
+  //   إعادة تَحميل الوَحدات لتَتَجاوز أَيّ سِباق مَع change events.
+  const runtimeSnapshot = {
+    verses:          Array.isArray(S.verses) ? JSON.parse(JSON.stringify(S.verses)) : [],
+    translations:    Array.isArray(S.translations) ? JSON.parse(JSON.stringify(S.translations)) : [],
+    currentAya:      S.currentAya || 0,
+    ayaDurations:    Array.isArray(S.ayaDurations) ? [...S.ayaDurations] : [],
+    mixedAnimsOrder: Array.isArray(S.mixedAnimsOrder) ? [...S.mixedAnimsOrder] : [],
+    useFreeAsSource: !!S.useFreeAsSource,
+    bgVidActiveIdx:  S.bgVidActiveIdx || 0,
+  };
+
   // المصادر
   const assets = [];
   // فيديوهات الخلفية — حقول حقيقيّة: audioEnabled / audioGain
@@ -9737,6 +9753,7 @@ async function serializeProject() {
     modules,
     freeText,
     detailsOpen,   // v1.2 — حالة الأَقسام القابِلة للطَيّ
+    runtime: runtimeSnapshot,   // v1.2 — لَقطة S.verses وما يُصاحِبها
     assets,
   };
 }
@@ -9744,6 +9761,9 @@ async function serializeProject() {
 // استعادة الحالة
 async function deserializeProject(proj) {
   if (!proj || proj.format !== PROJECT_FORMAT) throw new Error("ملفّ مشروع غير صالح");
+  // v1.2 — حارس: يَمنَع loadVerses/applyFreeText المُلتَقَطة من change events
+  //   من الكِتابة عَلى S.verses بَعد استعادة runtime snapshot
+  S._restoring = true;
 
   // الإعدادات
   const byId = proj.settings?.byId || {};
@@ -9822,6 +9842,34 @@ async function deserializeProject(proj) {
       } catch (_) {}
     }, 400);
   }
+
+  // v1.2 — استعادة لَقطة المُحتوى (S.verses وما يُصاحِبها) بَعد إعادة تَحميل الوَحدات.
+  //   500ms > 400ms المُخَصَّصة لِـapplyFreeText.
+  //   هذا يَضمَن أنّ ما كان في S.verses وَقت الحَفظ يَعود كما هو، بغَضّ النَظر
+  //   عن ما فَعَلَته change events (loadVerses، applyHadith، إلخ).
+  const hasRuntimeVerses = !!(proj.runtime && Array.isArray(proj.runtime.verses) && proj.runtime.verses.length);
+  setTimeout(() => {
+    try {
+      if (hasRuntimeVerses) {
+        S.verses          = JSON.parse(JSON.stringify(proj.runtime.verses));
+        S.translations    = Array.isArray(proj.runtime.translations) ? JSON.parse(JSON.stringify(proj.runtime.translations)) : [];
+        S.currentAya      = Math.min(proj.runtime.currentAya || 0, S.verses.length - 1);
+        S.ayaDurations    = Array.isArray(proj.runtime.ayaDurations) ? [...proj.runtime.ayaDurations] : [];
+        S.mixedAnimsOrder = Array.isArray(proj.runtime.mixedAnimsOrder) ? [...proj.runtime.mixedAnimsOrder] : (S.mixedAnimsOrder || []);
+        S.useFreeAsSource = !!proj.runtime.useFreeAsSource;
+        if (proj.runtime.bgVidActiveIdx != null && S.bgVidItems[proj.runtime.bgVidActiveIdx]) {
+          if (typeof activateBgVidByIndex === "function") activateBgVidByIndex(proj.runtime.bgVidActiveIdx, true);
+        }
+        if (typeof updateAyaUI === "function") updateAyaUI();
+      }
+    } catch (e) { console.warn("runtime snapshot restore failed:", e); }
+    // ارفَع الحارس — أَيّ تَفاعُل مُستقبَليّ من المُستخدم يَعمَل طَبيعيّاً
+    S._restoring = false;
+    // إن لم يَكُن هُناك snapshot: شَغِّل loadVerses مَرّة واحدة لِمَلء المُحتوى من الحقول المُستَعادة
+    if (!hasRuntimeVerses && typeof loadVerses === "function") {
+      loadVerses().catch(_ => {});
+    }
+  }, 500);
 
   clearProjectDirty();
   return { restored: (proj.assets || []).length - missing.length, missing: missing.length };
