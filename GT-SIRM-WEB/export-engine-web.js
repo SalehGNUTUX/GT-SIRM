@@ -489,8 +489,9 @@ async function startWebExportV2(opts) {
   // اجمع buffers صوتية للمقاطع المُفعّل صوتها (إن وجدت)
   // v0.5.0 — يحترم توگل "كتم صوت الفيديو" العام
   const globalMute = document.getElementById("bg-vid-mute-audio")?.checked;
+  // v1.2 — تَجاهُل المُعمّاة (hidden)
   const bgVidAudioItems = globalMute ? [] : (S.bgVidItems || [])
-    .filter(it => it.audioEnabled && it.audioBuffer)
+    .filter(it => !it.hidden && it.audioEnabled && it.audioBuffer)
     .map(it => ({ buffer: it.audioBuffer, gain: it.audioGain, dur: it.dur }));
   const mixed = await mixAudioToBufferWeb({
     audioBuffers, ayaStarts, bgBuffer, bgGain, bgLoop,

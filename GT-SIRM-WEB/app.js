@@ -5721,6 +5721,35 @@ function onBgMedia(input, type) {
 }
 
 // ── إدارة قائمة مقاطع الخلفية (playlist) — مطابق لنسخة المكتبية ──
+// v1.2 — إعماء (hidden) لكُلّ مَقطع: يَبقى في القائمة، يُتَخطّى في التَبديل/الـcrossfade/التَصدير
+function getNextVisibleBgVidIdx(fromIdx) {
+  const n = S.bgVidItems.length;
+  if (n === 0) return -1;
+  for (let step = 1; step <= n; step++) {
+    const idx = (fromIdx + step) % n;
+    if (!S.bgVidItems[idx].hidden) return idx;
+  }
+  return -1;
+}
+function getFirstVisibleBgVidIdx() {
+  const n = S.bgVidItems.length;
+  for (let i = 0; i < n; i++) if (!S.bgVidItems[i].hidden) return i;
+  return -1;
+}
+function toggleBgVidHidden(idx) {
+  if (idx < 0 || idx >= S.bgVidItems.length) return;
+  const it = S.bgVidItems[idx];
+  it.hidden = !it.hidden;
+  if (it.hidden && idx === S.bgVidActiveIdx) {
+    const nxt = getFirstVisibleBgVidIdx();
+    if (nxt >= 0) activateBgVidByIndex(nxt, true);
+    else { try { it.vid.pause(); } catch (_) {} }
+  }
+  if (typeof markProjectDirty === "function") markProjectDirty();
+  renderBgVidList();
+  toast(it.hidden ? "👁️‍🗨️ أُعمِيَ المَقطع (يَبقى مَحفوظاً)" : "👁️ أُعيدَ إظهار المَقطع", "info", 1500);
+}
+
 function addBgVidItem(file) {
   const url = URL.createObjectURL(file);
   const vid = document.createElement("video");
@@ -5734,6 +5763,7 @@ function addBgVidItem(file) {
       audioEnabled: false,   // الصوت معطّل افتراضياً
       audioGain: 0.5,        // 50%
       audioBuffer: null,     // يُفكّ ترميزه عند تفعيل الصوت (lazy)
+      hidden: false,         // v1.2 — إعماء مُنفَصِل عن الحَذف
     };
     S.bgVidItems.push(item);
     if (typeof markProjectDirty === "function") markProjectDirty();
@@ -5758,21 +5788,26 @@ function addBgVidItem(file) {
 }
 
 function switchToNextBgVid() {
-  if (S.bgVidItems.length < 2) {
+  const visibleCount = S.bgVidItems.filter(it => !it.hidden).length;
+  if (visibleCount < 2) {
     if (S.bgVid) { try { S.bgVid.currentTime = 0; S.bgVid.play().catch(() => {}); } catch (_) {} }
     return;
   }
-  const nextIdx = (S.bgVidActiveIdx + 1) % S.bgVidItems.length;
+  const nextIdx = getNextVisibleBgVidIdx(S.bgVidActiveIdx);
+  if (nextIdx < 0) return;
+  const oldVid = S.bgVid;                           // v1.2 Bug#4
   // مهم: لا تُعِد currentTime — التالي يلعب فعلاً منذ crossfade
-  // (إعادته كانت تسبّب rewind مرئياً بقدر مدة الـ crossfade)
   const active = S.bgVidItems[nextIdx];
   S.bgVidActiveIdx = nextIdx;
   S.bgVid = active.vid;
   S.bgVidNext = null;
   S.bgVidFadeProgress = 0;
-  // ضمان استمرار التشغيل إن كان توقّف لسبب ما
   if (S.playing || S._exportingV2) {
     try { active.vid.play().catch(() => {}); } catch (_) {}
+  }
+  // v1.2 Bug#4 — أوقِف القَديم بَعد التَبديل
+  if (oldVid && oldVid !== active.vid) {
+    try { oldVid.pause(); } catch (_) {}
   }
 }
 
@@ -5785,7 +5820,8 @@ function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 function updateBgVidCrossfade() {
-  if (!S.bgVid || S.bgVidItems.length < 2) {
+  const visibleCount = S.bgVidItems.filter(it => !it.hidden).length;
+  if (!S.bgVid || visibleCount < 2) {
     S.bgVidNext = null; S.bgVidFadeProgress = 0; return;
   }
   const cur = S.bgVid;
@@ -5799,7 +5835,8 @@ function updateBgVidCrossfade() {
   const remaining = endPoint - cur.currentTime;
 
   if (remaining <= xf && remaining > 0) {
-    const nextIdx = (S.bgVidActiveIdx + 1) % S.bgVidItems.length;
+    const nextIdx = getNextVisibleBgVidIdx(S.bgVidActiveIdx);
+    if (nextIdx < 0) { S.bgVidNext = null; S.bgVidFadeProgress = 0; return; }
     const nextItem = S.bgVidItems[nextIdx];
     if (S.bgVidNext !== nextItem.vid) {
       S.bgVidNext = nextItem.vid;
@@ -5904,10 +5941,14 @@ function renderBgVidList() {
     const dur = it.dur ? it.dur.toFixed(1) + "ث" : "—";
     const audioOn = it.audioEnabled;
     const volPct = Math.round((it.audioGain || 0) * 100);
-    return `<div class="bgv-item" data-idx="${i}">
+    const hidden = !!it.hidden;
+    const active = (i === S.bgVidActiveIdx);
+    const rowStyle = (hidden ? 'opacity:.45;' : '') + (active ? 'outline:2px solid var(--acc,#4caf50);' : '') + 'cursor:pointer';
+    return `<div class="bgv-item${hidden ? ' bgv-hidden' : ''}${active ? ' bgv-active' : ''}" data-idx="${i}" style="${rowStyle}" title="اِنقر لعرض المُعاينة">
       <span class="bgv-idx">${i + 1}</span>
       <span class="bgv-name" title="${escHtml(it.name)}">${escHtml(it.name)}</span>
       <span class="bgv-dur">${dur} · ${sz}MB</span>
+      <button data-act="hide" class="${hidden ? 'on' : ''}" title="${hidden ? 'إعادة إظهار المَقطع' : 'إعماء المَقطع (يَبقى مَحفوظاً)'}">${hidden ? '👁️‍🗨️' : '👁️'}</button>
       <button data-act="audio" class="${audioOn ? 'on' : ''}" title="${audioOn ? 'كتم صوت المقطع' : 'تفعيل صوت المقطع'}">${audioOn ? '🔊' : '🔇'}</button>
       <input type="range" class="bgv-vol" min="0" max="100" value="${volPct}" data-act="vol" title="مستوى صوت المقطع: ${volPct}%" ${audioOn ? '' : 'style="visibility:hidden"'}>
       <button data-act="up"     ${i === 0 ? "disabled" : ""} title="أعلى">▲</button>
@@ -5915,6 +5956,16 @@ function renderBgVidList() {
       <button data-act="remove" title="إزالة">✕</button>
     </div>`;
   }).join("");
+  // v1.2 — نَقر على صَفّ (خارج الأَزرار/الشَريط) يُفَعِّل المُعاينَة
+  el.querySelectorAll(".bgv-item").forEach(row => {
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("button") || e.target.closest("input")) return;
+      const idx = parseInt(row.dataset.idx);
+      if (!isNaN(idx) && !S.bgVidItems[idx]?.hidden) {
+        activateBgVidByIndex(idx, true);
+      }
+    });
+  });
   el.querySelectorAll(".bgv-item button").forEach(btn => {
     btn.addEventListener("click", (e) => {
       const idx = parseInt(e.currentTarget.closest(".bgv-item").dataset.idx);
@@ -5923,6 +5974,7 @@ function renderBgVidList() {
       else if (act === "down")   moveBgVidItem(idx, +1);
       else if (act === "remove") removeBgVidItem(idx);
       else if (act === "audio")  toggleBgVidAudio(idx);
+      else if (act === "hide")   toggleBgVidHidden(idx);
     });
   });
   el.querySelectorAll(".bgv-item input.bgv-vol").forEach(inp => {
@@ -7472,6 +7524,7 @@ async function serializeProject() {
         active: i === S.bgVidActiveIdx,
         audioEnabled: !!item.audioEnabled,
         audioGain: item.audioGain ?? 0.5,
+        hidden: !!item.hidden,   // v1.2
       };
       if (item.file && item.file.size <= ASSET_EMBED_MAX) {
         a.mode = "embedded";
@@ -7638,6 +7691,7 @@ async function restoreAssetFromDataURL(asset) {
           if (last) {
             if (asset.audioEnabled !== undefined) last.audioEnabled = !!asset.audioEnabled;
             if (asset.audioGain !== undefined) last.audioGain = asset.audioGain;
+            if (asset.hidden !== undefined) last.hidden = !!asset.hidden;   // v1.2
             if (typeof renderBgVidList === "function") renderBgVidList();
           }
         }
