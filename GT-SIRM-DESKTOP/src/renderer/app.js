@@ -9539,6 +9539,9 @@ async function serializeProject() {
     audioTrim: S.freeAudioTrim ? { start: S.freeAudioTrim.start, end: S.freeAudioTrim.end } : null,
   };
 
+  // v1.2 — حالة الأَقسام القابِلة للطَيّ (details) بحَسب التَرتيب
+  const detailsOpen = Array.from(document.querySelectorAll("details")).map(d => !!d.open);
+
   // المصادر
   const assets = [];
   // فيديوهات الخلفية — حقول حقيقيّة: audioEnabled / audioGain
@@ -9631,6 +9634,7 @@ async function serializeProject() {
     settings: { byId, byName },
     modules,
     freeText,
+    detailsOpen,   // v1.2 — حالة الأَقسام القابِلة للطَيّ
     assets,
   };
 }
@@ -9689,9 +9693,20 @@ async function deserializeProject(proj) {
     showMissingAssetsModal(missing);
   }
 
-  // v1.1.0 — إعادة تَطبيق النَصّ الحرّ إن كان مَحفوظاً (يُعيد بناء S.verses ويَستخدم S.freePerSlice المُستَعادة)
+  // v1.2 — استعادة حالة الأَقسام القابِلة للطَيّ (details) بحَسب التَرتيب
+  if (Array.isArray(proj.detailsOpen)) {
+    const allDetails = document.querySelectorAll("details");
+    proj.detailsOpen.forEach((wasOpen, i) => {
+      if (allDetails[i]) allDetails[i].open = !!wasOpen;
+    });
+  }
+
+  // v1.2 fix — تَطبيق النَصّ الحرّ فَقط إن كان توگل free-text-on مُفَعَّلاً وقت الحَفظ.
+  //   قَبل هذا الإصلاح كان يُطبَّق طالما وُجِد نَصّ في textarea ولَو كان التوگل مُغلَقاً،
+  //   مِمّا يَستَبدِل آيات القرآن بالنَصّ الحرّ رُغماً عن المُستَخدِم.
   const savedText = proj.freeText?.text?.trim();
-  if (savedText && typeof applyFreeText === "function") {
+  const freeTextOnAtSave = !!(proj.settings?.byId?.["free-text-on"]);
+  if (savedText && freeTextOnAtSave && typeof applyFreeText === "function") {
     // تَأخير قَصير حتى تَكتمِل استعادة المُصادر (خاصّةً الصوت الذي يُشغّل syncVersesToActiveAudio)
     setTimeout(() => {
       try {
