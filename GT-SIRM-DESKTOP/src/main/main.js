@@ -1012,7 +1012,7 @@ ipcMain.on("ffmpeg-pipe-cancel", () => {
 // ── استخراج إطارات فيديو الخلفية مسبقاً (مرة واحدة) ───
 //    أسرع وأكثر استقراراً من seek على HTMLVideoElement
 ipcMain.handle("extract-bg-frames", async (event, opts) => {
-  const { videoBytes, videoBytesList, clipDurations, crossfadeSec, fps, width, height, totalDuration, trimStart, trimEnd } = opts;
+  const { videoBytes, videoBytesList, clipDurations, clipTrims, crossfadeSec, fps, width, height, totalDuration, trimStart, trimEnd } = opts;
   const ffmpegPath = await getBinPath("ffmpeg");
   if (!ffmpegPath) throw new Error("ffmpeg not found");
 
@@ -1038,9 +1038,15 @@ ipcMain.handle("extract-bg-frames", async (event, opts) => {
     const concatPath = path.join(os.tmpdir(), `gt-sirm-bg-concat-${Date.now()}.mp4`);
     inputsToClean.push(concatPath);
     const W12 = Math.round(width * 1.2), H12 = Math.round(height * 1.2);
-    const filterInputs = tempFiles.map((_, i) =>
-      `[${i}:v:0]scale=${W12}:${H12}:force_original_aspect_ratio=increase,crop=${W12}:${H12},setsar=1,fps=${fps},format=yuv420p[v${i}]`
-    ).join(";");
+    // v1.2 Feature#2 — trim per-clip قبل scale/crop (setpts=PTS-STARTPTS بَعد trim)
+    const hasTrims = Array.isArray(clipTrims) && clipTrims.length === tempFiles.length;
+    const filterInputs = tempFiles.map((_, i) => {
+      const tr = hasTrims ? clipTrims[i] : null;
+      const trimSeg = (tr && (tr.start > 0.001 || tr.end > 0))
+        ? `trim=start=${(tr.start || 0).toFixed(3)}:end=${(tr.end || 0).toFixed(3)},setpts=PTS-STARTPTS,`
+        : "";
+      return `[${i}:v:0]${trimSeg}scale=${W12}:${H12}:force_original_aspect_ratio=increase,crop=${W12}:${H12},setsar=1,fps=${fps},format=yuv420p[v${i}]`;
+    }).join(";");
 
     // ── crossfade أو concat صلب ────────────────────────
     const xf = (typeof crossfadeSec === "number" && crossfadeSec > 0

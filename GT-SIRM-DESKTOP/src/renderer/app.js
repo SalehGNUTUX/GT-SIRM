@@ -4854,6 +4854,12 @@ function stopRecitationAudio() {
 // ── تقطيع نطاق زمني للوسائط المحلية ───────────────────
 //   يطبَّق في المعاينة وفي تصدير V2 (المكتبية) عبر ffmpeg -ss/-to
 function getBgVidTrim() {
+  // v1.2 — الأَولويّة لِتَقليم المَقطع النَشِط (per-clip)
+  const item = S.bgVidItems[S.bgVidActiveIdx];
+  if (item && hasBgClipTrim(item)) {
+    return { start: getBgClipTrimStart(item), end: getBgClipTrimEnd(item) };
+  }
+  // fallback: التَقليم العالميّ (legacy — يَعمَل فَقط في وَضع مَقطع واحد)
   if (!ge("bg-vid-trim-on") || !S.bgVid) return null;
   const s = Math.max(0, parseFloat(gv("bg-vid-trim-start")) || 0);
   const e = Math.max(s + 0.1, parseFloat(gv("bg-vid-trim-end")) || s + 1);
@@ -4883,17 +4889,10 @@ function applyBgVidTrim() {
   if (S.bgVid.currentTime < t.start || S.bgVid.currentTime > t.end) {
     try { S.bgVid.currentTime = t.start; } catch (_) {}
   }
-  // ربط مراقب يعيد للبداية عند تجاوز end
-  if (!S.bgVid._trimHandler) {
-    S.bgVid._trimHandler = () => {
-      const tt = getBgVidTrim();
-      if (!tt) return;
-      if (S.bgVid.currentTime >= tt.end - 0.05) {
-        try { S.bgVid.currentTime = tt.start; } catch (_) {}
-      }
-    };
-    S.bgVid.addEventListener("timeupdate", S.bgVid._trimHandler);
-  }
+  // v1.2 Bug#2 — أُزيل timeupdate handler السابق:
+  //   كان يُعيد currentTime=trim.start عند بُلوغ trim.end، فيَقفِل المَقطع الأَوّل
+  //   في وَضع playlist ولا يَنتَقِل للتالي. الآن updateBgVidCrossfade تُدير
+  //   الحُدود عبر hasBgClipTrim() + switchToNextBgVid() تلقائيّاً.
 }
 
 function applyBgAudioTrim() {
@@ -6531,6 +6530,56 @@ function toggleBgVidHidden(idx) {
   toast(it.hidden ? "👁️‍🗨️ أُعمِيَ المَقطع (يَبقى مَحفوظاً)" : "👁️ أُعيدَ إظهار المَقطع", "info", 1500);
 }
 
+// v1.2 Feature #2 — per-clip trim
+function getBgClipTrimStart(item) {
+  const s = parseFloat(item?.trimStart);
+  return isFinite(s) && s > 0 ? s : 0;
+}
+function getBgClipTrimEnd(item) {
+  if (!item) return 0;
+  const dur = item.dur || 0;
+  const e = parseFloat(item.trimEnd);
+  return (isFinite(e) && e > 0 && e < dur) ? e : dur;
+}
+function getBgClipEffectiveDur(item) {
+  return Math.max(0.1, getBgClipTrimEnd(item) - getBgClipTrimStart(item));
+}
+function hasBgClipTrim(item) {
+  if (!item) return false;
+  const s = getBgClipTrimStart(item), e = getBgClipTrimEnd(item), dur = item.dur || 0;
+  return (s > 0.001) || (e < dur - 0.001);
+}
+function setBgVidClipTrim(idx, which, value) {
+  const item = S.bgVidItems[idx];
+  if (!item) return;
+  const dur = item.dur || 0;
+  let v = parseFloat(value); if (!isFinite(v)) v = 0;
+  v = Math.max(0, Math.min(v, dur));
+  if (which === "trim-start") {
+    item.trimStart = v;
+    const curEnd = getBgClipTrimEnd(item);
+    if (curEnd <= v + 0.1) item.trimEnd = Math.min(dur, v + 0.1);
+  } else {
+    item.trimEnd = v <= getBgClipTrimStart(item) + 0.1 ? getBgClipTrimStart(item) + 0.1 : v;
+  }
+  // إن كان النَشِط: أَعِد ضَبط المَوضِع لَو خَرَج عن النِطاق
+  if (idx === S.bgVidActiveIdx && item.vid) {
+    const s = getBgClipTrimStart(item), e = getBgClipTrimEnd(item);
+    try { if (item.vid.currentTime < s || item.vid.currentTime > e) item.vid.currentTime = s; } catch (_) {}
+  }
+  if (typeof markProjectDirty === "function") markProjectDirty();
+  renderBgVidList();
+}
+function resetBgVidClipTrim(idx) {
+  const item = S.bgVidItems[idx];
+  if (!item) return;
+  item.trimStart = 0;
+  item.trimEnd = null;
+  if (typeof markProjectDirty === "function") markProjectDirty();
+  renderBgVidList();
+  toast("↺ أُعيدَ تَقليم المَقطع", "info", 1200);
+}
+
 function addBgVidItem(file) {
   const url = URL.createObjectURL(file);
   const vid = document.createElement("video");
@@ -6546,6 +6595,8 @@ function addBgVidItem(file) {
       audioGain: 0.5,
       audioBuffer: null,
       hidden: false,         // v1.2 — إعماء مُنفَصِل عن الحَذف
+      trimStart: 0,          // v1.2 — تَقليم لكُلّ مَقطع (0 = من البِداية)
+      trimEnd: null,         //        (null = حتى النِهاية الطَبيعيّة)
     };
     S.bgVidItems.push(item);
     if (typeof markProjectDirty === "function") markProjectDirty();
@@ -6573,8 +6624,12 @@ function addBgVidItem(file) {
 function switchToNextBgVid() {
   const visibleCount = S.bgVidItems.filter(it => !it.hidden).length;
   if (visibleCount < 2) {
-    // مَقطع واحد مَرئيّ فَقط: كرِّره
-    if (S.bgVid) { try { S.bgVid.currentTime = 0; S.bgVid.play().catch(() => {}); } catch (_) {} }
+    // مَقطع واحد مَرئيّ فَقط: كرِّره من trimStart
+    if (S.bgVid) {
+      const item = S.bgVidItems[S.bgVidActiveIdx];
+      const s = item ? getBgClipTrimStart(item) : 0;
+      try { S.bgVid.currentTime = s; S.bgVid.play().catch(() => {}); } catch (_) {}
+    }
     return;
   }
   const nextIdx = getNextVisibleBgVidIdx(S.bgVidActiveIdx);
@@ -6591,7 +6646,7 @@ function switchToNextBgVid() {
   if (S.playing || S._exportingV2) {
     try { active.vid.play().catch(() => {}); } catch (_) {}
   }
-  // v1.2 Bug#4 — أوقِف المقطع القَديم بَعد التَبديل (لا مَعنى لتَشغيله في الخَلفيّة)
+  // v1.2 Bug#4 — أوقِف المقطع القَديم بَعد التَبديل
   if (oldVid && oldVid !== active.vid) {
     try { oldVid.pause(); } catch (_) {}
   }
@@ -6611,18 +6666,33 @@ function updateBgVidCrossfade() {
   // v1.2 Bug#1 — تَصدير الويب V2 يُدير الحالة يَدويّاً؛ لِسَطح المكتب لا يُستَخدَم في التَصدير أَصلاً
   if (S._exportingV2) return;
   const visibleCount = S.bgVidItems.filter(it => !it.hidden).length;
-  if (!S.bgVid || visibleCount < 2) {
+  if (!S.bgVid || visibleCount < 1) {
     S.bgVidNext = null; S.bgVidFadeProgress = 0; return;
   }
   const cur = S.bgVid;
   if (!isFinite(cur.duration) || cur.duration <= 0) return;
 
+  // v1.2 Feature #2 — trimEnd الفَعّال لِلمَقطع النَشِط (per-clip) أَو duration
+  const curItem = S.bgVidItems[S.bgVidActiveIdx];
+  const endPoint = curItem ? getBgClipTrimEnd(curItem) : cur.duration;
+  const remaining = endPoint - cur.currentTime;
+
+  // v1.2 Feature #2 — لَو تَخَطّى trimEnd: انتقال قَسريّ (يَحُلّ Bug #2 القَديم أَيضاً)
+  if (remaining <= 0 && curItem && hasBgClipTrim(curItem)) {
+    if (visibleCount >= 2) {
+      switchToNextBgVid();  // مَعَ crossfade مَنتَهٍ فَقَط
+    } else {
+      // مَقطع واحد: لُف داخِل النِطاق
+      try { cur.currentTime = getBgClipTrimStart(curItem); cur.play().catch(() => {}); } catch (_) {}
+    }
+    S.bgVidNext = null; S.bgVidFadeProgress = 0;
+    return;
+  }
+
+  if (visibleCount < 2) { S.bgVidNext = null; S.bgVidFadeProgress = 0; return; }
+
   const xf = getCrossfadeDur();
   if (xf <= 0) { S.bgVidNext = null; S.bgVidFadeProgress = 0; return; }
-
-  const trim = (typeof getBgVidTrim === "function") ? getBgVidTrim() : null;
-  const endPoint = trim ? trim.end : cur.duration;
-  const remaining = endPoint - cur.currentTime;
 
   if (remaining <= xf && remaining > 0) {
     const nextIdx = getNextVisibleBgVidIdx(S.bgVidActiveIdx);
@@ -6630,9 +6700,9 @@ function updateBgVidCrossfade() {
     const nextItem = S.bgVidItems[nextIdx];
     if (S.bgVidNext !== nextItem.vid) {
       S.bgVidNext = nextItem.vid;
-      try { nextItem.vid.currentTime = 0; nextItem.vid.play().catch(() => {}); } catch (_) {}
+      const nextStart = getBgClipTrimStart(nextItem);
+      try { nextItem.vid.currentTime = nextStart; nextItem.vid.play().catch(() => {}); } catch (_) {}
     }
-    // التقدّم الخطي ثم easing لـ alpha أنعم
     const linear = Math.max(0, Math.min(1, 1 - (remaining / xf)));
     S.bgVidFadeProgress = easeInOutCubic(linear);
   } else {
@@ -6743,6 +6813,11 @@ function renderBgVidList() {
     const hidden = !!it.hidden;
     const active = (i === S.bgVidActiveIdx);
     const rowStyle = (hidden ? 'opacity:.45;' : '') + (active ? 'outline:2px solid var(--acc,#4caf50);' : '') + 'cursor:pointer';
+    // v1.2 — قِيَم tract per-clip
+    const tStart = getBgClipTrimStart(it);
+    const tEnd   = getBgClipTrimEnd(it);
+    const trimActive = hasBgClipTrim(it);
+    const durMax = (it.dur || 0).toFixed(2);
     return `<div class="bgv-item${hidden ? ' bgv-hidden' : ''}${active ? ' bgv-active' : ''}" data-idx="${i}" style="${rowStyle}" title="اِنقر لعرض المُعاينة">
       <span class="bgv-idx">${i + 1}</span>
       <span class="bgv-name" title="${escHtml(it.name)}">${escHtml(it.name)}</span>
@@ -6753,6 +6828,13 @@ function renderBgVidList() {
       <button data-act="up"     ${i === 0 ? "disabled" : ""} title="أعلى">▲</button>
       <button data-act="down"   ${i === S.bgVidItems.length - 1 ? "disabled" : ""} title="أسفل">▼</button>
       <button data-act="remove" title="إزالة">✕</button>
+      <span class="bgv-trim-block${trimActive ? ' on' : ''}" title="تَقليم مُدّة المَقطع">
+        <span>✂️ من</span>
+        <input type="number" min="0" max="${durMax}" step="0.1" value="${tStart.toFixed(2)}" data-act="trim-start" title="بَدء المَقطع (ث)">
+        <span>إلى</span>
+        <input type="number" min="0" max="${durMax}" step="0.1" value="${tEnd.toFixed(2)}" data-act="trim-end" title="نِهاية المَقطع (ث)">
+        <button data-act="trim-reset" title="إفراغ التَقليم (المَقطع كامِلاً)" ${trimActive ? '' : 'disabled'}>↺</button>
+      </span>
     </div>`;
   }).join("");
   // v1.2 — نَقر على صَفّ (خارج الأَزرار/الشَريط) يُفَعِّل المُعاينَة
@@ -6767,19 +6849,29 @@ function renderBgVidList() {
   });
   el.querySelectorAll(".bgv-item button").forEach(btn => {
     btn.addEventListener("click", (e) => {
+      e.stopPropagation();  // v1.2 — لا يُفَعِّل الصَفّ
       const idx = parseInt(e.currentTarget.closest(".bgv-item").dataset.idx);
       const act = e.currentTarget.dataset.act;
-      if (act === "up")          moveBgVidItem(idx, -1);
-      else if (act === "down")   moveBgVidItem(idx, +1);
-      else if (act === "remove") removeBgVidItem(idx);
-      else if (act === "audio")  toggleBgVidAudio(idx);
-      else if (act === "hide")   toggleBgVidHidden(idx);
+      if (act === "up")              moveBgVidItem(idx, -1);
+      else if (act === "down")       moveBgVidItem(idx, +1);
+      else if (act === "remove")     removeBgVidItem(idx);
+      else if (act === "audio")      toggleBgVidAudio(idx);
+      else if (act === "hide")       toggleBgVidHidden(idx);
+      else if (act === "trim-reset") resetBgVidClipTrim(idx);
     });
   });
   el.querySelectorAll(".bgv-item input.bgv-vol").forEach(inp => {
     inp.addEventListener("input", (e) => {
       const idx = parseInt(e.currentTarget.closest(".bgv-item").dataset.idx);
       setBgVidVolume(idx, parseFloat(e.currentTarget.value));
+    });
+  });
+  // v1.2 — حَقلا trim: تَحديث فَوريّ عَلى change
+  el.querySelectorAll(".bgv-item input[data-act='trim-start'], .bgv-item input[data-act='trim-end']").forEach(inp => {
+    inp.addEventListener("change", (e) => {
+      e.stopPropagation();
+      const idx = parseInt(e.currentTarget.closest(".bgv-item").dataset.idx);
+      setBgVidClipTrim(idx, e.currentTarget.dataset.act, e.currentTarget.value);
     });
   });
 }
@@ -9349,11 +9441,18 @@ async function startExportDesktop(codecKey) {
   let bgVideoBytesList = null;
   let bgClipDurations = null;
   const visibleBgVidItems = (S.bgVidItems || []).filter(it => !it.hidden && it.file);
+  // v1.2 Feature#2 — قوائم trim per-clip لِتَمريرها لِلـIPC
+  let bgClipTrims = null;
   if (visibleBgVidItems.length > 1) {
     try {
       $("rec-sub").textContent = `📥 قراءة ${visibleBgVidItems.length} مقاطع للخلفية…`;
       bgVideoBytesList = await Promise.all(visibleBgVidItems.map(it => it.file.arrayBuffer()));
-      bgClipDurations  = visibleBgVidItems.map(it => it.dur || 0);
+      // بَعد trim: المُدّة الفَعّالة = trimEnd − trimStart
+      bgClipDurations  = visibleBgVidItems.map(it => getBgClipEffectiveDur(it));
+      bgClipTrims      = visibleBgVidItems.map(it => ({
+        start: getBgClipTrimStart(it),
+        end:   getBgClipTrimEnd(it),
+      }));
     } catch (e) { console.warn("multi-bg bytes read failed:", e); }
   } else if (visibleBgVidItems.length === 1) {
     try {
@@ -9390,7 +9489,8 @@ async function startExportDesktop(codecKey) {
       bgVideo: S.bgVid,
       bgVideoBytes,
       bgVideoBytesList,
-      bgClipDurations,      // مدّة كل مقطع — لازم للـ crossfade xfade
+      bgClipDurations,      // مدّة كل مقطع بَعد trim
+      bgClipTrims,          // v1.2 Feature#2 — [{start,end}] لكُلّ مَقطع
       bgCrossfadeSec: getCrossfadeDur(),  // نفس مدة المعاينة بالضبط
       bgVidTrim,
       bgAudioTrim,
@@ -9557,6 +9657,8 @@ async function serializeProject() {
         audioEnabled: !!item.audioEnabled,
         audioGain: item.audioGain ?? 0.5,
         hidden: !!item.hidden,   // v1.2
+        trimStart: item.trimStart ?? 0,     // v1.2 Feature#2
+        trimEnd: item.trimEnd ?? null,      //
       };
       if (item.file && item.file.size <= ASSET_EMBED_MAX) {
         a.mode = "embedded";
@@ -9758,6 +9860,8 @@ async function restoreAssetFromDataURL(asset) {
             if (asset.audioEnabled !== undefined) last.audioEnabled = !!asset.audioEnabled;
             if (asset.audioGain !== undefined) last.audioGain = asset.audioGain;
             if (asset.hidden !== undefined) last.hidden = !!asset.hidden;   // v1.2
+            if (asset.trimStart !== undefined) last.trimStart = asset.trimStart;  // v1.2 Feature#2
+            if (asset.trimEnd !== undefined) last.trimEnd = asset.trimEnd;
             if (typeof renderBgVidList === "function") renderBgVidList();
           }
         }

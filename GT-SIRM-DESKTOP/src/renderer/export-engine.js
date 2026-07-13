@@ -312,9 +312,13 @@ async function mixAudioToBuffer({
         const gain = oac.createGain();
         gain.gain.value = it.gain ?? 0.5;
         src.connect(gain); gain.connect(oac.destination);
+        // v1.2 Feature#2 — offset في buffer = trimStart لِلمَقطع، مُدّة = it.dur الفَعّالة
+        const bufOffset = Math.max(0, Math.min(it.trimStart || 0, it.buffer.duration));
+        const clipMaxPlay = Math.max(0.05, it.buffer.duration - bufOffset);
+        const wantDur = Math.min(clipMaxPlay, it.dur || clipMaxPlay);
         const remaining = totalDuration - startTime;
-        if (remaining < it.buffer.duration) src.start(startTime, 0, remaining);
-        else                                src.start(startTime);
+        const playDur = Math.min(wantDur, remaining);
+        if (playDur > 0.02) src.start(startTime, bufOffset, playDur);
       }
       if (cycleDur <= 0.1) break;
       cycleStart += cycleDur;
@@ -464,7 +468,8 @@ async function startDesktopExportV2(opts) {
     bgVideo,             // HTMLVideoElement لخلفية الفيديو (اختياري)
     bgVideoBytes,        // ArrayBuffer واحد للفيديو
     bgVideoBytesList,    // Array<ArrayBuffer> لـ playlist (يضمّ في ffmpeg)
-    bgClipDurations,     // مدد المقاطع (للـ xfade)
+    bgClipDurations,     // مدد المقاطع الفَعّالة بَعد trim (للـ xfade)
+    bgClipTrims,         // v1.2 Feature#2 — [{start,end}] لكُلّ مَقطع
     bgCrossfadeSec,      // مدة الـ crossfade بالثواني
     bgVidTrim,           // {start,end} لتقطيع فيديو الخلفية (اختياري)
     bgAudioTrim,         // {start,end} لتقطيع صوت الخلفية (اختياري)
@@ -496,11 +501,18 @@ async function startDesktopExportV2(opts) {
   // v0.5.0 — يحترم توگل "كتم صوت الفيديو" العام (bg-vid-mute-audio)
   const globalMute = (typeof document !== "undefined")
     && document.getElementById("bg-vid-mute-audio")?.checked;
-  // v1.2 — تَجاهُل المُعمّاة (hidden)
+  // v1.2 — تَجاهُل المُعمّاة (hidden). Feature#2 — trim per-clip (dur الفَعّالة + start أَصليّ)
+  const _getEff = typeof getBgClipEffectiveDur === "function" ? getBgClipEffectiveDur : (it => it.dur || 0);
+  const _getTs  = typeof getBgClipTrimStart    === "function" ? getBgClipTrimStart    : (_  => 0);
   const bgVidAudioItems = (typeof S !== "undefined" && Array.isArray(S.bgVidItems) && !globalMute)
     ? S.bgVidItems
         .filter(it => !it.hidden && it.audioEnabled && it.audioBuffer)
-        .map(it => ({ buffer: it.audioBuffer, gain: it.audioGain, dur: it.dur }))
+        .map(it => ({
+          buffer: it.audioBuffer,
+          gain: it.audioGain,
+          dur: _getEff(it),
+          trimStart: _getTs(it),
+        }))
     : [];
   const mixed = await mixAudioToBuffer({
     audioBuffers, ayaStarts,
@@ -539,6 +551,7 @@ async function startDesktopExportV2(opts) {
           videoBytes: vidBytes,
           videoBytesList: hasMulti ? bgVideoBytesList : null,
           clipDurations:  hasMulti ? bgClipDurations : null,
+          clipTrims:      hasMulti ? bgClipTrims : null,      // v1.2 Feature#2
           crossfadeSec:   hasMulti ? bgCrossfadeSec  : 0,
           fps: FPS,
           width:  W,

@@ -108,7 +108,10 @@ details.sec > summary.sec-t:hover{color:var(--p)}
 .vs-item:last-child{border-bottom:none}
 .vs-item:hover{background:var(--bg4)}
 /* قائمة مقاطع الخلفية المتعددة */
-.bgv-item{display:flex;align-items:center;gap:5px;padding:4px 6px;background:var(--bg3);border:1px solid var(--b1);border-radius:var(--r);margin-bottom:3px;font-size:9.5px}
+.bgv-item{display:flex;align-items:center;gap:5px;padding:4px 6px;background:var(--bg3);border:1px solid var(--b1);border-radius:var(--r);margin-bottom:3px;font-size:9.5px;flex-wrap:wrap}
+.bgv-trim-block{flex-basis:100%;display:flex;gap:5px;align-items:center;justify-content:flex-end;padding-top:3px;font-size:9.5px;color:var(--t3)}
+.bgv-trim-block input[type=number]{width:52px;padding:2px 4px;font-size:9.5px;background:var(--bg4);border:1px solid var(--b1);color:var(--t1);border-radius:3px}
+.bgv-trim-block.on{color:var(--al)}
 .bgv-item .bgv-idx{color:var(--t3);min-width:14px;text-align:center}
 .bgv-item .bgv-name{flex:1;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr}
 .bgv-item .bgv-dur{color:var(--t3);font-size:8.5px}

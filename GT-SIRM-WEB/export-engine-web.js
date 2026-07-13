@@ -245,12 +245,13 @@ async function mixAudioToBufferWeb({
         const gain = oac.createGain();
         gain.gain.value = it.gain ?? 0.5;
         src.connect(gain); gain.connect(oac.destination);
+        // v1.2 Feature#2 — offset في buffer = trimStart، مُدّة = it.dur الفَعّالة
+        const bufOffset = Math.max(0, Math.min(it.trimStart || 0, it.buffer.duration));
+        const clipMaxPlay = Math.max(0.05, it.buffer.duration - bufOffset);
+        const wantDur = Math.min(clipMaxPlay, it.dur || clipMaxPlay);
         const remaining = totalDuration - startTime;
-        if (remaining < it.buffer.duration) {
-          src.start(startTime, 0, remaining);
-        } else {
-          src.start(startTime);
-        }
+        const playDur = Math.min(wantDur, remaining);
+        if (playDur > 0.02) src.start(startTime, bufOffset, playDur);
       }
       if (cycleDur <= 0.1) break; // أمان
       cycleStart += cycleDur;
@@ -513,10 +514,17 @@ async function startWebExportV2(opts) {
   // اجمع buffers صوتية للمقاطع المُفعّل صوتها (إن وجدت)
   // v0.5.0 — يحترم توگل "كتم صوت الفيديو" العام
   const globalMute = document.getElementById("bg-vid-mute-audio")?.checked;
-  // v1.2 — تَجاهُل المُعمّاة (hidden)
+  // v1.2 — تَجاهُل المُعمّاة (hidden). Feature#2 — trim per-clip
+  const _getEff = typeof getBgClipEffectiveDur === "function" ? getBgClipEffectiveDur : (it => it.dur || 0);
+  const _getTs  = typeof getBgClipTrimStart    === "function" ? getBgClipTrimStart    : (_  => 0);
   const bgVidAudioItems = globalMute ? [] : (S.bgVidItems || [])
     .filter(it => !it.hidden && it.audioEnabled && it.audioBuffer)
-    .map(it => ({ buffer: it.audioBuffer, gain: it.audioGain, dur: it.dur }));
+    .map(it => ({
+      buffer: it.audioBuffer,
+      gain: it.audioGain,
+      dur: _getEff(it),
+      trimStart: _getTs(it),
+    }));
   const mixed = await mixAudioToBufferWeb({
     audioBuffers, ayaStarts, bgBuffer, bgGain, bgLoop,
     bgVidAudioItems,
@@ -573,17 +581,21 @@ async function startWebExportV2(opts) {
   S._exportingV2 = true;
 
   // v1.2 Bug#1 — تَحضير قائمة المقاطع المَرئيّة (تَجاهُل المُعمّاة)
+  //   Feature#2 — استخدام المُدَد الفَعّالة بَعد trim
   const visibleBgClips = (S.bgVidItems || []).filter(it => !it.hidden && it.vid);
-  const bgClipDurations = visibleBgClips.map(it => it.dur || 0);
+  const _effV = typeof getBgClipEffectiveDur === "function" ? getBgClipEffectiveDur : (it => it.dur || 0);
+  const _tsV  = typeof getBgClipTrimStart    === "function" ? getBgClipTrimStart    : (_  => 0);
+  const bgClipDurations = visibleBgClips.map(_effV);
+  const bgClipTrimStarts = visibleBgClips.map(_tsV);
   const bgXf = (typeof getCrossfadeDur === "function") ? getCrossfadeDur() : 0;
 
   // أَوقِف كُلّ فيديوهات الخَلفيّة — نُدير مَواقعها بالـseek
   for (const it of (S.bgVidItems || [])) {
     try { it.vid.pause(); it.vid.playbackRate = 1; } catch (_) {}
   }
-  // اِبدأ الفيديو الأَوّل المَرئيّ من الصِفر
+  // اِبدأ الفيديو الأَوّل المَرئيّ من trimStart
   if (visibleBgClips.length) {
-    try { visibleBgClips[0].vid.currentTime = 0; } catch (_) {}
+    try { visibleBgClips[0].vid.currentTime = bgClipTrimStarts[0]; } catch (_) {}
     S.bgVid = visibleBgClips[0].vid;
     S.bgVidNext = null;
     S.bgVidFadeProgress = 0;
@@ -598,12 +610,13 @@ async function startWebExportV2(opts) {
       const cinfo = getBgClipAtTimeWeb(t, bgClipDurations, bgXf);
       if (cinfo) {
         S.bgVid = visibleBgClips[cinfo.clipIndex].vid;
-        // خَريطة back: fromVisible→original index (لِتَحديث UI activeIdx إن لَزِم)
-        // (لا حاجة لِتَحديث S.bgVidActiveIdx خلال التَصدير)
-        await seekVideoToTimeWeb(S.bgVid, cinfo.localTime);
+        // Feature#2 — seek إلى (trimStart + localTime)
+        const seekPos = bgClipTrimStarts[cinfo.clipIndex] + cinfo.localTime;
+        await seekVideoToTimeWeb(S.bgVid, seekPos);
         if (cinfo.inXfade) {
           S.bgVidNext = visibleBgClips[cinfo.nextClipIndex].vid;
-          await seekVideoToTimeWeb(S.bgVidNext, cinfo.nextLocalTime);
+          const nextSeekPos = bgClipTrimStarts[cinfo.nextClipIndex] + cinfo.nextLocalTime;
+          await seekVideoToTimeWeb(S.bgVidNext, nextSeekPos);
           const ease = (typeof easeInOutCubic === "function") ? easeInOutCubic : (x => x);
           S.bgVidFadeProgress = ease(cinfo.xfadeAlpha);
         } else {
