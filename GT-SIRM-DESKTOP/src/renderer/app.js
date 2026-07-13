@@ -6608,6 +6608,8 @@ function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 function updateBgVidCrossfade() {
+  // v1.2 Bug#1 — تَصدير الويب V2 يُدير الحالة يَدويّاً؛ لِسَطح المكتب لا يُستَخدَم في التَصدير أَصلاً
+  if (S._exportingV2) return;
   const visibleCount = S.bgVidItems.filter(it => !it.hidden).length;
   if (!S.bgVid || visibleCount < 2) {
     S.bgVidNext = null; S.bgVidFadeProgress = 0; return;

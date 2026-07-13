@@ -372,22 +372,46 @@ function precomputeWaveDataForExport(mixed, totalFrames, FPS) {
 }
 
 // ── ضبط معدّل تشغيل فيديو الخلفية ليطابق سرعة الترميز ──
-//   في الويب لا يوجد ffmpeg → نترك الفيديو يلعب طبيعياً
-//   لكن نضبط playbackRate ليطابق وتيرة الـ encode (وإلا يلعب أبطأ منها)
-//   نقيس وتيرة الإطارات الفعلية ونضبط ديناميكياً كل ~30 إطار
-function syncBgVidPlayback(vid, frameNum, FPS, msSinceStart) {
-  if (!vid || vid.paused === undefined) return;
-  if (frameNum < 30) return; // اتركه ينطلق أولاً
-  // الوقت المقدّر للوصول للإطار الحالي (real-time): frameNum/FPS
-  const ourClockSec = frameNum / FPS;
-  const wallClockSec = msSinceStart / 1000;
-  // إن كان الترميز أسرع من الزمن الحقيقي (wallClock < ourClock)، الفيديو متخلّف
-  // → نُسرّعه. الزيادة المثلى = ourClock / wallClock
-  const ratio = wallClockSec > 0 ? (ourClockSec / wallClockSec) : 1;
-  const newRate = Math.max(0.25, Math.min(16, ratio));
-  if (Math.abs((vid.playbackRate || 1) - newRate) > 0.1) {
-    try { vid.playbackRate = newRate; } catch (_) {}
+// v1.2 Bug#1 — deterministic seek لِخَلفيّة الفيديو في التَصدير
+// كان النَهج القَديم (syncBgVidPlayback) يَضبُط playbackRate حتى 16× → تَسريع مَرئيّ
+// + عَدَم تَزامُن بَين الحاليّ والقادم في الـcrossfade. الآن نَحسِب مَوضِع كُلّ إطار
+// حَتميّاً ثُمّ نَستَخدِم seekVideoToTimeWeb — نَفس نَمط recvid.
+//
+// الوقت في timeline المُدمَج:
+//   clip i يَبدأ عند start(i) = Σ D[k<i] − i·xf
+//   وينتهي عند start(i) + D[i]
+//   يَتَزامَن مَع بَداية clip i+1 عند start(i) + D[i] − xf (نافذة الـxfade)
+//   cycleDur = ΣD − (N−1)·xf
+function getBgClipAtTimeWeb(t, clipDurations, xf) {
+  const N = clipDurations.length;
+  if (N === 0) return null;
+  if (N === 1) {
+    const dur = clipDurations[0];
+    if (!(dur > 0)) return { clipIndex: 0, localTime: 0, inXfade: false, nextClipIndex: -1, nextLocalTime: 0, xfadeAlpha: 0 };
+    return { clipIndex: 0, localTime: t % dur, inXfade: false, nextClipIndex: -1, nextLocalTime: 0, xfadeAlpha: 0 };
   }
+  const totalCycle = clipDurations.reduce((a, b) => a + b, 0) - (N - 1) * xf;
+  if (totalCycle > 0 && t >= totalCycle) t = t % totalCycle;
+
+  let cum = 0;
+  for (let i = 0; i < N; i++) {
+    const clipEnd = cum + clipDurations[i];
+    if (t < clipEnd) {
+      const localTime = t - cum;
+      const remaining = clipEnd - t;
+      const inXfade = (remaining <= xf && i < N - 1 && xf > 0);
+      let nextClipIndex = -1, nextLocalTime = 0, xfadeAlpha = 0;
+      if (inXfade) {
+        nextClipIndex = i + 1;
+        const nextStart = cum + clipDurations[i] - xf;
+        nextLocalTime = Math.max(0, t - nextStart);
+        xfadeAlpha = Math.max(0, Math.min(1, 1 - remaining / xf));
+      }
+      return { clipIndex: i, localTime, inXfade, nextClipIndex, nextLocalTime, xfadeAlpha };
+    }
+    cum += clipDurations[i] - xf;
+  }
+  return { clipIndex: N - 1, localTime: clipDurations[N-1] || 0, inXfade: false, nextClipIndex: -1, nextLocalTime: 0, xfadeAlpha: 0 };
 }
 
 async function startWebExportV2(opts) {
@@ -537,37 +561,58 @@ async function startWebExportV2(opts) {
   }
 
   // ── 6) ترميز الفيديو (إطار-بإطار، حتمي) ─────────────
-  const savedAya     = S.currentAya;
-  const savedElapsed = S.elapsed;
-  const savedBgT     = S.bgMotionT;
+  const savedAya         = S.currentAya;
+  const savedElapsed     = S.elapsed;
+  const savedBgT         = S.bgMotionT;
+  const savedBgVid       = S.bgVid;             // v1.2 Bug#1 — استعادة بَعد التَصدير
+  const savedBgVidNext   = S.bgVidNext;
+  const savedBgFadeProg  = S.bgVidFadeProgress;
   let lastUiTick = 0;
 
-  // علم: switchToNextBgVid يستخدمه لتشغيل المقطع التالي حتى لو S.playing=false
+  // علم: يَمنَع updateBgVidCrossfade من العَبَث بحالة الـcrossfade خلال التَصدير
   S._exportingV2 = true;
 
-  // شغّل المقطع الأول الحالي من البداية
-  if (S.bgVid) {
-    try {
-      S.bgVid.currentTime = 0;
-      S.bgVid.playbackRate = 1;
-      // لا نُفعّل loop — `ended` يطلق switchToNextBgVid للانتقال للتالي
-      S.bgVid.loop = (S.bgVidItems && S.bgVidItems.length > 1) ? false : true;
-      await S.bgVid.play().catch(() => {});
-    } catch (_) {}
+  // v1.2 Bug#1 — تَحضير قائمة المقاطع المَرئيّة (تَجاهُل المُعمّاة)
+  const visibleBgClips = (S.bgVidItems || []).filter(it => !it.hidden && it.vid);
+  const bgClipDurations = visibleBgClips.map(it => it.dur || 0);
+  const bgXf = (typeof getCrossfadeDur === "function") ? getCrossfadeDur() : 0;
+
+  // أَوقِف كُلّ فيديوهات الخَلفيّة — نُدير مَواقعها بالـseek
+  for (const it of (S.bgVidItems || [])) {
+    try { it.vid.pause(); it.vid.playbackRate = 1; } catch (_) {}
+  }
+  // اِبدأ الفيديو الأَوّل المَرئيّ من الصِفر
+  if (visibleBgClips.length) {
+    try { visibleBgClips[0].vid.currentTime = 0; } catch (_) {}
+    S.bgVid = visibleBgClips[0].vid;
+    S.bgVidNext = null;
+    S.bgVidFadeProgress = 0;
   }
 
-  const loopStartMs = performance.now();
   for (let i = 0; i < totalFrames; i++) {
     if (cancelRef?.canceled) break;
     const t = i / FPS;
-    // استخدم S.bgVid مباشرة (يتغيّر بعد كل switchToNextBgVid)
-    const curVid = S.bgVid;
-    if (curVid) {
-      // ضمان استمرار التشغيل في حال توقّف الفيديو الجديد لأي سبب
-      if (curVid.paused) { try { curVid.play().catch(() => {}); } catch (_) {} }
-      // ضبط ديناميكي لـ playbackRate ليطابق وتيرة الترميز
-      syncBgVidPlayback(curVid, i, FPS, performance.now() - loopStartMs);
+
+    // v1.2 Bug#1 — deterministic seek لِمَقطع(مَقاطع) الخَلفيّة
+    if (visibleBgClips.length) {
+      const cinfo = getBgClipAtTimeWeb(t, bgClipDurations, bgXf);
+      if (cinfo) {
+        S.bgVid = visibleBgClips[cinfo.clipIndex].vid;
+        // خَريطة back: fromVisible→original index (لِتَحديث UI activeIdx إن لَزِم)
+        // (لا حاجة لِتَحديث S.bgVidActiveIdx خلال التَصدير)
+        await seekVideoToTimeWeb(S.bgVid, cinfo.localTime);
+        if (cinfo.inXfade) {
+          S.bgVidNext = visibleBgClips[cinfo.nextClipIndex].vid;
+          await seekVideoToTimeWeb(S.bgVidNext, cinfo.nextLocalTime);
+          const ease = (typeof easeInOutCubic === "function") ? easeInOutCubic : (x => x);
+          S.bgVidFadeProgress = ease(cinfo.xfadeAlpha);
+        } else {
+          S.bgVidNext = null;
+          S.bgVidFadeProgress = 0;
+        }
+      }
     }
+
     // بيانات الموجة الصوتية للإطار الحالي
     S._exportWaveData = exportWaveData[i];
     if (setStateForTime) setStateForTime(t);
@@ -604,8 +649,15 @@ async function startWebExportV2(opts) {
   S.currentAya = savedAya;
   S.elapsed    = savedElapsed;
   S.bgMotionT  = savedBgT;
+  S.bgVid              = savedBgVid;             // v1.2 Bug#1
+  S.bgVidNext          = savedBgVidNext;
+  S.bgVidFadeProgress  = savedBgFadeProg;
   S._exportWaveData = null;   // عد إلى analyser/synthetic للمعاينة
   S._exportingV2 = false;
+  // أَوقِف كُلّ فيديوهات الخَلفيّة (كانت مُسَلَّمة للـseek)
+  for (const it of (S.bgVidItems || [])) {
+    try { it.vid.pause(); } catch (_) {}
+  }
 
   if (cancelRef?.canceled) {
     try { videoEncoder.close(); audioEncoder.close(); } catch (_) {}

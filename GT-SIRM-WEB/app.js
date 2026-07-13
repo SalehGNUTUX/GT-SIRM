@@ -5820,6 +5820,8 @@ function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 function updateBgVidCrossfade() {
+  // v1.2 Bug#1 — في تَصدير V2 نُدير S.bgVid/Next/FadeProgress يَدويّاً بـdeterministic seek
+  if (S._exportingV2) return;
   const visibleCount = S.bgVidItems.filter(it => !it.hidden).length;
   if (!S.bgVid || visibleCount < 2) {
     S.bgVidNext = null; S.bgVidFadeProgress = 0; return;
