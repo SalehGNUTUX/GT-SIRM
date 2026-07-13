@@ -6856,6 +6856,21 @@ function removeBgVidItem(idx) {
   renderBgVidList();
 }
 
+// v1.2 — تَمييز بَصريّ لِلمَقطع بَعد نَقله (وميض ذَهبيّ + scroll إن لَزِم)
+function highlightMovedBgVidItem(idx) {
+  requestAnimationFrame(() => {
+    const el = document.querySelector(`.bgv-item[data-idx="${idx}"]`);
+    if (!el) return;
+    // أَعِد تَفعيل الرُسوم المُتَحرِّكة بإعادة الفَئة
+    el.classList.remove("bgv-just-moved");
+    // trigger reflow
+    void el.offsetWidth;
+    el.classList.add("bgv-just-moved");
+    try { el.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (_) {}
+    setTimeout(() => el.classList.remove("bgv-just-moved"), 1500);
+  });
+}
+
 function moveBgVidItem(idx, dir) {
   const newIdx = idx + dir;
   if (newIdx < 0 || newIdx >= S.bgVidItems.length) return;
@@ -6864,6 +6879,7 @@ function moveBgVidItem(idx, dir) {
   // التأثير فوري: شغّل دائماً المقطع الأول من الترتيب الجديد
   activateBgVidByIndex(0, /*resetTime*/ true);
   renderBgVidList();
+  highlightMovedBgVidItem(newIdx);   // v1.2 — تَمييز بَصريّ
 }
 
 // ── تفعيل مقطع معين فوراً (يُستخدم بعد إعادة الترتيب أو الحذف) ──

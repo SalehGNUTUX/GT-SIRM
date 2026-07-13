@@ -6070,6 +6070,19 @@ function removeBgVidItem(idx) {
   renderBgVidList();
 }
 
+// v1.2 — تَمييز بَصريّ لِلمَقطع بَعد نَقله
+function highlightMovedBgVidItem(idx) {
+  requestAnimationFrame(() => {
+    const el = document.querySelector(`.bgv-item[data-idx="${idx}"]`);
+    if (!el) return;
+    el.classList.remove("bgv-just-moved");
+    void el.offsetWidth;
+    el.classList.add("bgv-just-moved");
+    try { el.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (_) {}
+    setTimeout(() => el.classList.remove("bgv-just-moved"), 1500);
+  });
+}
+
 function moveBgVidItem(idx, dir) {
   const newIdx = idx + dir;
   if (newIdx < 0 || newIdx >= S.bgVidItems.length) return;
@@ -6077,6 +6090,7 @@ function moveBgVidItem(idx, dir) {
   S.bgVidItems.splice(newIdx, 0, moved);
   activateBgVidByIndex(0, true);  // التأثير فوري: ابدأ من الأول دائماً بعد الترتيب
   renderBgVidList();
+  highlightMovedBgVidItem(newIdx);   // v1.2 — تَمييز بَصريّ
 }
 
 // تطبيق إعدادات صوت العنصر على عنصر الفيديو
