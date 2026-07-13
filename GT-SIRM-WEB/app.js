@@ -2741,12 +2741,9 @@ function drawBg(ctx, W, H, ts) {
       const alpha = S.bgVidFadeProgress;
       targetCtx.save();
       if (applyMotion) applyBgMotion(targetCtx, W, H, bgm, ts);
-      targetCtx.globalAlpha = 1 - alpha;
-      imgCover(targetCtx, S.bgVid, 0, 0, W, H);
-      if (S.bgVidNext && S.bgVidNext.readyState >= 2 && alpha > 0) {
-        targetCtx.globalAlpha = alpha;
-        imgCover(targetCtx, S.bgVidNext, 0, 0, W, H);
-      }
+      // v1.2 — نَمط الاِنتقال المُختار
+      const hasNext = S.bgVidNext && S.bgVidNext.readyState >= 2 && alpha > 0;
+      drawBgTransition(targetCtx, S.bgVid, hasNext ? S.bgVidNext : null, alpha, W, H, getBgTransition());
       targetCtx.restore();
       return true;
     }
@@ -5870,6 +5867,122 @@ function getCrossfadeDur() {
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
+
+// v1.2 — أَنماط الاِنتقالات بَين مقاطع الخَلفيّة (مِرآة parity مَع سَطح المكتب)
+function getBgTransition() {
+  return (document.getElementById("bg-transition")?.value || "fade");
+}
+const BG_TRANSITION_TYPES = ["fade", "wipeleft", "wiperight", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "dissolve"];
+
+function drawBgTransition(ctx, srcCur, srcNext, alpha, W, H, type) {
+  alpha = Math.max(0, Math.min(1, alpha));
+  const drawSrc = (s) => imgCover(ctx, s, 0, 0, W, H);
+
+  if (type === "fade" || !srcNext) {
+    ctx.globalAlpha = 1 - alpha;
+    drawSrc(srcCur);
+    if (srcNext) {
+      ctx.globalAlpha = alpha;
+      drawSrc(srcNext);
+    }
+    return;
+  }
+
+  ctx.globalAlpha = 1;
+  drawSrc(srcCur);
+
+  ctx.save();
+  ctx.beginPath();
+  if (type === "wipeleft") {
+    const x = W * (1 - alpha);
+    ctx.rect(x, 0, W - x, H);
+  } else if (type === "wiperight") {
+    const w = W * alpha;
+    ctx.rect(0, 0, w, H);
+  } else if (type === "slideleft") {
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.translate(-W * alpha, 0);
+    drawSrc(srcCur);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(W * (1 - alpha), 0);
+    drawSrc(srcNext);
+    ctx.restore();
+    return;
+  } else if (type === "slideright") {
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.translate(W * alpha, 0);
+    drawSrc(srcCur);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(-W * (1 - alpha), 0);
+    drawSrc(srcNext);
+    ctx.restore();
+    return;
+  } else if (type === "slideup") {
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.translate(0, -H * alpha);
+    drawSrc(srcCur);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(0, H * (1 - alpha));
+    drawSrc(srcNext);
+    ctx.restore();
+    return;
+  } else if (type === "slidedown") {
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.translate(0, H * alpha);
+    drawSrc(srcCur);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(0, -H * (1 - alpha));
+    drawSrc(srcNext);
+    ctx.restore();
+    return;
+  } else if (type === "circleopen") {
+    const cx = W / 2, cy = H / 2;
+    const rMax = Math.sqrt(W * W + H * H) / 2;
+    ctx.arc(cx, cy, rMax * alpha, 0, Math.PI * 2);
+  } else if (type === "circleclose") {
+    const cx = W / 2, cy = H / 2;
+    const rMax = Math.sqrt(W * W + H * H) / 2;
+    ctx.rect(0, 0, W, H);
+    ctx.arc(cx, cy, rMax * (1 - alpha), 0, Math.PI * 2, true);
+  } else if (type === "radial") {
+    const cx = W / 2, cy = H / 2;
+    const rMax = Math.sqrt(W * W + H * H);
+    const ang = Math.PI * 2 * alpha;
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, rMax, -Math.PI / 2, -Math.PI / 2 + ang);
+    ctx.closePath();
+  } else if (type === "dissolve") {
+    ctx.restore();
+    ctx.globalAlpha = 1 - alpha;
+    drawSrc(srcCur);
+    ctx.globalAlpha = alpha;
+    drawSrc(srcNext);
+    return;
+  } else {
+    ctx.restore();
+    ctx.globalAlpha = 1 - alpha;
+    drawSrc(srcCur);
+    ctx.globalAlpha = alpha;
+    drawSrc(srcNext);
+    return;
+  }
+  ctx.clip();
+  ctx.globalAlpha = 1;
+  drawSrc(srcNext);
+  ctx.restore();
+}
 function updateBgVidCrossfade() {
   // v1.2 Bug#1 — في تَصدير V2 نُدير S.bgVid/Next/FadeProgress يَدويّاً بـdeterministic seek
   if (S._exportingV2) return;
@@ -5885,10 +5998,11 @@ function updateBgVidCrossfade() {
   const endPoint = curItem ? getBgClipTrimEnd(curItem) : cur.duration;
   const remaining = endPoint - cur.currentTime;
 
-  if (remaining <= 0 && curItem && hasBgClipTrim(curItem)) {
+  // v1.2 — عند بُلوغ نِهاية المَقطع: انتقل فَوراً بَدَل انتظار ended (يُصلِح وَميض المَقطع القَديم)
+  if (remaining <= 0) {
     if (visibleCount >= 2) {
       switchToNextBgVid();
-    } else {
+    } else if (curItem && hasBgClipTrim(curItem)) {
       try { cur.currentTime = getBgClipTrimStart(curItem); cur.play().catch(() => {}); } catch (_) {}
     }
     S.bgVidNext = null; S.bgVidFadeProgress = 0;

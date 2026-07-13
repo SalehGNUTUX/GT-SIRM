@@ -3065,12 +3065,9 @@ function drawBg(ctx, W, H, ts) {
       const alpha = S.bgVidFadeProgress;
       targetCtx.save();
       if (applyMotion) applyBgMotion(targetCtx, W, H, bgm, ts);
-      targetCtx.globalAlpha = 1 - alpha;
-      imgCover(targetCtx, src, 0, 0, W, H);
-      if (S.bgVidNext && S.bgVidNext.readyState >= 2 && alpha > 0) {
-        targetCtx.globalAlpha = alpha;
-        imgCover(targetCtx, S.bgVidNext, 0, 0, W, H);
-      }
+      // v1.2 — نَمط الاِنتقال المُختار (fade / wipe / slide / circle / …)
+      const hasNext = S.bgVidNext && S.bgVidNext.readyState >= 2 && alpha > 0;
+      drawBgTransition(targetCtx, src, hasNext ? S.bgVidNext : null, alpha, W, H, getBgTransition());
       targetCtx.restore();
       return true;
     }
@@ -6662,6 +6659,137 @@ function getCrossfadeDur() {
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
+
+// v1.2 — أَنماط الاِنتقالات بَين مقاطع الخَلفيّة
+// كُلّها تَقبَل (ctx, srcCur, srcNext, alpha 0-1, W, H). srcCur/Next: HTMLVideoElement أَو ImageBitmap.
+// alpha=0 → المَقطع الحاليّ فَقط، alpha=1 → القادِم فَقط.
+function getBgTransition() {
+  return (document.getElementById("bg-transition")?.value || "fade");
+}
+// يَتَوافَق مَع أَسماء ffmpeg xfade transitions لِلتَصدير سَطح المكتب
+const BG_TRANSITION_TYPES = ["fade", "wipeleft", "wiperight", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "dissolve"];
+
+function drawBgTransition(ctx, srcCur, srcNext, alpha, W, H, type) {
+  // أَمان: alpha خارج المَجال
+  alpha = Math.max(0, Math.min(1, alpha));
+  const drawSrc = (s) => imgCover(ctx, s, 0, 0, W, H);
+
+  if (type === "fade" || !srcNext) {
+    ctx.globalAlpha = 1 - alpha;
+    drawSrc(srcCur);
+    if (srcNext) {
+      ctx.globalAlpha = alpha;
+      drawSrc(srcNext);
+    }
+    return;
+  }
+
+  // كُلّ الأَنماط الأُخرى: القادِم يَظهَر بشَكل كامِل (globalAlpha=1) داخِل شَكل clip،
+  //   والحاليّ يُرسَم كامِلاً خَلفيّاً (بلا خَلط) ما لم يُذكَر خِلاف ذلك.
+  // 1) اِرسم الحاليّ كامِلاً
+  ctx.globalAlpha = 1;
+  drawSrc(srcCur);
+
+  // 2) اِرسم القادِم داخِل clip حَسَب النَمط
+  ctx.save();
+  ctx.beginPath();
+  if (type === "wipeleft") {
+    // الحَجاب يَمضي مِن اليَمين إلى اليَسار (مُلائِم لِـRTL)
+    const x = W * (1 - alpha);
+    ctx.rect(x, 0, W - x, H);
+  } else if (type === "wiperight") {
+    const w = W * alpha;
+    ctx.rect(0, 0, w, H);
+  } else if (type === "slideleft") {
+    // الحاليّ يَنسَحِب لِلجِهة اليَسرى، القادِم يَدخُل من اليَمين
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.translate(-W * alpha, 0);
+    drawSrc(srcCur);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(W * (1 - alpha), 0);
+    drawSrc(srcNext);
+    ctx.restore();
+    return;
+  } else if (type === "slideright") {
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.translate(W * alpha, 0);
+    drawSrc(srcCur);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(-W * (1 - alpha), 0);
+    drawSrc(srcNext);
+    ctx.restore();
+    return;
+  } else if (type === "slideup") {
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.translate(0, -H * alpha);
+    drawSrc(srcCur);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(0, H * (1 - alpha));
+    drawSrc(srcNext);
+    ctx.restore();
+    return;
+  } else if (type === "slidedown") {
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.translate(0, H * alpha);
+    drawSrc(srcCur);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(0, -H * (1 - alpha));
+    drawSrc(srcNext);
+    ctx.restore();
+    return;
+  } else if (type === "circleopen") {
+    // دائرة تَنفَتِح من المَركز
+    const cx = W / 2, cy = H / 2;
+    const rMax = Math.sqrt(W * W + H * H) / 2;
+    ctx.arc(cx, cy, rMax * alpha, 0, Math.PI * 2);
+  } else if (type === "circleclose") {
+    // دائرة تَنغَلِق نَحو المَركز — القادِم يَظهَر خارِج الدائرة
+    const cx = W / 2, cy = H / 2;
+    const rMax = Math.sqrt(W * W + H * H) / 2;
+    ctx.rect(0, 0, W, H);
+    ctx.arc(cx, cy, rMax * (1 - alpha), 0, Math.PI * 2, true);
+  } else if (type === "radial") {
+    // كشْف قَطاعيّ (بَنَدول) — الزَاوية تَتَقدَّم مَعَ alpha
+    const cx = W / 2, cy = H / 2;
+    const rMax = Math.sqrt(W * W + H * H);
+    const ang = Math.PI * 2 * alpha;
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, rMax, -Math.PI / 2, -Math.PI / 2 + ang);
+    ctx.closePath();
+  } else if (type === "dissolve") {
+    // مُذَوَّب: اِرسم القادِم بألفا كَـfade لكن مَع نَقّ pixel-based بسيط
+    ctx.restore();
+    ctx.globalAlpha = 1 - alpha;
+    drawSrc(srcCur);
+    ctx.globalAlpha = alpha;
+    drawSrc(srcNext);
+    return;
+  } else {
+    // نَمط غير مَعروف → fade
+    ctx.restore();
+    ctx.globalAlpha = 1 - alpha;
+    drawSrc(srcCur);
+    ctx.globalAlpha = alpha;
+    drawSrc(srcNext);
+    return;
+  }
+  ctx.clip();
+  ctx.globalAlpha = 1;
+  drawSrc(srcNext);
+  ctx.restore();
+}
 function updateBgVidCrossfade() {
   // v1.2 Bug#1 — تَصدير الويب V2 يُدير الحالة يَدويّاً؛ لِسَطح المكتب لا يُستَخدَم في التَصدير أَصلاً
   if (S._exportingV2) return;
@@ -6677,12 +6805,13 @@ function updateBgVidCrossfade() {
   const endPoint = curItem ? getBgClipTrimEnd(curItem) : cur.duration;
   const remaining = endPoint - cur.currentTime;
 
-  // v1.2 Feature #2 — لَو تَخَطّى trimEnd: انتقال قَسريّ (يَحُلّ Bug #2 القَديم أَيضاً)
-  if (remaining <= 0 && curItem && hasBgClipTrim(curItem)) {
+  // v1.2 — عند بُلوغ نِهاية المَقطع (طَبيعيّ أَو مُقلَّم): انتقل فَوراً
+  //   ⚠️ سَبَب الوَميض السابق: كُنّا نَنتَظِر ended من المُتَصَفِّح، وفي الأَثناء
+  //   يَظهَر إطار مَقطع قَديم كامِلاً بدون خَلط. الآن نَتَجاوَز ended وننتَقِل قَسريّاً.
+  if (remaining <= 0) {
     if (visibleCount >= 2) {
-      switchToNextBgVid();  // مَعَ crossfade مَنتَهٍ فَقَط
-    } else {
-      // مَقطع واحد: لُف داخِل النِطاق
+      switchToNextBgVid();
+    } else if (curItem && hasBgClipTrim(curItem)) {
       try { cur.currentTime = getBgClipTrimStart(curItem); cur.play().catch(() => {}); } catch (_) {}
     }
     S.bgVidNext = null; S.bgVidFadeProgress = 0;
@@ -9494,6 +9623,7 @@ async function startExportDesktop(codecKey) {
       bgClipDurations,      // مدّة كل مقطع بَعد trim
       bgClipTrims,          // v1.2 Feature#2 — [{start,end}] لكُلّ مَقطع
       bgCrossfadeSec: getCrossfadeDur(),  // نفس مدة المعاينة بالضبط
+      bgTransition: getBgTransition(),    // v1.2 — نَمط اِنتقال ffmpeg xfade
       bgVidTrim,
       bgAudioTrim,
       // v0.11.1 — المؤثّرات الصوتيّة: إن كان recvid فاعِلاً أخذ recvidFX، وإلّا free-audio FX

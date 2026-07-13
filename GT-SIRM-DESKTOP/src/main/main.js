@@ -1012,7 +1012,10 @@ ipcMain.on("ffmpeg-pipe-cancel", () => {
 // ── استخراج إطارات فيديو الخلفية مسبقاً (مرة واحدة) ───
 //    أسرع وأكثر استقراراً من seek على HTMLVideoElement
 ipcMain.handle("extract-bg-frames", async (event, opts) => {
-  const { videoBytes, videoBytesList, clipDurations, clipTrims, crossfadeSec, fps, width, height, totalDuration, trimStart, trimEnd } = opts;
+  const { videoBytes, videoBytesList, clipDurations, clipTrims, transition, crossfadeSec, fps, width, height, totalDuration, trimStart, trimEnd } = opts;
+  // v1.2 — قائمة أَسماء xfade المَعروفة (يَحمي من قيمة مَجهولة تُفشِل ffmpeg)
+  const XFADE_SAFE = new Set(["fade","wipeleft","wiperight","wipeup","wipedown","slideleft","slideright","slideup","slidedown","circleopen","circleclose","radial","dissolve","rectcrop","distance","pixelize","fadegrays","hlslice","hrslice","vuslice","vdslice"]);
+  const xfadeName = (transition && XFADE_SAFE.has(transition)) ? transition : "fade";
   const ffmpegPath = await getBinPath("ffmpeg");
   if (!ffmpegPath) throw new Error("ffmpeg not found");
 
@@ -1061,7 +1064,7 @@ ipcMain.handle("extract-bg-frames", async (event, opts) => {
       for (let i = 1; i < tempFiles.length; i++) {
         cum += Math.max(0.1, clipDurations[i - 1] - xf);
         const out = (i === tempFiles.length - 1) ? "outv" : `x${i}`;
-        segs.push(`[${prev}][v${i}]xfade=transition=fade:duration=${xf}:offset=${cum.toFixed(3)}[${out}]`);
+        segs.push(`[${prev}][v${i}]xfade=transition=${xfadeName}:duration=${xf}:offset=${cum.toFixed(3)}[${out}]`);
         prev = out;
       }
       chain = `${filterInputs};${segs.join(";")}`;
