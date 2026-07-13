@@ -5794,43 +5794,51 @@ function resetBgVidClipTrim(idx) {
   toast("↺ أُعيدَ تَقليم المَقطع", "info", 1200);
 }
 
-function addBgVidItem(file) {
-  const url = URL.createObjectURL(file);
-  const vid = document.createElement("video");
-  vid.src = url; vid.muted = true; vid.playsInline = true; vid.preload = "auto";
-  vid.addEventListener("ended", () => switchToNextBgVid());
-  vid.onloadeddata = () => {
-    const item = {
-      file, vid, name: file.name,
-      dur: isFinite(vid.duration) ? vid.duration : 0,
-      url,
-      audioEnabled: false,   // الصوت معطّل افتراضياً
-      audioGain: 0.5,        // 50%
-      audioBuffer: null,     // يُفكّ ترميزه عند تفعيل الصوت (lazy)
-      hidden: false,         // v1.2 — إعماء مُنفَصِل عن الحَذف
-      trimStart: 0,          // v1.2 Feature#2 — تَقليم لكُلّ مَقطع
-      trimEnd: null,         //
+// v1.2 — يُعيد Promise<item|null> لِيَتَمَكَّن الاستعادة من الـawait التَتابُعيّ
+function addBgVidItem(file, opts = {}) {
+  const silent = !!opts.silent;
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const vid = document.createElement("video");
+    vid.src = url; vid.muted = true; vid.playsInline = true; vid.preload = "auto";
+    vid.addEventListener("ended", () => switchToNextBgVid());
+    vid.onloadeddata = () => {
+      const item = {
+        file, vid, name: file.name,
+        dur: isFinite(vid.duration) ? vid.duration : 0,
+        url,
+        audioEnabled: false,
+        audioGain: 0.5,
+        audioBuffer: null,
+        hidden: false,
+        trimStart: 0,
+        trimEnd: null,
+      };
+      S.bgVidItems.push(item);
+      if (typeof markProjectDirty === "function") markProjectDirty();
+      if (!S.bgVid) {
+        S.bgVid = vid;
+        S.bgVidActiveIdx = S.bgVidItems.length - 1;
+        const thumb = $("bg-vid-thumb"); if (thumb) thumb.style.display = "block";
+        const prev = $("bg-vid-preview"); if (prev) prev.src = url;
+        try { vid.pause(); vid.currentTime = 0; } catch (_) {}
+      }
+      renderBgVidList();
+      if (!silent) {
+        if (S.bgVidItems.length === 1) {
+          toast("🎥 تم رفع المقطع — يمكن إضافة المزيد لتتابع الخلفيات", "success", 3500);
+        } else {
+          toast(`🎥 أُضيف المقطع (${S.bgVidItems.length} مجموع)`, "success", 2000);
+        }
+      }
+      resolve(item);
     };
-    S.bgVidItems.push(item);
-    if (typeof markProjectDirty === "function") markProjectDirty();
-    if (!S.bgVid) {
-      S.bgVid = vid;
-      S.bgVidActiveIdx = S.bgVidItems.length - 1;
-      const thumb = $("bg-vid-thumb"); if (thumb) thumb.style.display = "block";
-      const prev = $("bg-vid-preview"); if (prev) prev.src = url;
-      // الفيديو يبقى متوقفاً عند الرفع — يُشغَّل فقط مع ضغط ▶️
-      // (متناغم مع play/pause/next/prev للآيات)
-      try { vid.pause(); vid.currentTime = 0; } catch (_) {}
-    }
-    renderBgVidList();
-    if (S.bgVidItems.length === 1) {
-      toast("🎥 تم رفع المقطع — يمكن إضافة المزيد لتتابع الخلفيات", "success", 3500);
-    } else {
-      toast(`🎥 أُضيف المقطع (${S.bgVidItems.length} مجموع)`, "success", 2000);
-    }
-  };
-  vid.onerror = () => toast(`❌ فشل تحميل ${file.name}`, "error");
-  vid.load();
+    vid.onerror = () => {
+      if (!silent) toast(`❌ فشل تحميل ${file.name}`, "error");
+      resolve(null);
+    };
+    vid.load();
+  });
 }
 
 function switchToNextBgVid() {
@@ -7959,20 +7967,17 @@ async function restoreAssetFromDataURL(asset) {
     if (typeof onRecVidFile === "function") onRecVidFile(fakeInput);
   } else if (asset.key && asset.key.startsWith("bgVideo[")) {
     if (typeof addBgVidItem === "function") {
-      addBgVidItem(file);
-      setTimeout(() => {
-        if (Array.isArray(S.bgVidItems) && S.bgVidItems.length) {
-          const last = S.bgVidItems[S.bgVidItems.length - 1];
-          if (last) {
-            if (asset.audioEnabled !== undefined) last.audioEnabled = !!asset.audioEnabled;
-            if (asset.audioGain !== undefined) last.audioGain = asset.audioGain;
-            if (asset.hidden !== undefined) last.hidden = !!asset.hidden;   // v1.2
-            if (asset.trimStart !== undefined) last.trimStart = asset.trimStart;  // v1.2 Feature#2
-            if (asset.trimEnd !== undefined) last.trimEnd = asset.trimEnd;
-            if (typeof renderBgVidList === "function") renderBgVidList();
-          }
-        }
-      }, 250);
+      // v1.2 fix — await التَتابُعيّ يَحفَظ التَرتيب. الإعدادات تُطَبَّق على
+      //   الـitem المُعاد بالضَبط (لا افتراض 'آخر مُضاف').
+      const item = await addBgVidItem(file, { silent: true });
+      if (item) {
+        if (asset.audioEnabled !== undefined) item.audioEnabled = !!asset.audioEnabled;
+        if (asset.audioGain !== undefined) item.audioGain = asset.audioGain;
+        if (asset.hidden !== undefined) item.hidden = !!asset.hidden;
+        if (asset.trimStart !== undefined) item.trimStart = asset.trimStart;
+        if (asset.trimEnd !== undefined) item.trimEnd = asset.trimEnd;
+        if (typeof renderBgVidList === "function") renderBgVidList();
+      }
     }
   }
 }

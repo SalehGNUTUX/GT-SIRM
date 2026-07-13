@@ -6577,45 +6577,56 @@ function resetBgVidClipTrim(idx) {
   toast("↺ أُعيدَ تَقليم المَقطع", "info", 1200);
 }
 
-function addBgVidItem(file) {
-  const url = URL.createObjectURL(file);
-  const vid = document.createElement("video");
-  vid.src = url; vid.muted = true; vid.playsInline = true; vid.preload = "auto";
-  // عند نهاية المقطع: انتقل للتالي تلقائياً (تتابع playlist)
-  vid.addEventListener("ended", () => switchToNextBgVid());
-  vid.onloadeddata = () => {
-    const item = {
-      file, vid, name: file.name,
-      dur: isFinite(vid.duration) ? vid.duration : 0,
-      url,
-      audioEnabled: false,   // الصوت معطّل افتراضياً
-      audioGain: 0.5,
-      audioBuffer: null,
-      hidden: false,         // v1.2 — إعماء مُنفَصِل عن الحَذف
-      trimStart: 0,          // v1.2 — تَقليم لكُلّ مَقطع (0 = من البِداية)
-      trimEnd: null,         //        (null = حتى النِهاية الطَبيعيّة)
+// v1.2 — يُعيد Promise<item|null> لِيَتَمَكَّن الاستعادة من الـawait التَتابُعيّ
+//   opts.silent=true → لا يُظهِر toast (مُفيد في استعادة مَشروع)
+function addBgVidItem(file, opts = {}) {
+  const silent = !!opts.silent;
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const vid = document.createElement("video");
+    vid.src = url; vid.muted = true; vid.playsInline = true; vid.preload = "auto";
+    // عند نهاية المقطع: انتقل للتالي تلقائياً (تتابع playlist)
+    vid.addEventListener("ended", () => switchToNextBgVid());
+    vid.onloadeddata = () => {
+      const item = {
+        file, vid, name: file.name,
+        dur: isFinite(vid.duration) ? vid.duration : 0,
+        url,
+        audioEnabled: false,   // الصوت معطّل افتراضياً
+        audioGain: 0.5,
+        audioBuffer: null,
+        hidden: false,         // v1.2 — إعماء مُنفَصِل عن الحَذف
+        trimStart: 0,          // v1.2 — تَقليم لكُلّ مَقطع (0 = من البِداية)
+        trimEnd: null,         //        (null = حتى النِهاية الطَبيعيّة)
+      };
+      S.bgVidItems.push(item);
+      if (typeof markProjectDirty === "function") markProjectDirty();
+      // إن لم يكن هناك فيديو نشط، فعّل الأول
+      if (!S.bgVid) {
+        S.bgVid = vid;
+        S.bgVidFile = file;
+        S.bgVidActiveIdx = S.bgVidItems.length - 1;
+        $("bg-vid-preview").src = url;
+        $("bg-vid-thumb").style.display = "block";
+        // الفيديو يبقى متوقفاً عند الرفع — يُشغَّل فقط مع ضغط ▶️
+        try { vid.pause(); vid.currentTime = 0; } catch (_) {}
+      }
+      renderBgVidList();
+      if (!silent) {
+        if (S.bgVidItems.length === 1) {
+          toast("🎥 تم رفع المقطع — يمكن إضافة المزيد لتتابع الخلفيات", "success", 3500);
+        } else {
+          toast(`🎥 أُضيف المقطع (${S.bgVidItems.length} مجموع)`, "success", 2000);
+        }
+      }
+      resolve(item);
     };
-    S.bgVidItems.push(item);
-    if (typeof markProjectDirty === "function") markProjectDirty();
-    // إن لم يكن هناك فيديو نشط، فعّل الأول
-    if (!S.bgVid) {
-      S.bgVid = vid;
-      S.bgVidFile = file;
-      S.bgVidActiveIdx = S.bgVidItems.length - 1;
-      $("bg-vid-preview").src = url;
-      $("bg-vid-thumb").style.display = "block";
-      // الفيديو يبقى متوقفاً عند الرفع — يُشغَّل فقط مع ضغط ▶️
-      try { vid.pause(); vid.currentTime = 0; } catch (_) {}
-    }
-    renderBgVidList();
-    if (S.bgVidItems.length === 1) {
-      toast("🎥 تم رفع المقطع — يمكن إضافة المزيد لتتابع الخلفيات", "success", 3500);
-    } else {
-      toast(`🎥 أُضيف المقطع (${S.bgVidItems.length} مجموع)`, "success", 2000);
-    }
-  };
-  vid.onerror = () => toast(`❌ فشل تحميل ${file.name}`, "error");
-  vid.load();
+    vid.onerror = () => {
+      if (!silent) toast(`❌ فشل تحميل ${file.name}`, "error");
+      resolve(null);
+    };
+    vid.load();
+  });
 }
 
 function switchToNextBgVid() {
@@ -10045,21 +10056,19 @@ async function restoreAssetFromDataURL(asset) {
     }
   } else if (asset.key && asset.key.startsWith("bgVideo[")) {
     if (typeof addBgVidItem === "function") {
-      addBgVidItem(file);
-      // طبّق الإعدادات الصوتيّة على آخر عنصر بعد التحميل
-      setTimeout(() => {
-        if (Array.isArray(S.bgVidItems) && S.bgVidItems.length) {
-          const last = S.bgVidItems[S.bgVidItems.length - 1];
-          if (last) {
-            if (asset.audioEnabled !== undefined) last.audioEnabled = !!asset.audioEnabled;
-            if (asset.audioGain !== undefined) last.audioGain = asset.audioGain;
-            if (asset.hidden !== undefined) last.hidden = !!asset.hidden;   // v1.2
-            if (asset.trimStart !== undefined) last.trimStart = asset.trimStart;  // v1.2 Feature#2
-            if (asset.trimEnd !== undefined) last.trimEnd = asset.trimEnd;
-            if (typeof renderBgVidList === "function") renderBgVidList();
-          }
-        }
-      }, 250);
+      // v1.2 fix — await التَتابُعيّ يَحفَظ التَرتيب. الإعدادات تُطَبَّق على
+      //   الـitem المُعاد بالضَبط (لا افتراض 'آخر مُضاف').
+      //   قَبل الإصلاح: عِدّة addBgVidItem متَوازية → تَرتيب عَشوائيّ +
+      //   setTimeout(250) على [length-1] كان يَخلِط الإعدادات بَين المَقاطع.
+      const item = await addBgVidItem(file, { silent: true });
+      if (item) {
+        if (asset.audioEnabled !== undefined) item.audioEnabled = !!asset.audioEnabled;
+        if (asset.audioGain !== undefined) item.audioGain = asset.audioGain;
+        if (asset.hidden !== undefined) item.hidden = !!asset.hidden;
+        if (asset.trimStart !== undefined) item.trimStart = asset.trimStart;
+        if (asset.trimEnd !== undefined) item.trimEnd = asset.trimEnd;
+        if (typeof renderBgVidList === "function") renderBgVidList();
+      }
     }
   }
 }
