@@ -6694,6 +6694,8 @@ function activateBgVidByIndex(idx, resetTime = true) {
   }
   // إن كان المشغّل قيد التشغيل، شغّل المقطع الجديد فوراً
   if (S.playing) { try { item.vid.play().catch(() => {}); } catch (_) {} }
+  // v1.2 — تَحديث الحاشية الخَضراء عَلى الصَفّ النَشِط
+  if (typeof renderBgVidList === "function") renderBgVidList();
 }
 
 function applyBgVidItemAudio(item) {

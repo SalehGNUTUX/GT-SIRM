@@ -5872,6 +5872,8 @@ function activateBgVidByIndex(idx, resetTime = true) {
     } catch (_) {}
   }
   if (S.playing) { try { item.vid.play().catch(() => {}); } catch (_) {} }
+  // v1.2 — تَحديث الحاشية الخَضراء عَلى الصَفّ النَشِط
+  if (typeof renderBgVidList === "function") renderBgVidList();
 }
 
 function removeBgVidItem(idx) {
