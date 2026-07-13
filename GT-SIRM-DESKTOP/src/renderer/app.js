@@ -4706,6 +4706,8 @@ function drawWave(ctx, W, H, ts) {
 //  WATERMARK
 // ══════════════════════════════════════════════════════
 function drawWatermark(ctx, W, H) {
+  const wmOn = document.getElementById("wm-on");
+  if (wmOn && !wmOn.checked) return;
   const text = $("wm-text").value.trim(); if (!text) return;
   const sz = parseInt(gv("wm-size")), pos = $("wm-pos").value, col = $("wm-col").value;
   ctx.save(); ctx.font = `bold ${sz}px 'Cairo'`; ctx.fillStyle = col; ctx.globalAlpha = .72;
