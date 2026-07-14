@@ -470,7 +470,8 @@ async function startDesktopExportV2(opts) {
     bgVideoBytesList,    // Array<ArrayBuffer> لـ playlist (يضمّ في ffmpeg)
     bgClipDurations,     // مدد المقاطع الفَعّالة بَعد trim (للـ xfade)
     bgClipTrims,         // v1.2 Feature#2 — [{start,end}] لكُلّ مَقطع
-    bgTransition,        // v1.2 — نَمط xfade transition
+    bgTransition,        // v1.2 — نَمط xfade transition (عامّ fallback)
+    bgClipTransitions,   // v1.2 — [name,...] per-clip transition (فارِغ = عامّ)
     bgCrossfadeSec,      // مدة الـ crossfade بالثواني
     bgVidTrim,           // {start,end} لتقطيع فيديو الخلفية (اختياري)
     bgAudioTrim,         // {start,end} لتقطيع صوت الخلفية (اختياري)
@@ -558,6 +559,7 @@ async function startDesktopExportV2(opts) {
           clipDurations:  hasMulti ? bgClipDurations : null,
           clipTrims:      hasMulti ? bgClipTrims : null,      // v1.2 Feature#2
           transition:     hasMulti ? (bgTransition || "fade") : null,
+          clipTransitions: hasMulti ? (bgClipTransitions || null) : null,  // v1.2 per-clip
           crossfadeSec:   hasMulti ? bgCrossfadeSec  : 0,
           fps: FPS,
           width:  W,

@@ -1196,7 +1196,7 @@ body.offline .offline-badge{display:block}
             <div class="fg" style="margin-top:5px"><label class="fl">مدة الانتقال السلس بين المقاطع</label>
               <div class="sg"><input type="range" min="0" max="2000" step="50" value="1000" id="bg-crossfade-ms"><span class="sv" id="bg-crossfade-ms-v">1000ms</span></div>
             </div>
-            <div class="fg" style="margin-top:5px"><label class="fl">نَمط الاِنتقال</label>
+            <div class="fg" style="margin-top:5px"><label class="fl">نَمط الاِنتقال (عامّ لكُلّ المَقاطع)<br><small style="color:var(--t3)">يُطَبَّق ما لم يُخصَّص لكُلّ مَقطع تَأثيرٌ آخر</small></label>
               <select class="fc" id="bg-transition">
                 <option value="fade">✨ اندماج ناعم (fade)</option>
                 <option value="wipeleft">◀️ مَسح للجِهة اليَسرى (wipeleft)</option>
@@ -1210,6 +1210,9 @@ body.offline .offline-badge{display:block}
                 <option value="radial">🌀 كَشف قَطاعيّ (radial)</option>
                 <option value="dissolve">💫 مُذَوَّب (dissolve)</option>
               </select>
+            </div>
+            <div class="fg" style="margin-top:5px"><label class="fl">نُعومة الحَواف (لِلمَسح/الاِنزلاق/الدائرة)</label>
+              <div class="sg"><input type="range" min="0" max="100" step="5" value="30" id="bg-transition-softness"><span class="sv" id="bg-transition-softness-v">30%</span></div>
             </div>
             <div id="bg-vid-thumb"><video id="bg-vid-preview" muted loop playsinline></video></div>
             <div id="bg-vid-info" style="font-size:9px;color:var(--t3);margin-top:3px"></div>

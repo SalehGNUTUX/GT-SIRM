@@ -1012,10 +1012,15 @@ ipcMain.on("ffmpeg-pipe-cancel", () => {
 // ── استخراج إطارات فيديو الخلفية مسبقاً (مرة واحدة) ───
 //    أسرع وأكثر استقراراً من seek على HTMLVideoElement
 ipcMain.handle("extract-bg-frames", async (event, opts) => {
-  const { videoBytes, videoBytesList, clipDurations, clipTrims, transition, crossfadeSec, fps, width, height, totalDuration, trimStart, trimEnd } = opts;
+  const { videoBytes, videoBytesList, clipDurations, clipTrims, transition, clipTransitions, crossfadeSec, fps, width, height, totalDuration, trimStart, trimEnd } = opts;
   // v1.2 — قائمة أَسماء xfade المَعروفة (يَحمي من قيمة مَجهولة تُفشِل ffmpeg)
   const XFADE_SAFE = new Set(["fade","wipeleft","wiperight","wipeup","wipedown","slideleft","slideright","slideup","slidedown","circleopen","circleclose","radial","dissolve","rectcrop","distance","pixelize","fadegrays","hlslice","hrslice","vuslice","vdslice"]);
   const xfadeName = (transition && XFADE_SAFE.has(transition)) ? transition : "fade";
+  const xfadeAt = (i) => {
+    // v1.2 — نَمط الاِنتقال بَين المَقطع i والمَقطع i+1: تَأثير المَقطع i إن حُدّد، وإلا العامّ
+    const perClip = Array.isArray(clipTransitions) ? clipTransitions[i] : null;
+    return (perClip && XFADE_SAFE.has(perClip)) ? perClip : xfadeName;
+  };
   const ffmpegPath = await getBinPath("ffmpeg");
   if (!ffmpegPath) throw new Error("ffmpeg not found");
 
@@ -1064,7 +1069,8 @@ ipcMain.handle("extract-bg-frames", async (event, opts) => {
       for (let i = 1; i < tempFiles.length; i++) {
         cum += Math.max(0.1, clipDurations[i - 1] - xf);
         const out = (i === tempFiles.length - 1) ? "outv" : `x${i}`;
-        segs.push(`[${prev}][v${i}]xfade=transition=${xfadeName}:duration=${xf}:offset=${cum.toFixed(3)}[${out}]`);
+        // v1.2 — تَأثير الاِنتقال من المَقطع (i-1) إلى (i): يَستَخدِم تَأثير المَقطع (i-1)
+        segs.push(`[${prev}][v${i}]xfade=transition=${xfadeAt(i-1)}:duration=${xf}:offset=${cum.toFixed(3)}[${out}]`);
         prev = out;
       }
       chain = `${filterInputs};${segs.join(";")}`;

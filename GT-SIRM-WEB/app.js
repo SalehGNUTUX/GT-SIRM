@@ -2263,6 +2263,7 @@ function initEventListeners() {
     { id: "glitch-intensity", outId: "glitch-intensity-v", unit: "" },
     { id: "word-fade-ms", outId: "word-fade-ms-v", unit: "ms" },
     { id: "bg-crossfade-ms", outId: "bg-crossfade-ms-v", unit: "ms" },
+    { id: "bg-transition-softness", outId: "bg-transition-softness-v", unit: "%" },
   ];
   sliders.forEach(s => {
     const el = $(s.id);
@@ -2752,9 +2753,9 @@ function drawBg(ctx, W, H, ts) {
       const alpha = S.bgVidFadeProgress;
       targetCtx.save();
       if (applyMotion) applyBgMotion(targetCtx, W, H, bgm, ts);
-      // v1.2 — نَمط الاِنتقال المُختار
+      // v1.2 — نَمط الاِنتقال (per-clip إن حُدّد، وإلا العامّ) + نُعومة الحَواف
       const hasNext = S.bgVidNext && S.bgVidNext.readyState >= 2 && alpha > 0;
-      drawBgTransition(targetCtx, S.bgVid, hasNext ? S.bgVidNext : null, alpha, W, H, getBgTransition());
+      drawBgTransition(targetCtx, S.bgVid, hasNext ? S.bgVidNext : null, alpha, W, H, getEffectiveBgTransition(), getBgTransitionSoftness());
       targetCtx.restore();
       return true;
     }
@@ -5831,6 +5832,7 @@ function addBgVidItem(file, opts = {}) {
         hidden: false,
         trimStart: 0,
         trimEnd: null,
+        transition: "",        // v1.2 — نَمط اِنتقال per-clip
       };
       S.bgVidItems.push(item);
       if (typeof markProjectDirty === "function") markProjectDirty();
@@ -5871,10 +5873,26 @@ function switchToNextBgVid() {
   }
   const nextIdx = getNextVisibleBgVidIdx(S.bgVidActiveIdx);
   if (nextIdx < 0) return;
-  const oldVid = S.bgVid;                           // v1.2 Bug#4
+  const oldVid = S.bgVid;
+  // v1.2 fix — تَحقَّق من هَلْ crossfade مُسبَق شَغَّل المَقطع الجَديد من trimStart
   const active = S.bgVidItems[nextIdx];
+  const hadCrossfade = (S.bgVidNext === active.vid);
   S.bgVidActiveIdx = nextIdx;
   S.bgVid = active.vid;
+  // v1.2 fix — اِضبِط currentTime لِلمَقطع الجَديد إن لم يَكُن قَد شُغِّل بـcrossfade،
+  //   أَو إن كان خارج نِطاق trim (يَمنَع switch مُتَتالِياً)
+  if (!hadCrossfade) {
+    const tStart = (typeof getBgClipTrimStart === "function") ? getBgClipTrimStart(active) : 0;
+    try { active.vid.currentTime = tStart; } catch (_) {}
+  } else {
+    const tStart = (typeof getBgClipTrimStart === "function") ? getBgClipTrimStart(active) : 0;
+    const tEnd   = (typeof getBgClipTrimEnd   === "function") ? getBgClipTrimEnd(active)   : (active.vid.duration || 0);
+    try {
+      if (active.vid.currentTime < tStart || active.vid.currentTime >= tEnd - 0.05) {
+        active.vid.currentTime = tStart;
+      }
+    } catch (_) {}
+  }
   S.bgVidNext = null;
   S.bgVidFadeProgress = 0;
   if (S.playing || S._exportingV2) {
@@ -5898,10 +5916,20 @@ function easeInOutCubic(t) {
 function getBgTransition() {
   return (document.getElementById("bg-transition")?.value || "fade");
 }
+function getBgTransitionSoftness() {
+  const v = parseFloat(document.getElementById("bg-transition-softness")?.value);
+  return isFinite(v) ? Math.max(0, Math.min(100, v)) / 100 : 0.3;
+}
+function getEffectiveBgTransition() {
+  const it = S.bgVidItems[S.bgVidActiveIdx];
+  if (it && typeof it.transition === "string" && it.transition) return it.transition;
+  return getBgTransition();
+}
 const BG_TRANSITION_TYPES = ["fade", "wipeleft", "wiperight", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "dissolve"];
 
-function drawBgTransition(ctx, srcCur, srcNext, alpha, W, H, type) {
+function drawBgTransition(ctx, srcCur, srcNext, alpha, W, H, type, softness) {
   alpha = Math.max(0, Math.min(1, alpha));
+  softness = Math.max(0, Math.min(1, softness ?? 0));
   const drawSrc = (s) => imgCover(ctx, s, 0, 0, W, H);
 
   if (type === "fade" || !srcNext) {
@@ -5914,7 +5942,8 @@ function drawBgTransition(ctx, srcCur, srcNext, alpha, W, H, type) {
     return;
   }
 
-  ctx.globalAlpha = 1;
+  const curAlpha = 1 - alpha * softness;
+  ctx.globalAlpha = curAlpha;
   drawSrc(srcCur);
 
   ctx.save();
@@ -6008,6 +6037,13 @@ function drawBgTransition(ctx, srcCur, srcNext, alpha, W, H, type) {
   ctx.globalAlpha = 1;
   drawSrc(srcNext);
   ctx.restore();
+  // v1.2 — نُعومة إضافيّة: طَبَقة fade مُصاحِبة تَخفِّف الحَواف الحادّة
+  if (softness > 0.02) {
+    ctx.save();
+    ctx.globalAlpha = alpha * softness;
+    drawSrc(srcNext);
+    ctx.restore();
+  }
 }
 function updateBgVidCrossfade() {
   // v1.2 Bug#1 — في تَصدير V2 نُدير S.bgVid/Next/FadeProgress يَدويّاً بـdeterministic seek
@@ -6188,6 +6224,21 @@ function renderBgVidList() {
         <span>إلى</span>
         <input type="number" min="0" max="${durMax}" step="0.1" value="${tEnd.toFixed(2)}" data-act="trim-end" title="نِهاية المَقطع (ث)">
         <button data-act="trim-reset" title="إفراغ التَقليم (المَقطع كامِلاً)" ${trimActive ? '' : 'disabled'}>↺</button>
+        <span style="margin-inline-start:8px">🎞️</span>
+        <select data-act="clip-transition" title="نَمط اِنتقال هذا المَقطع (فارِغ = يَتبَع العامّ)" style="width:110px;padding:1px 2px;font-size:9.5px">
+          <option value="">— عامّ —</option>
+          <option value="fade">✨ ناعم</option>
+          <option value="wipeleft">◀️ مَسح يَسار</option>
+          <option value="wiperight">▶️ مَسح يَمين</option>
+          <option value="slideleft">⬅️ اِنزلاق يَسار</option>
+          <option value="slideright">➡️ اِنزلاق يَمين</option>
+          <option value="slideup">⬆️ اِنزلاق أَعلى</option>
+          <option value="slidedown">⬇️ اِنزلاق أَسفل</option>
+          <option value="circleopen">⚪ دائرة تَنفَتِح</option>
+          <option value="circleclose">⚫ دائرة تَنغَلِق</option>
+          <option value="radial">🌀 قَطاعيّ</option>
+          <option value="dissolve">💫 مُذَوَّب</option>
+        </select>
       </span>
     </div>`;
   }).join("");
@@ -6221,6 +6272,21 @@ function renderBgVidList() {
       const idx = parseInt(e.currentTarget.closest(".bgv-item").dataset.idx);
       setBgVidClipTrim(idx, e.currentTarget.dataset.act, e.currentTarget.value);
     });
+  });
+  // v1.2 — dropdown اِنتقال per-clip
+  el.querySelectorAll(".bgv-item select[data-act='clip-transition']").forEach(sel => {
+    const idx = parseInt(sel.closest(".bgv-item").dataset.idx);
+    const it = S.bgVidItems[idx];
+    if (it && typeof it.transition === "string") sel.value = it.transition;
+    sel.addEventListener("change", (e) => {
+      e.stopPropagation();
+      const i = parseInt(e.currentTarget.closest(".bgv-item").dataset.idx);
+      if (S.bgVidItems[i]) {
+        S.bgVidItems[i].transition = e.currentTarget.value || "";
+        if (typeof markProjectDirty === "function") markProjectDirty();
+      }
+    });
+    sel.addEventListener("click", (e) => e.stopPropagation());
   });
   el.querySelectorAll(".bgv-item input.bgv-vol").forEach(inp => {
     inp.addEventListener("input", (e) => {
@@ -7792,6 +7858,7 @@ async function serializeProject() {
         hidden: !!item.hidden,   // v1.2
         trimStart: item.trimStart ?? 0,     // v1.2 Feature#2
         trimEnd: item.trimEnd ?? null,      //
+        transition: item.transition || "",  // v1.2 — per-clip transition
       };
       if (item.file && item.file.size <= ASSET_EMBED_MAX) {
         a.mode = "embedded";
@@ -7998,6 +8065,7 @@ async function restoreAssetFromDataURL(asset) {
         if (asset.hidden !== undefined) item.hidden = !!asset.hidden;
         if (asset.trimStart !== undefined) item.trimStart = asset.trimStart;
         if (asset.trimEnd !== undefined) item.trimEnd = asset.trimEnd;
+        if (asset.transition !== undefined) item.transition = asset.transition;  // v1.2 — per-clip
         if (typeof renderBgVidList === "function") renderBgVidList();
       }
     }
