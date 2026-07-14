@@ -10,7 +10,7 @@
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
 [![Platform: Linux + Web + Android](https://img.shields.io/badge/Platform-Linux%20%7C%20Web%20%7C%20Android-orange?logo=linux)](#)
 [![Status](https://img.shields.io/badge/Status-Stable-brightgreen)](#)
-[![Version](https://img.shields.io/badge/Version-1.0.0-success)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-1.2.0-success)](./CHANGELOG.md)
 [![Releases](https://img.shields.io/github/v/release/SalehGNUTUX/GT-SIRM?label=Latest%20Release)](https://github.com/SalehGNUTUX/GT-SIRM/releases)
 
 </div>
@@ -33,7 +33,50 @@
 
 يَرِثُ GT-SIRM كلَّ مزايا [GT-SQRM](https://github.com/SalehGNUTUX/GT-SQRM) (صانع الريلز القرآنيّة) — مع توگل لتفعيل/إلغاء وحدة القرآن — ويُضيف إليها وحدات للحديث والأذكار والأدعية وأسماء الله الحسنى والحِكَم، إلى جانب محرّر نصٍّ حرٍّ، وأداة Chromakey لإزالة الخلفيّات، ومرونةً كاملةً في استيراد الصوت والصورة والفيديو.
 
-### الميزات المُكتمَلة (v0.13.3) ✅
+### 🆕 الجَديد في v1.2.0 (2026-07-14)
+
+#### 🎬 مقاطع الخَلفيّة المُتَعدّدة — تَحَكُّم كامِل
+- **👁️ إعماء (hidden) لكُلّ مَقطع** — إخفاء دون حَذف، يُتَخَطّى في المُعاينَة والتَصدير
+- **✂️ تَقليم لكُلّ مَقطع (per-clip trim)** — تَحديد `start`/`end` لكُلّ مَقطع مُنفَصِلاً
+- **🎨 11 نَمط اِنتقال** — fade / wipe / slide (4 اتّجاهات) / circle (open+close) / radial / dissolve
+- **🌫️ نُعومة الحَواف** — 0-100% عبر gradient mask حَقيقيّ لِلاِنتقالات الجيوميتريّة
+- **🎞️ اِنتقال مُنفَصِل لكُلّ مَقطع** — عامّ + مُخَصَّص per-clip
+- **🌟 وَميض ذَهبيّ** — تَتَبُّع بَصريّ بَعد ▲▼ مَع scroll تلقائيّ
+- **🖱️ نَقر عَلى صَفّ** — تَنشيط + تَحديث المُعاينَة + حاشية خَضراء
+
+#### ↩️↪️ نِظام Undo/Redo عامّ
+- تَراجُع/إعادة لِـحَذف + نَقل ▲▼
+- **♻️ استعادة مَحذوف** فَوريّة
+- اختِصارات: `Ctrl+Z` / `Ctrl+Y` / `Ctrl+Shift+Z`
+
+#### 🏷️ العلامة المائيّة
+- **توگل تَفعيل/تَعطيل** — إخفاء دون مَسح
+- **شَريط ارتفاع/انخفاض** عن الحافّة (يَعمَل لِلمَواضِع الأَربعة)
+
+#### 📝 النَصّ الحرّ
+- **توگل ذَكيّ** — الإيقاف يُخفي، التَفعيل يُعيد تلقائياً من الحَقل
+
+#### 💾 حَفظ/استعادة شامِل
+- **لَقطة كامِلة لِـS.verses** — القُرآن/الحديث/النَصّ الحرّ/الأذكار/الأدعية/الحِكَم تَعود بالضَبط
+- **حالة الأَقسام (details)** مَحفوظة
+- **تَرتيب المَقاطع + إعداداتها** (trim/audio/hidden/transition) مُطابِقة
+
+#### 🐛 إصلاحات جَوهريّة (12+)
+- 🔴 deterministic seek في تَصدير الويب (كان `playbackRate ×16` يُسبِّب تَسريعاً)
+- 🔴 وَميض المَقطع القَديم بَعد crossfade
+- 🔴 صَوت مَقطع يَستَمِرّ عَلى طول الفيديو المُصَدَّر
+- 🔴 تَرتيب مقاطع الاستعادة عَشوائيّ (async race)
+- 🔴 trim WebM لا يُحتَرَم في المُعاينَة
+- 🔴 الصَوت لا يَعمَل بَعد استعادة المَشروع
+- 🔴 restart يَبدأ من المَقطع النَشِط لا الأَوّل
+- 🔴 resume يُعيد الآية لِلبِداية (بدل الاستئناف من مَوضِع التوقّف)
+- ➕ 4 إصلاحات أُخرى
+
+📋 التَفاصيل الكامِلة في [`CHANGELOG.md`](./CHANGELOG.md).
+
+---
+
+### الميزات المُكتمَلة (v1.2.0) ✅
 
 #### 📚 وَحدات المحتوى الإسلاميّ (6 وَحدات، 6557+ عُنصراً)
 - 📖 **القرآن الكَريم** — 114 سورة، 6236 آية + قُرّاء + 60 ترجمة (api.alquran.cloud + everyayah)
@@ -96,30 +139,37 @@
 
 ---
 
-## 🚀 البدء السريع
+## 🚀 البدء السريع — تَنزيل v1.2.0
 
-### النسخة الويب — مباشرةً في المتصفّح
-```
-https://salehgnutux.github.io/GT-SIRM/GT-SIRM-WEB/
-```
+### 📥 رَوابِط مُباشَرة (أَحدَث إصدار)
 
-### النسخة المكتبيّة — تنزيل لـ Linux
+| المِنَصّة | الحُزمة | الحَجم | تَنزيل |
+|---|---|---:|---|
+| 🐧 **Linux Universal** | AppImage | 182 MB | [GT-SIRM-1.2.0.AppImage](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.2.0/GT-SIRM-1.2.0.AppImage) |
+| 📦 **Debian/Ubuntu/Mint** | DEB | 137 MB | [gt-sirm_1.2.0_amd64.deb](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.2.0/gt-sirm_1.2.0_amd64.deb) |
+| 🎩 **Fedora/RHEL/openSUSE** | RPM | 180 MB | [gt-sirm-1.2.0-2.x86_64.rpm](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.2.0/gt-sirm-1.2.0-2.x86_64.rpm) |
+| 📱 **Android 6+** | APK | 13 MB | [GT-SIRM-1.2.0-debug.apk](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.2.0/GT-SIRM-1.2.0-debug.apk) |
+| 🌐 **الويب (PWA)** | — | — | [تشغيل مُباشَر](https://salehgnutux.github.io/GT-SIRM/GT-SIRM-WEB/) |
+
+📋 **صَفحة الإصدارات:** [github.com/SalehGNUTUX/GT-SIRM/releases](https://github.com/SalehGNUTUX/GT-SIRM/releases)
+🏷️ **آخر إصدار:** [v1.2.0](https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.2.0) — 2026-07-14
+
+### ⚙️ التَثبيت
+
 ```bash
-# AppImage (يعمل على كلّ التوزيعات)
-chmod +x GT-SIRM-x.y.z.AppImage && ./GT-SIRM-x.y.z.AppImage
+# AppImage (يعمل على كلّ التوزيعات — بلا تَثبيت)
+chmod +x GT-SIRM-1.2.0.AppImage && ./GT-SIRM-1.2.0.AppImage
 
 # DEB (Debian/Ubuntu/Mint)
-sudo dpkg -i gt-sirm_x.y.z_amd64.deb
+sudo dpkg -i gt-sirm_1.2.0_amd64.deb
 
 # RPM (Fedora/RHEL/openSUSE)
-sudo dnf install ./gt-sirm-x.y.z.x86_64.rpm
+sudo dnf install ./gt-sirm-1.2.0-2.x86_64.rpm
+
+# APK Android — ثَبِّت يَدويّاً (يَطلب الأذونات: ميكروفون + تَخزين + وَسائط عند الحاجة)
 ```
 
-### نُسخة Android — APK
-حَمِّل `GT-SIRM-x.y.z-debug.apk` مِن [الإصدارات](https://github.com/SalehGNUTUX/GT-SIRM/releases) ثُمَّ ثَبِّته يَدويّاً.
-يَطلب الأذونات: ميكروفون + تَخزين + وَسائط + اهتزاز عند الحاجة فقط.
-
-تفاصيل التثبيت الكاملة في [`GT-SIRM-DESKTOP/README.md`](./GT-SIRM-DESKTOP/README.md) و[`GT-SIRM-WEB/README.md`](./GT-SIRM-WEB/README.md).
+📖 تفاصيل التثبيت الكاملة في [`GT-SIRM-DESKTOP/README.md`](./GT-SIRM-DESKTOP/README.md) و[`GT-SIRM-WEB/README.md`](./GT-SIRM-WEB/README.md).
 
 ---
 
