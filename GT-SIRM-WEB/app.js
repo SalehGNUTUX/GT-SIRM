@@ -2290,6 +2290,7 @@ function initEventListeners() {
     { id: "word-fade-ms", outId: "word-fade-ms-v", unit: "ms" },
     { id: "bg-crossfade-ms", outId: "bg-crossfade-ms-v", unit: "ms" },
     { id: "bg-transition-softness", outId: "bg-transition-softness-v", unit: "%" },
+    { id: "wm-y-offset", outId: "wm-y-offset-v", unit: "%" },
   ];
   sliders.forEach(s => {
     const el = $(s.id);
@@ -4316,10 +4317,18 @@ function drawWatermark(ctx, W, H) {
   if (wmOn && !wmOn.checked) return;
   const text = $("wm-text").value.trim(); if (!text) return;
   const sz = parseInt(gv("wm-size")), pos = $("wm-pos").value, col = $("wm-col").value;
+  // v1.2 — اِرتفاع من الحافّة
+  const _yOffPct = Math.max(0, Math.min(40, parseFloat(gv("wm-y-offset") || "0"))) / 100;
+  const _yOff = H * _yOffPct;
   ctx.save(); ctx.font = `bold ${sz}px 'Cairo'`; ctx.fillStyle = col; ctx.globalAlpha = .72;
   ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 6;
   const pad = sz + 8;
-  const pm = { br: ["right", W - pad, H - pad], bl: ["left", pad, H - pad], tr: ["right", W - pad, pad + sz], tl: ["left", pad, pad + sz] };
+  const pm = {
+    br: ["right", W - pad, H - pad - _yOff],
+    bl: ["left",  pad,     H - pad - _yOff],
+    tr: ["right", W - pad, pad + sz + _yOff],
+    tl: ["left",  pad,     pad + sz + _yOff],
+  };
   const [align, x, y] = pm[pos] || pm.br;
   ctx.textAlign = align; ctx.fillText(text, x, y);
   ctx.restore();
