@@ -6662,8 +6662,15 @@ function getBgClipEffectiveDur(item) {
 }
 function hasBgClipTrim(item) {
   if (!item) return false;
-  const s = getBgClipTrimStart(item), e = getBgClipTrimEnd(item), dur = item.dur || 0;
-  return (s > 0.001) || (e < dur - 0.001);
+  // v1.2 fix — تَقليم مُفَعَّل إن كان trimStart > 0 أَو trimEnd مُحَدَّد صَراحةً.
+  //   قَبل: كان يُقارن e < dur-0.001 → يَفشَل مَع WebM (dur=0) رَغم trim مَضبوط.
+  const rawStart = parseFloat(item.trimStart);
+  if (isFinite(rawStart) && rawStart > 0.001) return true;
+  const rawEnd = parseFloat(item.trimEnd);
+  if (!isFinite(rawEnd) || rawEnd <= 0) return false;
+  const dur = item.dur || 0;
+  // إن كانت المُدّة مَعروفة: trim مُفَعَّل لَو trimEnd أَصغَر منها. إن لم تَكُن (WebM): مُفَعَّل دائماً
+  return dur > 0 ? (rawEnd < dur - 0.001) : true;
 }
 function setBgVidClipTrim(idx, which, value) {
   const item = S.bgVidItems[idx];
@@ -10231,7 +10238,11 @@ async function deserializeProject(proj) {
     if (typeof renderPerSliceList === "function") renderPerSliceList();
   }
 
-  // المصادر — تتبع المفقودة
+  // المصادر — تتبع المفقودة (await تَتابُعيّ)
+  //   v1.2 fix — كُلّ الاستعادة الآن سِلسِلة awaited بلا setTimeouts.
+  //   قَبل: setTimeout(500) لِـruntime snapshot كان يُطلَق من بِداية الدالّة،
+  //   لكنّ استعادة N مَقطع تَتَجاوَز أَحياناً 500ms → snapshot يُستَعاد قَبل
+  //   اكتمال تَحميل المَقاطع → bgVidActiveIdx غير صَحيح + سِباقات مُتَعدّدة.
   const missing = [];
   for (const a of (proj.assets || [])) {
     if (a.mode === "embedded" && a.dataURL) {
@@ -10253,52 +10264,46 @@ async function deserializeProject(proj) {
   }
 
   // v1.2 fix — تَطبيق النَصّ الحرّ فَقط إن كان توگل free-text-on مُفَعَّلاً وقت الحَفظ.
-  //   قَبل هذا الإصلاح كان يُطبَّق طالما وُجِد نَصّ في textarea ولَو كان التوگل مُغلَقاً،
-  //   مِمّا يَستَبدِل آيات القرآن بالنَصّ الحرّ رُغماً عن المُستَخدِم.
+  //   الآن يَعمَل بشَكل تَتابُعيّ (كُلّ المُصادر مُحَمَّلة → لا سِباق).
   const savedText = proj.freeText?.text?.trim();
   const freeTextOnAtSave = !!(proj.settings?.byId?.["free-text-on"]);
   if (savedText && freeTextOnAtSave && typeof applyFreeText === "function") {
-    // تَأخير قَصير حتى تَكتمِل استعادة المُصادر (خاصّةً الصوت الذي يُشغّل syncVersesToActiveAudio)
-    setTimeout(() => {
-      try {
-        applyFreeText();
-        // أَعِد تَعيين freePerSlice بَعد applyFreeText تَحسّباً لأيّ سِباق داخِل applyFreeText
-        if (proj.freeText.perSlice) {
-          S.freePerSlice = JSON.parse(JSON.stringify(proj.freeText.perSlice));
-          if (typeof syncPerSliceToPlayback === "function") syncPerSliceToPlayback();
-          if (typeof renderPerSliceList === "function") renderPerSliceList();
-        }
-      } catch (_) {}
-    }, 400);
+    try {
+      applyFreeText();
+      // أَعِد تَعيين freePerSlice بَعد applyFreeText تَحسّباً لأيّ سِباق داخِل applyFreeText
+      if (proj.freeText.perSlice) {
+        S.freePerSlice = JSON.parse(JSON.stringify(proj.freeText.perSlice));
+        if (typeof syncPerSliceToPlayback === "function") syncPerSliceToPlayback();
+        if (typeof renderPerSliceList === "function") renderPerSliceList();
+      }
+    } catch (e) { console.warn("applyFreeText on restore failed:", e); }
   }
 
-  // v1.2 — استعادة لَقطة المُحتوى (S.verses وما يُصاحِبها) بَعد إعادة تَحميل الوَحدات.
-  //   500ms > 400ms المُخَصَّصة لِـapplyFreeText.
-  //   هذا يَضمَن أنّ ما كان في S.verses وَقت الحَفظ يَعود كما هو، بغَضّ النَظر
-  //   عن ما فَعَلَته change events (loadVerses، applyHadith، إلخ).
+  // v1.2 — استعادة لَقطة المُحتوى (S.verses وما يُصاحِبها) — بَعد اكتمال كُلّ الأُصول
   const hasRuntimeVerses = !!(proj.runtime && Array.isArray(proj.runtime.verses) && proj.runtime.verses.length);
-  setTimeout(() => {
-    try {
-      if (hasRuntimeVerses) {
-        S.verses          = JSON.parse(JSON.stringify(proj.runtime.verses));
-        S.translations    = Array.isArray(proj.runtime.translations) ? JSON.parse(JSON.stringify(proj.runtime.translations)) : [];
-        S.currentAya      = Math.min(proj.runtime.currentAya || 0, S.verses.length - 1);
-        S.ayaDurations    = Array.isArray(proj.runtime.ayaDurations) ? [...proj.runtime.ayaDurations] : [];
-        S.mixedAnimsOrder = Array.isArray(proj.runtime.mixedAnimsOrder) ? [...proj.runtime.mixedAnimsOrder] : (S.mixedAnimsOrder || []);
-        S.useFreeAsSource = !!proj.runtime.useFreeAsSource;
-        if (proj.runtime.bgVidActiveIdx != null && S.bgVidItems[proj.runtime.bgVidActiveIdx]) {
-          if (typeof activateBgVidByIndex === "function") activateBgVidByIndex(proj.runtime.bgVidActiveIdx, true);
-        }
-        if (typeof updateAyaUI === "function") updateAyaUI();
+  try {
+    if (hasRuntimeVerses) {
+      S.verses          = JSON.parse(JSON.stringify(proj.runtime.verses));
+      S.translations    = Array.isArray(proj.runtime.translations) ? JSON.parse(JSON.stringify(proj.runtime.translations)) : [];
+      S.currentAya      = Math.min(proj.runtime.currentAya || 0, Math.max(0, S.verses.length - 1));
+      S.ayaDurations    = Array.isArray(proj.runtime.ayaDurations) ? [...proj.runtime.ayaDurations] : [];
+      S.mixedAnimsOrder = Array.isArray(proj.runtime.mixedAnimsOrder) ? [...proj.runtime.mixedAnimsOrder] : (S.mixedAnimsOrder || []);
+      S.useFreeAsSource = !!proj.runtime.useFreeAsSource;
+      // v1.2 fix — bgVidActiveIdx يَعمَل الآن لأنّ كُلّ المَقاطع مُحَمَّلة
+      if (proj.runtime.bgVidActiveIdx != null && S.bgVidItems[proj.runtime.bgVidActiveIdx]) {
+        if (typeof activateBgVidByIndex === "function") activateBgVidByIndex(proj.runtime.bgVidActiveIdx, true);
       }
-    } catch (e) { console.warn("runtime snapshot restore failed:", e); }
-    // ارفَع الحارس — أَيّ تَفاعُل مُستقبَليّ من المُستخدم يَعمَل طَبيعيّاً
-    S._restoring = false;
-    // إن لم يَكُن هُناك snapshot: شَغِّل loadVerses مَرّة واحدة لِمَلء المُحتوى من الحقول المُستَعادة
-    if (!hasRuntimeVerses && typeof loadVerses === "function") {
-      loadVerses().catch(_ => {});
+      if (typeof updateAyaUI === "function") updateAyaUI();
     }
-  }, 500);
+  } catch (e) { console.warn("runtime snapshot restore failed:", e); }
+
+  // ارفَع الحارس — أَيّ تَفاعُل مُستقبَليّ من المُستخدم يَعمَل طَبيعيّاً
+  S._restoring = false;
+
+  // إن لم يَكُن هُناك snapshot: شَغِّل loadVerses مَرّة واحدة لِمَلء المُحتوى من الحقول المُستَعادة
+  if (!hasRuntimeVerses && typeof loadVerses === "function") {
+    loadVerses().catch(_ => {});
+  }
 
   clearProjectDirty();
   return { restored: (proj.assets || []).length - missing.length, missing: missing.length };

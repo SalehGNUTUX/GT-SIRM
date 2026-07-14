@@ -5873,8 +5873,13 @@ function getBgClipEffectiveDur(item) {
 }
 function hasBgClipTrim(item) {
   if (!item) return false;
-  const s = getBgClipTrimStart(item), e = getBgClipTrimEnd(item), dur = item.dur || 0;
-  return (s > 0.001) || (e < dur - 0.001);
+  // v1.2 fix — trim مُفَعَّل إن كان trimStart > 0 أَو trimEnd مُحَدَّد صَراحةً (يَعمَل مَع WebM بمُدّة Infinity)
+  const rawStart = parseFloat(item.trimStart);
+  if (isFinite(rawStart) && rawStart > 0.001) return true;
+  const rawEnd = parseFloat(item.trimEnd);
+  if (!isFinite(rawEnd) || rawEnd <= 0) return false;
+  const dur = item.dur || 0;
+  return dur > 0 ? (rawEnd < dur - 0.001) : true;
 }
 function setBgVidClipTrim(idx, which, value) {
   const item = S.bgVidItems[idx];
@@ -8163,45 +8168,42 @@ async function deserializeProject(proj) {
   }
 
   // v1.2 fix — تَطبيق النَصّ الحرّ فَقط إن كان توگل free-text-on مُفَعَّلاً وقت الحَفظ.
-  //   قَبل هذا الإصلاح كان يُطبَّق طالما وُجِد نَصّ في textarea ولَو كان التوگل مُغلَقاً،
-  //   مِمّا يَستَبدِل آيات القرآن بالنَصّ الحرّ رُغماً عن المُستَخدِم.
+  //   الآن sequential awaited (لا setTimeouts) → لا سِباق بَعد اكتمال المُصادر
   const savedText = proj.freeText?.text?.trim();
   const freeTextOnAtSave = !!(proj.settings?.byId?.["free-text-on"]);
   if (savedText && freeTextOnAtSave && typeof applyFreeText === "function") {
-    setTimeout(() => {
-      try {
-        applyFreeText();
-        if (proj.freeText.perSlice) {
-          S.freePerSlice = JSON.parse(JSON.stringify(proj.freeText.perSlice));
-          if (typeof syncPerSliceToPlayback === "function") syncPerSliceToPlayback();
-          if (typeof renderPerSliceList === "function") renderPerSliceList();
-        }
-      } catch (_) {}
-    }, 400);
+    try {
+      applyFreeText();
+      if (proj.freeText.perSlice) {
+        S.freePerSlice = JSON.parse(JSON.stringify(proj.freeText.perSlice));
+        if (typeof syncPerSliceToPlayback === "function") syncPerSliceToPlayback();
+        if (typeof renderPerSliceList === "function") renderPerSliceList();
+      }
+    } catch (e) { console.warn("applyFreeText on restore failed:", e); }
   }
 
-  // v1.2 — استعادة لَقطة المُحتوى (S.verses وما يُصاحِبها) بَعد إعادة تَحميل الوَحدات
+  // v1.2 — استعادة لَقطة المُحتوى (S.verses وما يُصاحِبها) — بَعد اكتمال كُلّ الأُصول
   const hasRuntimeVerses = !!(proj.runtime && Array.isArray(proj.runtime.verses) && proj.runtime.verses.length);
-  setTimeout(() => {
-    try {
-      if (hasRuntimeVerses) {
-        S.verses          = JSON.parse(JSON.stringify(proj.runtime.verses));
-        S.translations    = Array.isArray(proj.runtime.translations) ? JSON.parse(JSON.stringify(proj.runtime.translations)) : [];
-        S.currentAya      = Math.min(proj.runtime.currentAya || 0, S.verses.length - 1);
-        S.ayaDurations    = Array.isArray(proj.runtime.ayaDurations) ? [...proj.runtime.ayaDurations] : [];
-        S.mixedAnimsOrder = Array.isArray(proj.runtime.mixedAnimsOrder) ? [...proj.runtime.mixedAnimsOrder] : (S.mixedAnimsOrder || []);
-        S.useFreeAsSource = !!proj.runtime.useFreeAsSource;
-        if (proj.runtime.bgVidActiveIdx != null && S.bgVidItems[proj.runtime.bgVidActiveIdx]) {
-          if (typeof activateBgVidByIndex === "function") activateBgVidByIndex(proj.runtime.bgVidActiveIdx, true);
-        }
-        if (typeof updateAyaUI === "function") updateAyaUI();
+  try {
+    if (hasRuntimeVerses) {
+      S.verses          = JSON.parse(JSON.stringify(proj.runtime.verses));
+      S.translations    = Array.isArray(proj.runtime.translations) ? JSON.parse(JSON.stringify(proj.runtime.translations)) : [];
+      S.currentAya      = Math.min(proj.runtime.currentAya || 0, Math.max(0, S.verses.length - 1));
+      S.ayaDurations    = Array.isArray(proj.runtime.ayaDurations) ? [...proj.runtime.ayaDurations] : [];
+      S.mixedAnimsOrder = Array.isArray(proj.runtime.mixedAnimsOrder) ? [...proj.runtime.mixedAnimsOrder] : (S.mixedAnimsOrder || []);
+      S.useFreeAsSource = !!proj.runtime.useFreeAsSource;
+      if (proj.runtime.bgVidActiveIdx != null && S.bgVidItems[proj.runtime.bgVidActiveIdx]) {
+        if (typeof activateBgVidByIndex === "function") activateBgVidByIndex(proj.runtime.bgVidActiveIdx, true);
       }
-    } catch (e) { console.warn("runtime snapshot restore failed:", e); }
-    S._restoring = false;
-    if (!hasRuntimeVerses && typeof loadVerses === "function") {
-      loadVerses().catch(_ => {});
+      if (typeof updateAyaUI === "function") updateAyaUI();
     }
-  }, 500);
+  } catch (e) { console.warn("runtime snapshot restore failed:", e); }
+
+  S._restoring = false;
+
+  if (!hasRuntimeVerses && typeof loadVerses === "function") {
+    loadVerses().catch(_ => {});
+  }
 
   clearProjectDirty();
   return { restored: (proj.assets || []).length - missing.length, missing: missing.length };
