@@ -2075,6 +2075,24 @@ function initEventListeners() {
   const restartAllBtn = $("restart-all-btn");
   if (restartAllBtn) restartAllBtn.addEventListener("click", restartAll);
 
+  // v1.2 Feature #3/#4 — Undo/Redo + استعادة مَحذوف
+  $("bgv-undo-btn")?.addEventListener("click", historyUndo);
+  $("bgv-redo-btn")?.addEventListener("click", historyRedo);
+  $("bgv-restore-deleted-btn")?.addEventListener("click", restoreLastDeletedBgVid);
+  document.addEventListener("keydown", (e) => {
+    const tag = (e.target?.tagName || "").toUpperCase();
+    if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) return;
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      historyUndo();
+    } else if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") ||
+               ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z")) {
+      e.preventDefault();
+      historyRedo();
+    }
+  });
+  updateHistoryUI();
+
   const pbar = $("pbar");
   if (pbar) pbar.addEventListener("click", seekClick);
 
@@ -5734,6 +5752,56 @@ function onBgMedia(input, type) {
   }
 }
 
+// ── نِظام Undo/Redo عامّ (v1.2) — تَجريبيّاً في multi-bg ──
+S._history = { undo: [], redo: [], max: 30 };
+function historyPush(action) {
+  if (!action || typeof action.undo !== "function" || typeof action.redo !== "function") return;
+  S._history.undo.push(action);
+  while (S._history.undo.length > S._history.max) S._history.undo.shift();
+  S._history.redo.length = 0;
+  updateHistoryUI();
+}
+function historyUndo() {
+  const action = S._history.undo.pop();
+  if (!action) { toast?.("↩️ لا يوجد ما يُتراجَع عنه", "info", 1200); return; }
+  try { action.undo(); } catch (e) { console.warn("undo failed:", e); }
+  S._history.redo.push(action);
+  updateHistoryUI();
+  toast?.(`↩️ تَراجُع: ${action.label || "إجراء"}`, "info", 1200);
+}
+function historyRedo() {
+  const action = S._history.redo.pop();
+  if (!action) { toast?.("↪️ لا يوجد ما يُعاد", "info", 1200); return; }
+  try { action.redo(); } catch (e) { console.warn("redo failed:", e); }
+  S._history.undo.push(action);
+  updateHistoryUI();
+  toast?.(`↪️ إعادة: ${action.label || "إجراء"}`, "info", 1200);
+}
+function updateHistoryUI() {
+  const ub = document.getElementById("bgv-undo-btn");
+  const rb = document.getElementById("bgv-redo-btn");
+  const cb = document.getElementById("bgv-restore-deleted-btn");
+  if (ub) { ub.disabled = !S._history.undo.length; ub.title = S._history.undo.length ? `تَراجُع: ${S._history.undo[S._history.undo.length-1].label}` : "لا يوجد ما يُتراجَع عنه"; }
+  if (rb) { rb.disabled = !S._history.redo.length; rb.title = S._history.redo.length ? `إعادة: ${S._history.redo[S._history.redo.length-1].label}` : "لا يوجد ما يُعاد"; }
+  if (cb) {
+    const hasDeleted = S._history.undo.some(a => a.type === "bgVidDelete");
+    cb.disabled = !hasDeleted;
+    cb.title = hasDeleted ? "استعادة آخر مَقطع مَحذوف" : "لا يوجد مَقطع مَحذوف لِلاستعادة";
+  }
+}
+function restoreLastDeletedBgVid() {
+  for (let i = S._history.undo.length - 1; i >= 0; i--) {
+    if (S._history.undo[i].type === "bgVidDelete") {
+      const action = S._history.undo.splice(i, 1)[0];
+      try { action.undo(); } catch (e) { console.warn("restore-deleted failed:", e); }
+      updateHistoryUI();
+      toast?.(`♻️ استعادة: ${action.label}`, "success", 1400);
+      return;
+    }
+  }
+  toast?.("لا يوجد مَقطع مَحذوف لِلاستعادة", "info", 1200);
+}
+
 // ── إدارة قائمة مقاطع الخلفية (playlist) — مطابق لنسخة المكتبية ──
 // v1.2 — إعماء (hidden) لكُلّ مَقطع: يَبقى في القائمة، يُتَخطّى في التَبديل/الـcrossfade/التَصدير
 function getNextVisibleBgVidIdx(fromIdx) {
@@ -6117,10 +6185,12 @@ function activateBgVidByIndex(idx, resetTime = true) {
   if (typeof renderBgVidList === "function") renderBgVidList();
 }
 
-function removeBgVidItem(idx) {
-  if (idx < 0 || idx >= S.bgVidItems.length) return;
+// v1.2 — الحَذف الأَصليّ (بدون Undo history) — يُستَخدَم من الـundo/redo
+function _removeBgVidItemCore(idx) {
+  if (idx < 0 || idx >= S.bgVidItems.length) return null;
   const item = S.bgVidItems[idx];
-  try { item.vid.pause(); URL.revokeObjectURL(item.url); } catch (_) {}
+  try { item.vid.pause(); } catch (_) {}
+  // v1.2 — لا نُلغي URL.revokeObjectURL هُنا: نُبقيه حَيّاً لِسَماح undo
   S.bgVidItems.splice(idx, 1);
   if (S.bgVidItems.length === 0) {
     S.bgVid = null;
@@ -6130,6 +6200,31 @@ function removeBgVidItem(idx) {
     activateBgVidByIndex(0, true);
   }
   renderBgVidList();
+  return item;
+}
+
+function removeBgVidItem(idx) {
+  if (idx < 0 || idx >= S.bgVidItems.length) return;
+  const item = S.bgVidItems[idx];
+  const wasActiveIdx = S.bgVidActiveIdx;
+  _removeBgVidItemCore(idx);
+  historyPush({
+    type: "bgVidDelete",
+    label: `مَقطع «${item.name || "بلا اسم"}»`,
+    undo: () => {
+      S.bgVidItems.splice(idx, 0, item);
+      if (typeof markProjectDirty === "function") markProjectDirty();
+      if (wasActiveIdx === idx || !S.bgVid) {
+        activateBgVidByIndex(idx, true);
+      } else {
+        renderBgVidList();
+      }
+    },
+    redo: () => {
+      const i = S.bgVidItems.indexOf(item);
+      if (i >= 0) _removeBgVidItemCore(i);
+    },
+  });
 }
 
 // v1.2 — تَمييز بَصريّ لِلمَقطع بَعد نَقله
@@ -6145,14 +6240,26 @@ function highlightMovedBgVidItem(idx) {
   });
 }
 
+function _moveBgVidItemCore(fromIdx, toIdx) {
+  if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0 || fromIdx >= S.bgVidItems.length || toIdx >= S.bgVidItems.length) return;
+  const [moved] = S.bgVidItems.splice(fromIdx, 1);
+  S.bgVidItems.splice(toIdx, 0, moved);
+  activateBgVidByIndex(0, true);
+  renderBgVidList();
+  highlightMovedBgVidItem(toIdx);
+}
+
 function moveBgVidItem(idx, dir) {
   const newIdx = idx + dir;
   if (newIdx < 0 || newIdx >= S.bgVidItems.length) return;
-  const [moved] = S.bgVidItems.splice(idx, 1);
-  S.bgVidItems.splice(newIdx, 0, moved);
-  activateBgVidByIndex(0, true);  // التأثير فوري: ابدأ من الأول دائماً بعد الترتيب
-  renderBgVidList();
-  highlightMovedBgVidItem(newIdx);   // v1.2 — تَمييز بَصريّ
+  const item = S.bgVidItems[idx];
+  _moveBgVidItemCore(idx, newIdx);
+  historyPush({
+    type: "bgVidMove",
+    label: `نَقل «${item.name || "بلا اسم"}» ${dir < 0 ? "↑" : "↓"}`,
+    undo: () => _moveBgVidItemCore(newIdx, idx),
+    redo: () => _moveBgVidItemCore(idx, newIdx),
+  });
 }
 
 // تطبيق إعدادات صوت العنصر على عنصر الفيديو
