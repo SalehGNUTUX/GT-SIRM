@@ -6634,9 +6634,19 @@ function getBgClipTrimStart(item) {
 }
 function getBgClipTrimEnd(item) {
   if (!item) return 0;
-  const dur = item.dur || 0;
+  // v1.2 fix — استخدم vid.duration الحيَّة إن كانت item.dur غير صالِحة (WebM بمُدّة Infinity)
+  let dur = item.dur || 0;
+  if ((!dur || !isFinite(dur)) && item.vid && isFinite(item.vid.duration) && item.vid.duration > 0) {
+    dur = item.vid.duration;
+    item.dur = dur;   // حَدِّث الـcached
+  }
   const e = parseFloat(item.trimEnd);
-  return (isFinite(e) && e > 0 && e < dur) ? e : dur;
+  // v1.2 fix — إن كان trimEnd مَضبوطاً صَراحةً، اِستَخدِمه (مُقَيَّداً بـdur لَو مَعروفاً)
+  //   قَبل: كان يُعيد dur=0 لَو e < dur فَشَل → remaining سالب → switch فَوريّ في المُعاينَة
+  if (isFinite(e) && e > 0) {
+    return dur > 0 ? Math.min(e, dur) : e;
+  }
+  return dur;
 }
 function getBgClipEffectiveDur(item) {
   return Math.max(0.1, getBgClipTrimEnd(item) - getBgClipTrimStart(item));
@@ -7169,7 +7179,7 @@ function renderBgVidList() {
         <input type="number" min="0" max="${durMax}" step="0.1" value="${tEnd.toFixed(2)}" data-act="trim-end" title="نِهاية المَقطع (ث)">
         <button data-act="trim-reset" title="إفراغ التَقليم (المَقطع كامِلاً)" ${trimActive ? '' : 'disabled'}>↺</button>
         <span style="margin-inline-start:8px">🎞️</span>
-        <select data-act="clip-transition" title="نَمط اِنتقال هذا المَقطع (فارِغ = يَتبَع العامّ)" style="width:110px;padding:1px 2px;font-size:9.5px">
+        <select data-act="clip-transition" title="نَمط اِنتقال هذا المَقطع (فارِغ = يَتبَع العامّ)">
           <option value="">— عامّ —</option>
           <option value="fade">✨ ناعم</option>
           <option value="wipeleft">◀️ مَسح يَسار</option>
@@ -10281,7 +10291,18 @@ async function restoreAssetFromDataURL(asset) {
         if (asset.hidden !== undefined) item.hidden = !!asset.hidden;
         if (asset.trimStart !== undefined) item.trimStart = asset.trimStart;
         if (asset.trimEnd !== undefined) item.trimEnd = asset.trimEnd;
-        if (asset.transition !== undefined) item.transition = asset.transition;  // v1.2 — per-clip
+        if (asset.transition !== undefined) item.transition = asset.transition;
+        // v1.2 fix — طَبِّق إعدادات الصَوت عَلى vid element (كان لا يُطَبَّق فتَبقى الصَوت
+        //   مَكتوماً ولَو audioEnabled=true. المُستخدِم يَحتاج لإلغاء وإعادة تَفعيل حَتى يَعمل).
+        if (typeof applyBgVidItemAudio === "function") applyBgVidItemAudio(item);
+        // v1.2 fix — فَكّ ترميز audioBuffer لِلتَصدير V2 (كان lazy عَبر toggleBgVidAudio فَقَط)
+        if (item.audioEnabled && !item.audioBuffer && item.file) {
+          try {
+            const ctx = await resumeAudioCtx();
+            const ab = await item.file.arrayBuffer();
+            item.audioBuffer = await ctx.decodeAudioData(ab.slice(0));
+          } catch (e) { console.warn("decode bg-vid audio failed (restore):", e); }
+        }
         if (typeof renderBgVidList === "function") renderBgVidList();
       }
     }
