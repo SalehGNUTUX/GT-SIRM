@@ -6053,24 +6053,64 @@ function drawBgTransition(ctx, srcCur, srcNext, alpha, W, H, type, softness) {
   }
 
   if (type.startsWith("slide")) {
-    const dx = (type === "slideleft") ? -W * alpha :
-               (type === "slideright") ? W * alpha : 0;
-    const dy = (type === "slideup") ? -H * alpha :
-               (type === "slidedown") ? H * alpha : 0;
-    const dxNext = (type === "slideleft") ? W * (1 - alpha) :
-                   (type === "slideright") ? -W * (1 - alpha) : 0;
-    const dyNext = (type === "slideup") ? H * (1 - alpha) :
-                   (type === "slidedown") ? -H * (1 - alpha) : 0;
+    const dx     = (type === "slideleft")  ? -W * alpha       : (type === "slideright") ?  W * alpha       : 0;
+    const dy     = (type === "slideup")    ? -H * alpha       : (type === "slidedown")  ?  H * alpha       : 0;
+    const dxNext = (type === "slideleft")  ?  W * (1 - alpha) : (type === "slideright") ? -W * (1 - alpha) : 0;
+    const dyNext = (type === "slideup")    ?  H * (1 - alpha) : (type === "slidedown")  ? -H * (1 - alpha) : 0;
+
     ctx.save();
-    ctx.globalAlpha = 1 - alpha * softness;
+    ctx.globalAlpha = 1;
     ctx.translate(dx, dy);
     drawSrc(srcCur);
     ctx.restore();
-    ctx.save();
+
+    if (softness < 0.03) {
+      ctx.save();
+      ctx.translate(dxNext, dyNext);
+      drawSrc(srcNext);
+      ctx.restore();
+      return;
+    }
+
+    // v1.2 fix — نُعومة حَقيقيّة لِلـslides عبر gradient mask
+    const { canvas: offCanvas, ctx: octx } = _getSoftMaskCanvas(W, H);
+    octx.setTransform(1, 0, 0, 1, 0, 0);
+    octx.clearRect(0, 0, W, H);
+    octx.globalAlpha = 1;
+    octx.globalCompositeOperation = "source-over";
+    octx.save();
+    octx.translate(dxNext, dyNext);
+    imgCover(octx, srcNext, 0, 0, W, H);
+    octx.restore();
+    const featherPx = Math.max(2, softness * Math.min(W, H) * 0.2);
+    octx.globalCompositeOperation = "destination-in";
+    let grad = null;
+    if (type === "slideleft") {
+      const edge = W * (1 - alpha);
+      grad = octx.createLinearGradient(edge - featherPx, 0, edge + featherPx, 0);
+      grad.addColorStop(0, "rgba(0,0,0,0)");
+      grad.addColorStop(1, "rgba(0,0,0,1)");
+    } else if (type === "slideright") {
+      const edge = W * alpha;
+      grad = octx.createLinearGradient(edge - featherPx, 0, edge + featherPx, 0);
+      grad.addColorStop(0, "rgba(0,0,0,1)");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+    } else if (type === "slideup") {
+      const edge = H * (1 - alpha);
+      grad = octx.createLinearGradient(0, edge - featherPx, 0, edge + featherPx);
+      grad.addColorStop(0, "rgba(0,0,0,0)");
+      grad.addColorStop(1, "rgba(0,0,0,1)");
+    } else if (type === "slidedown") {
+      const edge = H * alpha;
+      grad = octx.createLinearGradient(0, edge - featherPx, 0, edge + featherPx);
+      grad.addColorStop(0, "rgba(0,0,0,1)");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+    }
+    octx.fillStyle = grad;
+    octx.fillRect(0, 0, W, H);
+    octx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
-    ctx.translate(dxNext, dyNext);
-    drawSrc(srcNext);
-    ctx.restore();
+    ctx.drawImage(offCanvas, 0, 0);
     return;
   }
 
@@ -6136,20 +6176,35 @@ function drawBgTransition(ctx, srcCur, srcNext, alpha, W, H, type, softness) {
     return;
   }
 
-  // radial أَو غيره: hard clip + طَبَقة fade مُصاحِبة كـfallback
-  ctx.save();
-  ctx.beginPath();
-  _makeClipPath(ctx, type, alpha, W, H);
-  ctx.clip();
-  ctx.globalAlpha = 1;
-  drawSrc(srcNext);
-  ctx.restore();
-  if (softness > 0.02) {
+  // radial أَو غيره: نَستَخدِم blur-mask في off-canvas لِتَنعيم الحَواف
+  if (softness < 0.03) {
     ctx.save();
-    ctx.globalAlpha = alpha * softness;
+    ctx.beginPath();
+    _makeClipPath(ctx, type, alpha, W, H);
+    ctx.clip();
+    ctx.globalAlpha = 1;
     drawSrc(srcNext);
     ctx.restore();
+    return;
   }
+  // v1.2 fix — نُعومة radial عبر ctx.filter blur على mask
+  const { canvas: offCanvas2, ctx: octx2 } = _getSoftMaskCanvas(W, H);
+  octx2.setTransform(1, 0, 0, 1, 0, 0);
+  octx2.clearRect(0, 0, W, H);
+  octx2.globalAlpha = 1;
+  octx2.globalCompositeOperation = "source-over";
+  imgCover(octx2, srcNext, 0, 0, W, H);
+  const featherPx2 = Math.max(2, softness * Math.min(W, H) * 0.08);
+  octx2.globalCompositeOperation = "destination-in";
+  octx2.filter = `blur(${featherPx2.toFixed(1)}px)`;
+  octx2.fillStyle = "rgba(0,0,0,1)";
+  octx2.beginPath();
+  _makeClipPath(octx2, type, alpha, W, H);
+  octx2.fill();
+  octx2.filter = "none";
+  octx2.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.drawImage(offCanvas2, 0, 0);
 }
 
 function _makeClipPath(ctx, type, alpha, W, H) {

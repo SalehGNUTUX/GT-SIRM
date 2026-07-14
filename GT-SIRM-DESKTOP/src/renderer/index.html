@@ -254,8 +254,10 @@ body.desktop .browser-only{display:none!important}
 }
 .bgv-item.bgv-just-moved{animation:bgv-moved-highlight 1.4s ease-out}
 .bgv-trim-block{flex-basis:100%;display:flex;gap:4px;align-items:center;justify-content:flex-end;padding-top:3px;font-size:9.5px;color:var(--t3);flex-wrap:nowrap;overflow:hidden;min-width:0}
-.bgv-trim-block input[type=number]{width:42px;padding:2px 4px;font-size:9.5px;background:var(--bg4);border:1px solid var(--b1);color:var(--t1);border-radius:3px;flex-shrink:0}
-.bgv-trim-block select{background:var(--bg4);color:var(--t1);border:1px solid var(--b1);border-radius:3px;padding:2px 4px;font-size:9.5px;height:22px;cursor:pointer;font-family:inherit;appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg, transparent 50%, var(--t1) 50%), linear-gradient(135deg, var(--t1) 50%, transparent 50%);background-position:calc(100% - 6px) 50%, calc(100% - 3px) 50%;background-size:4px 4px, 4px 4px;background-repeat:no-repeat;padding-inline-end:14px;min-width:0;flex:1 1 90px;max-width:110px;text-overflow:ellipsis;overflow:hidden}
+.bgv-trim-block input[type=number]{width:52px;padding:2px 4px;font-size:9.5px;background:var(--bg4);border:1px solid var(--b1);color:var(--t1);border-radius:3px;flex-shrink:0;text-align:center;-moz-appearance:textfield}
+.bgv-trim-block input[type=number]::-webkit-inner-spin-button,
+.bgv-trim-block input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.bgv-trim-block select{background:var(--bg4);color:var(--t1);border:1px solid var(--b1);border-radius:3px;padding:2px 4px;font-size:9.5px;height:22px;cursor:pointer;font-family:inherit;appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg, transparent 50%, var(--t1) 50%), linear-gradient(135deg, var(--t1) 50%, transparent 50%);background-position:calc(100% - 6px) 50%, calc(100% - 3px) 50%;background-size:4px 4px, 4px 4px;background-repeat:no-repeat;padding-inline-end:14px;min-width:0;flex:1 1 80px;max-width:95px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
 .bgv-trim-block select:hover{border-color:var(--p)}
 .bgv-trim-block select:focus{outline:2px solid var(--p);outline-offset:1px;border-color:var(--p)}
 .bgv-trim-block select option{background:var(--bg3);color:var(--t1)}
