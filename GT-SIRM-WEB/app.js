@@ -6020,12 +6020,24 @@ function getEffectiveBgTransition() {
 }
 const BG_TRANSITION_TYPES = ["fade", "wipeleft", "wiperight", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "dissolve"];
 
+// v1.2 — كانفس مُخَبَّأ لِلـsoft-edge mask
+function _getSoftMaskCanvas(W, H) {
+  if (!S._softMaskCanvas || S._softMaskCanvas.width !== W || S._softMaskCanvas.height !== H) {
+    S._softMaskCanvas = document.createElement("canvas");
+    S._softMaskCanvas.width = W;
+    S._softMaskCanvas.height = H;
+    S._softMaskCtx = S._softMaskCanvas.getContext("2d");
+  }
+  return { canvas: S._softMaskCanvas, ctx: S._softMaskCtx };
+}
+
 function drawBgTransition(ctx, srcCur, srcNext, alpha, W, H, type, softness) {
   alpha = Math.max(0, Math.min(1, alpha));
   softness = Math.max(0, Math.min(1, softness ?? 0));
   const drawSrc = (s) => imgCover(ctx, s, 0, 0, W, H);
+  const drawSrcTo = (targetCtx, s) => imgCover(targetCtx, s, 0, 0, W, H);
 
-  if (type === "fade" || !srcNext) {
+  if (type === "fade" || type === "dissolve" || !srcNext) {
     ctx.globalAlpha = 1 - alpha;
     drawSrc(srcCur);
     if (srcNext) {
@@ -6035,66 +6047,112 @@ function drawBgTransition(ctx, srcCur, srcNext, alpha, W, H, type, softness) {
     return;
   }
 
-  const curAlpha = 1 - alpha * softness;
-  ctx.globalAlpha = curAlpha;
+  if (type.startsWith("slide")) {
+    const dx = (type === "slideleft") ? -W * alpha :
+               (type === "slideright") ? W * alpha : 0;
+    const dy = (type === "slideup") ? -H * alpha :
+               (type === "slidedown") ? H * alpha : 0;
+    const dxNext = (type === "slideleft") ? W * (1 - alpha) :
+                   (type === "slideright") ? -W * (1 - alpha) : 0;
+    const dyNext = (type === "slideup") ? H * (1 - alpha) :
+                   (type === "slidedown") ? -H * (1 - alpha) : 0;
+    ctx.save();
+    ctx.globalAlpha = 1 - alpha * softness;
+    ctx.translate(dx, dy);
+    drawSrc(srcCur);
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.translate(dxNext, dyNext);
+    drawSrc(srcNext);
+    ctx.restore();
+    return;
+  }
+
+  ctx.globalAlpha = 1;
   drawSrc(srcCur);
 
+  if (softness < 0.03) {
+    ctx.save();
+    ctx.beginPath();
+    _makeClipPath(ctx, type, alpha, W, H);
+    ctx.clip();
+    ctx.globalAlpha = 1;
+    drawSrc(srcNext);
+    ctx.restore();
+    return;
+  }
+
+  // v1.2 fix — نُعومة حَقيقيّة عبر gradient mask
+  const { canvas: offCanvas, ctx: octx } = _getSoftMaskCanvas(W, H);
+  octx.setTransform(1, 0, 0, 1, 0, 0);
+  octx.clearRect(0, 0, W, H);
+  octx.globalAlpha = 1;
+  octx.globalCompositeOperation = "source-over";
+  drawSrcTo(octx, srcNext);
+
+  const featherPx = Math.max(2, softness * Math.min(W, H) * 0.25);
+
+  octx.globalCompositeOperation = "destination-in";
+  let grad = null;
+
+  if (type === "wipeleft") {
+    const bx = W * (1 - alpha);
+    grad = octx.createLinearGradient(bx - featherPx, 0, bx + featherPx, 0);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(1, "rgba(0,0,0,1)");
+  } else if (type === "wiperight") {
+    const bx = W * alpha;
+    grad = octx.createLinearGradient(bx - featherPx, 0, bx + featherPx, 0);
+    grad.addColorStop(0, "rgba(0,0,0,1)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+  } else if (type === "circleopen") {
+    const cx = W / 2, cy = H / 2;
+    const rMax = Math.sqrt(W * W + H * H) / 2;
+    const r = rMax * alpha;
+    grad = octx.createRadialGradient(cx, cy, Math.max(0, r - featherPx), cx, cy, r + featherPx);
+    grad.addColorStop(0, "rgba(0,0,0,1)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+  } else if (type === "circleclose") {
+    const cx = W / 2, cy = H / 2;
+    const rMax = Math.sqrt(W * W + H * H) / 2;
+    const r = rMax * (1 - alpha);
+    grad = octx.createRadialGradient(cx, cy, Math.max(0, r - featherPx), cx, cy, r + featherPx);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(1, "rgba(0,0,0,1)");
+  }
+
+  if (grad) {
+    octx.fillStyle = grad;
+    octx.fillRect(0, 0, W, H);
+    octx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
+    ctx.drawImage(offCanvas, 0, 0);
+    return;
+  }
+
+  // radial أَو غيره: hard clip + طَبَقة fade مُصاحِبة كـfallback
   ctx.save();
   ctx.beginPath();
+  _makeClipPath(ctx, type, alpha, W, H);
+  ctx.clip();
+  ctx.globalAlpha = 1;
+  drawSrc(srcNext);
+  ctx.restore();
+  if (softness > 0.02) {
+    ctx.save();
+    ctx.globalAlpha = alpha * softness;
+    drawSrc(srcNext);
+    ctx.restore();
+  }
+}
+
+function _makeClipPath(ctx, type, alpha, W, H) {
   if (type === "wipeleft") {
     const x = W * (1 - alpha);
     ctx.rect(x, 0, W - x, H);
   } else if (type === "wiperight") {
-    const w = W * alpha;
-    ctx.rect(0, 0, w, H);
-  } else if (type === "slideleft") {
-    ctx.restore();
-    ctx.save();
-    ctx.globalAlpha = 1;
-    ctx.translate(-W * alpha, 0);
-    drawSrc(srcCur);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(W * (1 - alpha), 0);
-    drawSrc(srcNext);
-    ctx.restore();
-    return;
-  } else if (type === "slideright") {
-    ctx.restore();
-    ctx.save();
-    ctx.globalAlpha = 1;
-    ctx.translate(W * alpha, 0);
-    drawSrc(srcCur);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(-W * (1 - alpha), 0);
-    drawSrc(srcNext);
-    ctx.restore();
-    return;
-  } else if (type === "slideup") {
-    ctx.restore();
-    ctx.save();
-    ctx.globalAlpha = 1;
-    ctx.translate(0, -H * alpha);
-    drawSrc(srcCur);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(0, H * (1 - alpha));
-    drawSrc(srcNext);
-    ctx.restore();
-    return;
-  } else if (type === "slidedown") {
-    ctx.restore();
-    ctx.save();
-    ctx.globalAlpha = 1;
-    ctx.translate(0, H * alpha);
-    drawSrc(srcCur);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(0, -H * (1 - alpha));
-    drawSrc(srcNext);
-    ctx.restore();
-    return;
+    ctx.rect(0, 0, W * alpha, H);
   } else if (type === "circleopen") {
     const cx = W / 2, cy = H / 2;
     const rMax = Math.sqrt(W * W + H * H) / 2;
@@ -6111,31 +6169,8 @@ function drawBgTransition(ctx, srcCur, srcNext, alpha, W, H, type, softness) {
     ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, rMax, -Math.PI / 2, -Math.PI / 2 + ang);
     ctx.closePath();
-  } else if (type === "dissolve") {
-    ctx.restore();
-    ctx.globalAlpha = 1 - alpha;
-    drawSrc(srcCur);
-    ctx.globalAlpha = alpha;
-    drawSrc(srcNext);
-    return;
   } else {
-    ctx.restore();
-    ctx.globalAlpha = 1 - alpha;
-    drawSrc(srcCur);
-    ctx.globalAlpha = alpha;
-    drawSrc(srcNext);
-    return;
-  }
-  ctx.clip();
-  ctx.globalAlpha = 1;
-  drawSrc(srcNext);
-  ctx.restore();
-  // v1.2 — نُعومة إضافيّة: طَبَقة fade مُصاحِبة تَخفِّف الحَواف الحادّة
-  if (softness > 0.02) {
-    ctx.save();
-    ctx.globalAlpha = alpha * softness;
-    drawSrc(srcNext);
-    ctx.restore();
+    ctx.rect(0, 0, W, H);
   }
 }
 function updateBgVidCrossfade() {
@@ -6351,7 +6386,7 @@ function renderBgVidList() {
       <button data-act="down"   ${i === S.bgVidItems.length - 1 ? "disabled" : ""} title="أسفل">▼</button>
       <button data-act="remove" title="إزالة">✕</button>
       <span class="bgv-trim-block${trimActive ? ' on' : ''}" title="تَقليم مُدّة المَقطع + نَمط الاِنتقال">
-        <span title="تَقليم">✂️</span>
+        <span title="تَقليم" style="margin-inline-end:6px">✂️</span>
         <input type="number" min="0" max="${durMax}" step="0.1" value="${tStart.toFixed(2)}" data-act="trim-start" title="بَدء المَقطع (ث)">
         <span>→</span>
         <input type="number" min="0" max="${durMax}" step="0.1" value="${tEnd.toFixed(2)}" data-act="trim-end" title="نِهاية المَقطع (ث)">
