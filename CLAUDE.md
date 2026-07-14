@@ -2,22 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project state (2026-07-10)
+## Project state (2026-07-14)
 
-**GT-SIRM (GnuTux Short Islamic Reels Maker)** — at **v1.1.0 STABLE**. Triple-platform Electron+PWA+Capacitor Islamic reels maker forked from GT-SQRM/GT-SQR v3.0.
+**GT-SIRM (GnuTux Short Islamic Reels Maker)** — at **v1.2.0 STABLE**. Triple-platform Electron+PWA+Capacitor Islamic reels maker forked from GT-SQRM/GT-SQR v3.0.
 
 ### Current state
-- آخر release مَنشور: **v1.1.0** — https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.1.0 (AppImage + DEB + RPM + APK)
-- آخر commits: `71c5098` (landing links) → `43a1ca9` (v1.1.0 core) → `179e3bb` (hadith source docs)
+- v1.2.0 مُوَحَّد على `main` — جاهز لِلبِناء والنَشر (لم يُرفَع بَعد كـrelease على GitHub)
+- آخر release مَنشور: **v1.1.0** — https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.1.0
 - جميع الوَحدات الستّ مُكتمَلة: 6557 عُنصراً (قرآن + 90 حديث + 267 ذكر + 100 اسم + 32 دعاء + 32 حكمة)
-- الإصدار مُستقرّ — إضافات v1.1: النَصّ فَوق فيديو التِلاوة + تَطبيق تَأثيرات المَشهد عَلى recvid + إصلاحات مُشغّل + حَفظ تلقائيّ ذَكيّ
+- إضافات v1.2 الرَئيسيّة: مقاطع خَلفيّة مُتَقَدّمة (إعماء + per-clip trim + 11 اِنتقال + softness + per-clip transition) + Undo/Redo عامّ + استعادة مَحذوف + حَفظ/استعادة شامِل لِـS.verses + 12+ إصلاح جَوهريّ
 
 ### Latest versions
 | Platform | Version | Tag |
 |---|---|---|
-| **Desktop (AppImage/DEB/RPM)** | 1.1.0 | `v1.1.0` |
-| **Web (PWA)** | 1.1.0 | sw cache `gt-sirm-v63` |
-| **Android (APK)** | 1.1.0 | Capacitor 6 (with Share + App + Filesystem plugins) |
+| **Desktop (AppImage/DEB/RPM)** | 1.2.0 | `v1.2.0` (pending release) |
+| **Web (PWA)** | 1.2.0 | sw cache `gt-sirm-v64` |
+| **Android (APK)** | 1.2.0 | Capacitor 6 (Share + App + Filesystem) |
 
 ### Sibling repos (kept in sync for portable features)
 GT-SIRM features that are portable (chromakey, vtitle, project save, recvid, restart-all-btn) get backported to GT-SQRM/GT-SQR. Features tied to GT-SIRM's architecture (Module Manager, free text, per-slice timing+lock, content modules, work dir, collapsible UI, mic recorder, TTS, Android wrapping) are NOT ported.
