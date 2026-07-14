@@ -6341,14 +6341,14 @@ function renderBgVidList() {
       <button data-act="up"     ${i === 0 ? "disabled" : ""} title="أعلى">▲</button>
       <button data-act="down"   ${i === S.bgVidItems.length - 1 ? "disabled" : ""} title="أسفل">▼</button>
       <button data-act="remove" title="إزالة">✕</button>
-      <span class="bgv-trim-block${trimActive ? ' on' : ''}" title="تَقليم مُدّة المَقطع">
-        <span>✂️ من</span>
+      <span class="bgv-trim-block${trimActive ? ' on' : ''}" title="تَقليم مُدّة المَقطع + نَمط الاِنتقال">
+        <span title="تَقليم">✂️</span>
         <input type="number" min="0" max="${durMax}" step="0.1" value="${tStart.toFixed(2)}" data-act="trim-start" title="بَدء المَقطع (ث)">
-        <span>إلى</span>
+        <span>→</span>
         <input type="number" min="0" max="${durMax}" step="0.1" value="${tEnd.toFixed(2)}" data-act="trim-end" title="نِهاية المَقطع (ث)">
         <button data-act="trim-reset" title="إفراغ التَقليم (المَقطع كامِلاً)" ${trimActive ? '' : 'disabled'}>↺</button>
-        <span style="margin-inline-start:8px">🎞️</span>
-        <select data-act="clip-transition" title="نَمط اِنتقال هذا المَقطع (فارِغ = يَتبَع العامّ)">
+        <span title="نَمط اِنتقال">🎞️</span>
+        <select data-act="clip-transition" title="نَمط اِنتقال هذا المَقطع (— عامّ — = يَتبَع الإعداد العامّ)">
           <option value="">— عامّ —</option>
           <option value="fade">✨ ناعم</option>
           <option value="wipeleft">◀️ مَسح يَسار</option>
