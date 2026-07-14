@@ -984,17 +984,26 @@ function removeFreeAudio() {
   toast?.("🗑️ أُزيل ملفّ الصوت", "info", 1500);
 }
 
-// ── Toggle A: محرّر النصّ الحرّ (إظهار/إخفاء المحرّر فقط) ──────
+// ── Toggle A: محرّر النصّ الحرّ (إظهار/إخفاء + استعادة تلقائيّة) ──────
 function toggleFreeTextVisibility() {
   const cb = document.getElementById("free-text-on");
   const ctrl = document.getElementById("free-text-ctrl");
   if (!cb || !ctrl) return;
   ctrl.style.display = cb.checked ? "block" : "none";
 
-  // عند الإلغاء بعد تطبيق نصّ حرّ: عُد للقرآن
   if (!cb.checked && S.useFreeAsSource && !ge("quran-text-only")) {
+    // v1.2 — عند الإلغاء: النَصّ في textarea مَحفوظ، فَقط المَشهد يَعود للقرآن
     disableFreeAsSource();
-    toast?.("⤴️ عودة لمصدر التلاوة الافتراضيّ (القرآن)", "info", 1800);
+    toast?.("👁️‍🗨️ أُخفِيَ النَصّ الحرّ — نَصّك مَحفوظ في الحَقل لاستخدامه لاحِقاً", "info", 2200);
+  } else if (cb.checked) {
+    // v1.2 — عند إعادة التَفعيل: طَبِّق النَصّ تلقائياً إن كان لِلحَقل مُحتوى
+    const ta = document.getElementById("free-text-area");
+    if (ta && ta.value.trim() && typeof applyFreeText === "function") {
+      setTimeout(() => {
+        try { applyFreeText(); } catch (_) {}
+      }, 100);
+      toast?.("✅ استعادة النَصّ الحرّ من الحَقل", "success", 1400);
+    }
   }
   try { localStorage.setItem("gt_sirm_free_text_on", cb.checked ? "1" : "0"); } catch (_) {}
 }

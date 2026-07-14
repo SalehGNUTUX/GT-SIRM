@@ -931,8 +931,16 @@ function toggleFreeTextVisibility() {
   if (!cb || !ctrl) return;
   ctrl.style.display = cb.checked ? "block" : "none";
   if (!cb.checked && S.useFreeAsSource && !ge("quran-text-only")) {
+    // v1.2 — النَصّ في textarea مَحفوظ، فَقط المَشهد يَعود
     disableFreeAsSource();
-    toast?.("⤴️ عودة لمصدر التلاوة الافتراضيّ (القرآن)", "info", 1800);
+    toast?.("👁️‍🗨️ أُخفِيَ النَصّ الحرّ — نَصّك مَحفوظ في الحَقل لاستخدامه لاحِقاً", "info", 2200);
+  } else if (cb.checked) {
+    // v1.2 — تَفعيل: طَبِّق النَصّ تلقائياً إن كان مَوجوداً
+    const ta = document.getElementById("free-text-area");
+    if (ta && ta.value.trim() && typeof applyFreeText === "function") {
+      setTimeout(() => { try { applyFreeText(); } catch (_) {} }, 100);
+      toast?.("✅ استعادة النَصّ الحرّ من الحَقل", "success", 1400);
+    }
   }
   try { localStorage.setItem("gt_sirm_free_text_on", cb.checked ? "1" : "0"); } catch (_) {}
 }
