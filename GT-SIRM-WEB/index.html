@@ -246,7 +246,7 @@ details.sec > summary.sec-t:hover{color:var(--p)}
 #rec-ov{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:500;display:none;flex-direction:column;align-items:center;justify-content:center;gap:13px;backdrop-filter:blur(8px)}
 #rec-ov.on{display:flex}
 .rec-t{font-size:18px;font-weight:800;color:var(--al)}
-.rec-sub{font-size:11px;color:var(--t2);text-align:center}
+.rec-sub{font-size:11px;color:var(--t2);text-align:center;white-space:pre-line;line-height:1.7}
 .rec-bar{width:280px;height:6px;background:var(--b1);border-radius:6px;overflow:hidden}
 .rec-fill{height:100%;background:linear-gradient(90deg,var(--pl),var(--al));border-radius:6px;width:0%;transition:width .3s ease}
 
@@ -412,6 +412,7 @@ body.offline .offline-badge{display:block}
     <h3 id="export-done-title">✅ اكتَمَلَ التَصدير</h3>
     <div id="export-done-where" style="font-size:11px;line-height:1.7;margin-bottom:8px;word-break:break-word"></div>
     <div id="export-done-note" style="font-size:9px;color:var(--t3);line-height:1.6;margin-bottom:8px"></div>
+    <div id="export-done-perf" style="display:none;font-size:10px;line-height:1.8;background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-bottom:8px"></div>
     <div class="modal-btns" style="flex-wrap:wrap;gap:6px">
       <button class="btn btn-g" id="export-done-close-btn">إغلاق</button>
       <button class="btn btn-g" id="export-done-download-btn">⬇️ حِفظٌ آخَر</button>

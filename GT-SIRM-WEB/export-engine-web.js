@@ -70,25 +70,29 @@ function isWebCodecsSupported() {
 //   وحينَ يَكونُ إطارُ التَصديرِ أَسرَعَ مِن إطارِ المَصدَر (30 مِن 25 مَثَلاً)
 //   تَقَعُ إطاراتٌ مُتَتالِيةٌ عَلى نَفسِ إطارِ المَصدَر — فَلا داعِيَ لِتَكرارِه.
 //   السَماحُ الافتِراضيُّ 20ms (سُلوكُ ما قَبل v1.2.1) ما لَم يُمَرَّر غَيرُه.
-function seekVideoToTimeWeb(v, t, tolerance) {
+// v1.2.2 — يُعيدُ الآنَ وَصفاً لِما جَرى، لِيَعرِفَ المُصَدِّرُ أَينَ يَضيعُ الزَمَن:
+//   { skipped } لَم يَلزَمِ النَقل · { timedOut } انقَضَتِ المُهلةُ ولَم يَصِل
+//   حَدَثُ seeked (الإطارُ المَرسومُ عِندَئِذٍ قَديم) · { ms } الزَمَنُ المُستَغرَق.
+function seekVideoToTimeWeb(v, t, tolerance, guardMs) {
   return new Promise(resolve => {
-    if (!v || !isFinite(v.duration)) return resolve();
+    if (!v || !isFinite(v.duration)) return resolve({ skipped: true, ms: 0 });
     const tol = (typeof tolerance === "number" && tolerance > 0) ? tolerance : 0.02;
     const target = Math.min(t, Math.max(0, v.duration - 1e-4));
-    if (Math.abs(v.currentTime - target) < tol) return resolve();
+    if (Math.abs(v.currentTime - target) < tol) return resolve({ skipped: true, ms: 0 });
+    const t0 = performance.now();
     let done = false;
     let timer = null;
-    const finish = () => {
+    const finish = (timedOut) => {
       if (done) return;
       done = true;
       if (timer) { clearTimeout(timer); timer = null; }
       try { v.removeEventListener("seeked", onSeeked); } catch (_) {}
-      resolve();
+      resolve({ skipped: false, timedOut: !!timedOut, ms: performance.now() - t0 });
     };
-    const onSeeked = () => finish();
+    const onSeeked = () => finish(false);
     v.addEventListener("seeked", onSeeked);
-    try { v.currentTime = target; } catch (_) { finish(); return; }
-    timer = setTimeout(finish, 800);
+    try { v.currentTime = target; } catch (_) { finish(false); return; }
+    timer = setTimeout(() => finish(true), guardMs || 800);
   });
 }
 
@@ -675,6 +679,16 @@ async function startWebExportV2(opts) {
   const recVidOn    = !!(S.recVidEl && typeof ge === "function" && ge("recvid-on"));
   const tStartMs    = performance.now();
 
+  // v1.2.2 — مِقياسٌ لِكُلِّ طَورٍ داخِلَ الحَلقة. بِلا هذا يَبقى «التَصديرُ بَطيء»
+  //   تَخميناً: النَقلُ (seek) والرَسمُ والتَرميزُ لَها كُلَفٌ تَختَلِفُ عَشَراتِ
+  //   الأَضعافِ بِاختِلافِ المَشروعِ والجِهاز.
+  const prof = {
+    seek: 0, draw: 0, encode: 0, wait: 0, yield: 0,
+    seeks: 0, seekTimeouts: 0, seekSkips: 0, frames: 0,
+  };
+  window._sirmExportProfile = prof;
+  let seekDisabled = false;
+
   for (let i = 0; i < totalFrames; i++) {
     if (cancelRef?.canceled) break;
     const t = i / FPS;
@@ -684,7 +698,21 @@ async function startWebExportV2(opts) {
     //   الـseek هُوَ عُنُقُ الزُجاجةِ الأَوَّلُ في التَصدير، وانتِظارُهُما
     //   بِالتَوازي يَحذِفُ نِصفَ زَمَنِ الانتِظارِ حينَ يَجتَمِعان.
     const seekJobs = [];
-    if (visibleBgClips.length) {
+    // v1.2.2 — صِمامُ أَمان: إن كانَ العُنصُرُ <video> عاجِزاً عَنِ النَقلِ في هذه
+    //   البيئة (تَنقَضي المُهلةُ ولا يَصِلُ حَدَثُ seeked)، فَنَحنُ نَدفَعُ 800ms
+    //   لِكُلِّ إطارٍ ثُمَّ نَرسُمُ إطاراً قَديماً عَلى أَيّ حال — خَسارةٌ خالِصة.
+    //   بَعدَ 10 مُحاوَلاتٍ أَغلَبُها فاشِل: أَوقِفِ النَقلَ وأَبلِغِ المُستَخدِم.
+    if (!seekDisabled && prof.seeks >= 10 && prof.seekTimeouts / prof.seeks > 0.5) {
+      seekDisabled = true;
+      console.warn("[V2] النَقلُ (seek) يَفشَلُ في هذه البيئة — أُوقِفَ لِتَسريعِ التَصدير");
+      if (typeof toast === "function") {
+        toast("⚠️ تَعَذَّرَ نَقلُ فيديو الخَلفيّةِ إطاراً بِإطار عَلى هذا الجِهاز — " +
+              "سَيُكمِلُ التَصديرُ بِلا تَحريكِ الفيديو (أَسرَعُ بِكَثير). " +
+              "لِنَتيجةٍ أَفضَل: استَعمِل صورةَ خَلفيّة، أو صَدِّر مِن نُسخةِ سَطحِ المَكتَب.",
+              "warn", 9000);
+      }
+    }
+    if (!seekDisabled && visibleBgClips.length) {
       const cinfo = getBgClipAtTimeWeb(t, bgClipDurations, bgXf);
       if (cinfo) {
         S.bgVid = visibleBgClips[cinfo.clipIndex].vid;
@@ -704,15 +732,27 @@ async function startWebExportV2(opts) {
       }
     }
     // v0.7.3 — مزامنة فيديو التلاوة مع زمن الإطار
-    if (recVidOn) seekJobs.push(seekVideoToTimeWeb(S.recVidEl, t, recSeekTol));
-    if (seekJobs.length) await Promise.all(seekJobs);
+    if (!seekDisabled && recVidOn) seekJobs.push(seekVideoToTimeWeb(S.recVidEl, t, recSeekTol));
+    if (seekJobs.length) {
+      const tSeek = performance.now();
+      const results = await Promise.all(seekJobs);
+      prof.seek += performance.now() - tSeek;
+      for (const r of results) {
+        if (!r) continue;
+        if (r.skipped) prof.seekSkips++;
+        else { prof.seeks++; if (r.timedOut) prof.seekTimeouts++; }
+      }
+    }
 
     // بيانات الموجة الصوتية للإطار الحالي (null إن كانَتِ الموجاتُ مُطفَأة)
     S._exportWaveData = exportWaveData ? exportWaveData[i] : null;
     if (setStateForTime) setStateForTime(t);
+    const tDraw = performance.now();
     drawFrame(t);
+    prof.draw += performance.now() - tDraw;
 
     // VideoFrame من الـ canvas بـ timestamp دقيق
+    const tEnc = performance.now();
     const videoFrame = new VideoFrame(canvas, {
       timestamp: Math.round(t * 1_000_000),
       duration:  Math.round(1_000_000 / FPS),
@@ -721,12 +761,20 @@ async function startWebExportV2(opts) {
     const keyFrame = (i % FPS === 0);
     videoEncoder.encode(videoFrame, { keyFrame });
     videoFrame.close();
+    prof.encode += performance.now() - tEnc;
+    prof.frames++;
 
     // v1.2.1 — ضَغطُ الطابورِ عَبرَ حَدَثِ dequeue بَدَلَ setTimeout المَخنوق،
     //   ثُمَّ تَنازُلٌ واحِدٌ عَنِ المُعالِجِ عَبرَ MessageChannel (لا يُخنَقُ في
     //   الخَلفيّة) حَتّى تَجريَ رُدودُ المُرَمِّزِ وتَتَحَدَّثَ الواجِهة.
+    const tWait = performance.now();
     await waitForEncoderQueue(videoEncoder, 8);
-    if (window.PIO) await window.PIO.yieldToBrowser();
+    prof.wait += performance.now() - tWait;
+    if (window.PIO) {
+      const tY = performance.now();
+      await window.PIO.yieldToBrowser();
+      prof.yield += performance.now() - tY;
+    }
 
     const now = performance.now();
     if (now - lastUiTick > 200 || i === totalFrames - 1) {
@@ -740,7 +788,13 @@ async function startWebExportV2(opts) {
         const left = Math.round((per * (totalFrames - i - 1)) / 1000);
         eta = `  ·  مُتَبَقٍّ ~${formatTime(left)}`;
       }
-      onProgress(pct, `🎞 إطار ${i + 1}/${totalFrames}  ·  ${formatTime(t)} / ${formatTime(totalDuration)}${eta}`);
+      // v1.2.2 — مُتَوَسِّطُ كُلِّ طَورٍ بِالمِلِّي ثانية لِكُلِّ إطار: يَكشِفُ أَينَ
+      //   يَذهَبُ الزَمَنُ فِعلاً بَدَلَ التَخمين. «نقل» = نَقلُ الفيديو (seek).
+      const n = Math.max(1, prof.frames);
+      const ms = (x) => Math.round(x / n);
+      const to = prof.seekTimeouts ? ` ⚠️مُهلة×${prof.seekTimeouts}` : "";
+      const perf = `⏱ نقل ${ms(prof.seek)} · رسم ${ms(prof.draw)} · ترميز ${ms(prof.encode)} · انتظار ${ms(prof.wait)}${to}`;
+      onProgress(pct, `🎞 إطار ${i + 1}/${totalFrames}  ·  ${formatTime(t)} / ${formatTime(totalDuration)}${eta}\n${perf}`);
       // أَبقِ إشعارَ الخِدمةِ (Android) مُواكِباً حَتّى والبَرنامَجُ في الخَلفيّة
       if (window.PIO) window.PIO.keepAwakeProgress(pct, `إطار ${i + 1}/${totalFrames}${eta}`);
     }
@@ -804,7 +858,7 @@ async function startWebExportV2(opts) {
   onProgress(100, "✅ اكتمل التصدير!");
   // نُعيدُ الـblob كَذلِك: يَحتَفِظُ بِهِ التَطبيقُ لِزِرِّ «احفَظ مَرّةً أُخرى»
   // فَلا يَضيعُ الناتِجُ إن فَشِلَت وَسيلةُ الحَفظِ المُختارة.
-  return { ok: true, size: buffer.byteLength, blob, filename, mime, saved };
+  return { ok: true, size: buffer.byteLength, blob, filename, mime, saved, profile: prof };
 }
 
 function formatTime(s) {

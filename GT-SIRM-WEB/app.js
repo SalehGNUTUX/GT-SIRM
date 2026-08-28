@@ -6848,6 +6848,33 @@ function showExportResult(res) {
   $("export-done-where").innerHTML = `${where}<br><span style="color:var(--t3)">الحَجم: ${sizeMB} ميغابايت</span>`;
   $("export-done-note").textContent = note;
 
+  // v1.2.2 — تَشريحُ زَمَنِ التَصدير: أَينَ ذَهَبَتِ الثَواني فِعلاً
+  const pf = res.profile;
+  const perfEl = $("export-done-perf");
+  if (perfEl) {
+    if (pf && pf.frames) {
+      const n = pf.frames;
+      const ms = (x) => (x / n).toFixed(1);
+      const totalPer = ((pf.seek + pf.draw + pf.encode + pf.wait + pf.yield) / n).toFixed(1);
+      const rows = [
+        ["نَقلُ الفيديو (seek)", ms(pf.seek)],
+        ["الرَسم (drawFrame)",  ms(pf.draw)],
+        ["التَرميز",            ms(pf.encode)],
+        ["انتِظارُ المُرَمِّز",   ms(pf.wait)],
+        ["التَنازُل",           ms(pf.yield)],
+      ].map(([k, v]) => `<div style="display:flex;justify-content:space-between"><span>${k}</span><span dir="ltr">${v} ms</span></div>`).join("");
+      perfEl.innerHTML =
+        `<div style="font-weight:700;margin-bottom:4px">⏱ مُتَوَسِّطُ الإطارِ الواحِد (${n} إطاراً)</div>` +
+        rows +
+        `<div style="display:flex;justify-content:space-between;border-top:1px solid var(--b1);margin-top:4px;padding-top:4px;font-weight:700"><span>المَجموع</span><span dir="ltr">${totalPer} ms</span></div>` +
+        `<div style="color:var(--t3);margin-top:4px">نَقَلاتٌ مُنَفَّذة: ${pf.seeks} · مُتَخَطّاة: ${pf.seekSkips}` +
+        (pf.seekTimeouts ? ` · <b style="color:var(--danger,#e05)">انقَضَت مُهلَتُها: ${pf.seekTimeouts}</b>` : "") + `</div>`;
+      perfEl.style.display = "";
+    } else {
+      perfEl.style.display = "none";
+    }
+  }
+
   const shareBtn = $("export-done-share-btn");
   if (shareBtn) {
     const canShare = !!(window.PIO && (res.saved?.uri || (res.blob && window.PIO.canShareFiles())));
