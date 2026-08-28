@@ -18,7 +18,13 @@ const WEB_EXPORT_CODECS = {
   "mp4-h264": {
     ext: "mp4", muxer: "mp4",
     videoTries: [
-      { videoCodec: "avc", videoCodecStr: "avc1.42E01F" },  // H.264 Baseline
+      // v1.2.3 — جَوّد قَبلَ أن تَتَنازَل: كانَ الخِيارُ الوَحيدُ هُوَ Baseline،
+      //   وهُوَ أَدنى مِلَفّاتِ H.264 جَودةً عِندَ نَفسِ مُعَدَّلِ البِتّ (لا CABAC
+      //   ولا إطاراتِ B). High ثُمَّ Main يُعطِيانِ صورةً أَنقى بِنَفسِ الحَجم،
+      //   ويُسقَطُ إلى Baseline إن لَم يَدعَمهُما الجِهاز.
+      { videoCodec: "avc", videoCodecStr: "avc1.640028" },  // High 4.0
+      { videoCodec: "avc", videoCodecStr: "avc1.4D0028" },  // Main 4.0
+      { videoCodec: "avc", videoCodecStr: "avc1.42E01F" },  // Baseline (احتياط)
     ],
     audioTries: [
       { audioCodec: "aac",  audioCodecStr: "mp4a.40.2" },   // AAC LC (الأفضل قبولاً)
@@ -28,6 +34,7 @@ const WEB_EXPORT_CODECS = {
   "webm-vp9": {
     ext: "webm", muxer: "webm",
     videoTries: [
+      { videoCodec: "vp9", videoCodecStr: "vp09.02.10.10" },  // Profile 2، عُمقُ 10 بِت
       { videoCodec: "vp9", videoCodecStr: "vp09.00.10.08" },
       { videoCodec: "vp8", videoCodecStr: "vp8" },
     ],
@@ -79,12 +86,26 @@ function seekVideoToTimeWeb(v, t, tolerance, guardMs, noWait) {
     const tol = (typeof tolerance === "number" && tolerance > 0) ? tolerance : 0.02;
     const target = Math.min(t, Math.max(0, v.duration - 1e-4));
     if (Math.abs(v.currentTime - target) < tol) return resolve({ skipped: true, ms: 0 });
-    // v1.2.2 — الوَضعُ السَريع: اطلُبِ النَقلَ ولا تَنتَظِر. يَلحَقُ فاكُّ التَرميزِ
-    //   مُتَأَخِّراً بِإطارٍ أو إطارَين، ويَرسُمُ `drawBg` آخِرَ إطارٍ صالِحٍ رَيثَما
-    //   يَصِل — وهذا مَقبولٌ تَماماً لِخَلفيّةٍ مَشهَديّة، ويَحذِفُ أَثقَلَ انتِظارٍ
-    //   في الحَلقة. لا يُستَعمَلُ لِفيديو التِلاوةِ (يَجِبُ أن يُطابِقَ الصَوت).
+    // v1.2.3 — «تَقَدَّم عِندَ الجاهِزيّة» بَدَلَ «أَطلِق وانسَ».
+    //   الصيغةُ الأُولى (v1.2.2) كانَت تُسنِدُ currentTime في كُلِّ إطار، فَتُلغي
+    //   كُلُّ إسنادٍ النَقلةَ التي قَبلَه: لا تَكتَمِلُ نَقلةٌ واحِدةٌ أَبَداً،
+    //   فَتَتَجَمَّدُ الخَلفيّةُ عَلى أَوَّلِ إطارٍ — وهُوَ ما ظَهَرَ في الناتِج.
+    //   الصَحيحُ ألّا نَطلُبَ نَقلةً جَديدةً حَتّى تَنتَهيَ الجارية: فَتَتَقَدَّمُ
+    //   الخَلفيّةُ بِأَقصى ما يَسمَحُ بِهِ فاكُّ التَرميز، وتُعيدُ الإطاراتُ
+    //   البَينيّةُ آخِرَ إطارٍ مَفكوك. النَتيجة: خَلفيّةٌ مُتَحَرِّكةٌ بِمُعَدَّلِ
+    //   إطاراتٍ أَقَلّ، بِلا انتِظارٍ في الحَلقة.
     if (noWait) {
-      try { v.currentTime = target; } catch (_) {}
+      if (v._sirmSeeking) return resolve({ skipped: true, ms: 0 });
+      v._sirmSeeking = true;
+      const clear = () => {
+        v._sirmSeeking = false;
+        try { v.removeEventListener("seeked", clear); } catch (_) {}
+        if (v._sirmSeekGuard) { clearTimeout(v._sirmSeekGuard); v._sirmSeekGuard = null; }
+      };
+      v.addEventListener("seeked", clear);
+      // حارِسٌ لِئَلّا يَبقى العَلَمُ مَرفوعاً لَو ضاعَ حَدَثُ seeked
+      v._sirmSeekGuard = setTimeout(clear, 1500);
+      try { v.currentTime = target; } catch (_) { clear(); }
       return resolve({ skipped: false, noWait: true, ms: 0 });
     }
     const t0 = performance.now();
@@ -509,6 +530,10 @@ async function startWebExportV2(opts) {
     width: W, height: H,
     bitrate: (videoBitrate || 8) * 1_000_000,
     framerate: FPS,
+    // v1.2.3 — التَصديرُ لَيسَ بَثّاً حَيّاً: أَخبِرِ المُرَمِّزَ أن يُؤثِرَ الجَودةَ
+    //   عَلى زَمَنِ الاستِجابة (يُتيحُ نَظَراً أَمامِيّاً وإطاراتِ B حَيثُ تُدعَم).
+    latencyMode: "quality",
+    bitrateMode: "variable",
   };
   const baseAudioCfg = {
     numberOfChannels: channels,
@@ -517,12 +542,21 @@ async function startWebExportV2(opts) {
   };
 
   let fmt = null, pickedV = null, pickedA = null;
+  // v1.2.3 — `latencyMode`/`bitrateMode` حَديثانِ نِسبيّاً. إن رَفَضَهُما مُحَرِّكٌ
+  //   أَقدَم لَرُفِضَت كُلُّ الكوديكاتِ وفَشِلَ التَصديرُ كامِلاً — فَنُعيدُ المُحاوَلةَ
+  //   بِإعدادٍ أَدنى بَدَلَ أن نَستَسلِم.
+  const videoCfgTries = [baseVideoCfg, {
+    width: W, height: H,
+    bitrate: (videoBitrate || 8) * 1_000_000,
+    framerate: FPS,
+  }];
+  for (const vcfg of videoCfgTries) {
   for (const key of tryOrder) {
     const candidate = WEB_EXPORT_CODECS[key];
     if (!candidate) continue;
     const MuxerLib = (candidate.muxer === "mp4") ? window.Mp4Muxer : window.WebmMuxer;
     if (!MuxerLib) continue;
-    const v = await pickSupportedVideoCodec(candidate.videoTries, baseVideoCfg);
+    const v = await pickSupportedVideoCodec(candidate.videoTries, vcfg);
     const a = await pickSupportedAudioCodec(candidate.audioTries, baseAudioCfg);
     if (v && a) {
       fmt = candidate; pickedV = v; pickedA = a;
@@ -537,6 +571,9 @@ async function startWebExportV2(opts) {
       }
       break;
     }
+  }
+  if (fmt) break;
+  console.warn("[V2] لَم يُقبَل أَيُّ كوديكٍ بِالإعدادِ المُجَوَّد — إعادةُ المُحاوَلةِ بِإعدادٍ أَدنى");
   }
   if (!fmt) {
     throw new Error("لا يدعم المتصفح أي كوديك متاح. حاول Chrome/Edge أحدث.");
@@ -655,6 +692,7 @@ async function startWebExportV2(opts) {
   const savedBgVidNext   = S.bgVidNext;
   const savedBgFadeProg  = S.bgVidFadeProgress;
   let lastUiTick = 0;
+  let lastYieldTick = 0;
 
   // علم: يَمنَع updateBgVidCrossfade من العَبَث بحالة الـcrossfade خلال التَصدير
   S._exportingV2 = true;
@@ -692,7 +730,7 @@ async function startWebExportV2(opts) {
   //   الأَضعافِ بِاختِلافِ المَشروعِ والجِهاز.
   const prof = {
     seek: 0, draw: 0, encode: 0, wait: 0, yield: 0,
-    seeks: 0, seekTimeouts: 0, seekSkips: 0, seekNoWait: 0, frames: 0,
+    seeks: 0, seekTimeouts: 0, seekSkips: 0, seekNoWait: 0, frames: 0, bgFrames: 0,
   };
   window._sirmExportProfile = prof;
   let seekDisabled = false;
@@ -789,7 +827,14 @@ async function startWebExportV2(opts) {
     const tWait = performance.now();
     await waitForEncoderQueue(videoEncoder, 8);
     prof.wait += performance.now() - tWait;
-    if (window.PIO) {
+
+    // v1.2.3 — التَنازُلُ عَنِ المُعالِجِ كَلَّفَ 36ms لِلإطارِ في قِياسِ المُستَخدِم
+    //   (30% مِنَ الزَمَن): كُلُّ تَنازُلٍ يَسمَحُ لِلمُتَصَفِّحِ بِتَركيبِ اللَوحةِ
+    //   كامِلةً عَلى الشاشة. لا نَحتاجُ ذلِكَ لِكُلِّ إطار — يَكفي كُلَّ 120ms
+    //   لِتَبقى الواجِهةُ حَيّةً ويَجريَ رَدُّ المُرَمِّز.
+    const nowY = performance.now();
+    if (window.PIO && (nowY - lastYieldTick > 120 || i === totalFrames - 1)) {
+      lastYieldTick = nowY;
       const tY = performance.now();
       await window.PIO.yieldToBrowser();
       prof.yield += performance.now() - tY;
@@ -830,7 +875,12 @@ async function startWebExportV2(opts) {
   S._exportingV2 = false;
   // أَوقِف كُلّ فيديوهات الخَلفيّة (كانت مُسَلَّمة للـseek)
   for (const it of (S.bgVidItems || [])) {
-    try { it.vid.pause(); } catch (_) {}
+    try {
+      it.vid.pause();
+      // v1.2.3 — أَسقِط أَعلامَ «نَقلةٌ جارية» حَتّى لا تَمنَعَ تَصديراً لاحِقاً
+      it.vid._sirmSeeking = false;
+      if (it.vid._sirmSeekGuard) { clearTimeout(it.vid._sirmSeekGuard); it.vid._sirmSeekGuard = null; }
+    } catch (_) {}
   }
 
   if (cancelRef?.canceled) {

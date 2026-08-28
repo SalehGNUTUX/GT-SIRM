@@ -218,6 +218,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   restoreLogo();
   restoreMixedAnimsOrder();
   applyCanvasSize();     // v1.2.1 — طَبِّق سَقفَ الدِقّةِ المُستَعادَ واعرِضِ الأَبعاد
+  injectResetButtons();  // v1.2.3 — زِرُّ ↺ في تَرويسةِ كُلِّ قِسم
   initAutoSave();
 
   // تحميل فهرس القرآن الكامل في الخلفية للعمل دون اتصال
@@ -2416,9 +2417,28 @@ function initEventListeners() {
     try { textOnlyCb.checked = localStorage.getItem("gt_sirm_quran_text_only") === "1"; } catch (_) {}
     textOnlyCb.addEventListener("change", () => {
       try { localStorage.setItem("gt_sirm_quran_text_only", textOnlyCb.checked ? "1" : "0"); } catch (_) {}
+      // v1.2.3 — الوَضعانِ مُتَنافِيان
+      const ao = document.getElementById("quran-audio-only");
+      if (textOnlyCb.checked && ao && ao.checked) { ao.checked = false; ao.dispatchEvent(new Event("change")); }
       toast?.(textOnlyCb.checked
         ? "🔇 وضع النصّ فقط مُفعَّل — اضغط 'تحميل الآيات' لتطبيقه"
         : "🔊 وضع النصّ فقط مُلغى — التحميل التالي يشمل صوت القارئ", "info", 2200);
+    });
+  }
+
+  // v1.2.3 — «استيرادُ الصَوتِ فَقَط»: نَقيضُ «النَصّ فَقَط»، فَلا يَجتَمِعان
+  const audioOnlyCb = $("quran-audio-only");
+  if (audioOnlyCb) {
+    try { audioOnlyCb.checked = localStorage.getItem("gt_sirm_quran_audio_only") === "1"; } catch (_) {}
+    audioOnlyCb.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_quran_audio_only", audioOnlyCb.checked ? "1" : "0"); } catch (_) {}
+      if (audioOnlyCb.checked && textOnlyCb && textOnlyCb.checked) {
+        textOnlyCb.checked = false;
+        textOnlyCb.dispatchEvent(new Event("change"));
+      }
+      toast?.(audioOnlyCb.checked
+        ? "🔊 صَوتٌ فَقَط — تُتلى الآياتُ ولا يُرسَمُ نَصُّها"
+        : "📝 عادَ رَسمُ نَصِّ الآيات", "info", 2400);
     });
   }
 
@@ -2440,6 +2460,10 @@ function initEventListeners() {
   // v1.2.1 — سَقفُ دِقّةِ التَصدير (كانَ عُنصُراً مَيِّتاً لا يَقرَؤُهُ أَحَد)
   const resEl = $("export-res");
   if (resEl) resEl.addEventListener("change", onExportResChange);
+
+  // v1.2.3 — إعادةٌ شامِلةٌ لِلإعدادات
+  const resetAllBtn = $("reset-all-settings-btn");
+  if (resetAllBtn) resetAllBtn.addEventListener("click", resetAllSettings);
 
   const toggleAddReciterBtn = $("toggle-add-reciter-btn");
   if (toggleAddReciterBtn) toggleAddReciterBtn.addEventListener("click", toggleAddReciter);
@@ -3196,7 +3220,10 @@ function drawFrame(ts) {
   if (ge("fx-oldfilm")) applyOldFilm(ctx, W, H, ts);
   if (recvidPos === "late") drawRecitationVideo(ctx, W, H);
   // اِرسِم النَصّ إن لَم يَكُن الفيديو فَعّالاً، أَو كان فَعّالاً مع تَوگل "إظهار النَصّ فَوق الفيديو"
-  if (S.verses.length && (!recvidActive || recvidShowText) && !(S.verses.length === 1 && S.verses[0]?.recvid)) drawVerse(ctx, W, H, ts);
+  // v1.2.3 — «استيرادُ الصَوتِ فَقَط»: تُتلى الآياتُ ولا يُرسَمُ نَصُّها
+  //   (ولا تَرجَمَتُها ولا رَقَمُها — كُلُّها داخِلَ drawVerse).
+  const audioOnly = ge("quran-audio-only");
+  if (!audioOnly && S.verses.length && (!recvidActive || recvidShowText) && !(S.verses.length === 1 && S.verses[0]?.recvid)) drawVerse(ctx, W, H, ts);
   drawSurahName(ctx, W, H);
   drawVideoTitle(ctx, W, H);
   drawWave(ctx, W, H, ts);
@@ -4257,6 +4284,14 @@ function drawVideoTitle(ctx, W, H) {
   ctx.restore();
 }
 
+// v1.2.3 — مُشتَرَك: واجِهةُ alquran.cloud تُعيدُ الاسمَ مَسبوقاً بِـ«سُورَةُ»
+//   (مُشَكَّلةً)، فَإن أُضيفَت كَلِمةُ «سورة» أَمامَهُ تَكَرَّرَت: «سورة سُورَةُ الكَهْفِ».
+//   كانَت هذه المُعالَجةُ داخِلَ drawSurahName وَحدَها، فَتَسَرَّبَ التَكرارُ إلى
+//   اسمِ المَلَفِّ المُصَدَّر.
+function stripSurahPrefix(name) {
+  return String(name || "").replace(/^\s*(?:سُورَةُ|سُورَة|سُورة|سورة)\s+/u, "");
+}
+
 function drawSurahName(ctx, W, H) {
   if (!ge("sname-on")) return;
   if (!S.surahs || !S.surahs.length) return;
@@ -4266,7 +4301,7 @@ function drawSurahName(ctx, W, H) {
 
   const prefix = $("sname-prefix")?.value || "surah";
   const rawName = surah.name || "";
-  const cleanName = rawName.replace(/^\s*(?:سُورَةُ|سُورَة|سُورة|سورة)\s+/u, "");
+  const cleanName = stripSurahPrefix(rawName);
   const label = prefix === "surah" ? `سُورَةُ ${cleanName}`
               : prefix === "hizb"  ? `حِزْبُ ${cleanName}`
               :                       cleanName;
@@ -7834,6 +7869,188 @@ function updateAyaUI() {
 }
 function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`; }
 
+
+// ══════════════════════════════════════════════════════
+//  v1.2.3 — إعادةُ الإعداداتِ إلى وَضعِها الافتِراضيّ
+//  ───────────────────────────────────────────────────
+//  مَصدَرُ الافتِراضيّاتِ هُوَ HTML نَفسُه، لا جَدوَلٌ مُوازٍ يُنسى تَحديثُه:
+//  المُتَصَفِّحُ يَحفَظُ `defaultValue` و`defaultChecked` و`defaultSelected`
+//  مِن سِماتِ العُنصُرِ في الصَفحة، واستعادةُ الإعداداتِ تَكتُبُ `.value`
+//  و`.checked` ولا تَمَسُّ تِلكَ السِمات. فَكُلُّ عُنصُرٍ يَعرِفُ افتِراضِيَّهُ
+//  بِنَفسِه، وأَيُّ إعدادٍ جَديدٍ يُضافُ لاحِقاً يَنالُ الميزةَ تِلقائيّاً.
+//
+//  زِرُّ ↺ يُحقَنُ في تَرويسةِ كُلِّ قِسم، وزِرٌّ شامِلٌ في الإعدادات.
+//  الإعادةُ قابِلةٌ لِلتَراجُعِ عَبرَ نِظامِ Undo القائِم.
+// ══════════════════════════════════════════════════════
+
+// حاوِياتٌ مُوَلَّدةٌ ديناميكيّاً تَحمِلُ بَياناتِ المُستَخدِمِ لا إعداداتِه
+// (مَقاطِعُ الخَلفيّةِ وتَوقيتُ الشَرائِحِ ونَموذَجُ إضافةِ قارئ) — تُستَثنى كامِلةً.
+const RESET_SKIP_CONTAINERS = [
+  "#bg-vid-list", "#add-reciter-form", "#free-per-slice-list", "#verse-search-results",
+];
+// حاوِياتٌ مُوَلَّدةٌ لَكِنَّ اختيارَها إعدادٌ حَقيقيّ (الخَطّ والقارئ):
+// نَسمَحُ بِإعادةِ أَزرارِ الاختيارِ وَحدَها. ولَمّا كانَت مُوَلَّدةً بِـJS فَلا
+// تَحمِلُ سِمةَ `checked` في HTML، فَالافتِراضيُّ = أَوَّلُ خِيارٍ في المَجموعة
+// (وهُوَ أَوَّلُ عُنصُرٍ في BUILT_IN_FONTS و RECITERS_LIST — أَي المُدمَجُ الأَوَّل).
+const RESET_RADIO_ONLY_CONTAINERS = ["#font-grid", "#reciters-grid"];
+// حُقولُ مُحتَوىً لا إعدادات (نَصُّ المُستَخدِمِ وبَحثُه)
+const RESET_SKIP_IDS = [
+  "free-text-area", "surah-search", "verse-search-inp",
+  "tpl-name-inp", "ar-name", "ar-folder", "ar-flag",
+];
+
+function _isResettable(el) {
+  if (!el || el.disabled) return false;
+  const t = (el.type || "").toLowerCase();
+  if (t === "file" || t === "button" || t === "submit" || t === "reset" || t === "search") return false;
+  if (el.hasAttribute("data-no-reset")) return false;
+  if (el.id && RESET_SKIP_IDS.includes(el.id)) return false;
+  // نَصٌّ حُرٌّ طَويل = مُحتَوىً، إلّا أن يُطلَبَ صَراحةً
+  if (el.tagName === "TEXTAREA" && !el.hasAttribute("data-reset")) return false;
+  for (const sel of RESET_SKIP_CONTAINERS) {
+    if (el.closest(sel)) return false;
+  }
+  for (const sel of RESET_RADIO_ONLY_CONTAINERS) {
+    if (el.closest(sel)) return el.type === "radio" || el.type === "checkbox";
+  }
+  return true;
+}
+
+// يَلتَقِطُ الحالةَ الراهِنةَ لِيُمكِنَ التَراجُع
+function _captureState(els) {
+  return els.map(el => ({
+    el,
+    value: el.value,
+    checked: (el.type === "checkbox" || el.type === "radio") ? el.checked : null,
+  }));
+}
+
+function _applyState(snapshot) {
+  const touched = new Set();
+  for (const s of snapshot) {
+    if (s.checked !== null) s.el.checked = s.checked;
+    else s.el.value = s.value;
+    touched.add(s.el);
+  }
+  _fireChangeFor(Array.from(touched));
+}
+
+// يُعيدُ عُنصُراً واحِداً لِافتِراضيِّهِ المَأخوذِ مِن سِماتِ HTML
+function _resetOne(el) {
+  if (el.tagName === "SELECT") {
+    let target = null;
+    for (const o of el.options) if (o.defaultSelected) { target = o; break; }
+    if (!target && el.options.length) target = el.options[0];
+    if (target && el.value !== target.value) { el.value = target.value; return true; }
+    return false;
+  }
+  if (el.type === "radio") {
+    // مَجموعةٌ مُوَلَّدةٌ بِـJS لا سِمةَ checked في أَيٍّ مِن أَفرادِها:
+    // اعتَبِرِ الأَوَّلَ افتِراضِيَّها.
+    const group = el.name ? document.querySelectorAll(`input[name="${el.name}"]`) : [el];
+    let def = null;
+    for (const r of group) if (r.defaultChecked) { def = r; break; }
+    if (!def) def = group[0];
+    const want = (el === def);
+    if (el.checked !== want) { el.checked = want; return true; }
+    return false;
+  }
+  if (el.type === "checkbox") {
+    if (el.checked !== el.defaultChecked) { el.checked = el.defaultChecked; return true; }
+    return false;
+  }
+  if (el.value !== el.defaultValue) { el.value = el.defaultValue; return true; }
+  return false;
+}
+
+// إطلاقُ الأَحداثِ حَتّى تَستَجيبَ الواجِهةُ (تَسمياتُ الشَرائِطِ، إظهارُ اللَوحات…)
+function _fireChangeFor(els) {
+  const radiosDone = new Set();
+  for (const el of els) {
+    if (el.type === "radio") {
+      if (radiosDone.has(el.name)) continue;
+      radiosDone.add(el.name);
+      const checked = document.querySelector(`input[name="${el.name}"]:checked`);
+      if (checked) checked.dispatchEvent(new Event("change", { bubbles: true }));
+      continue;
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
+/**
+ * يُعيدُ كُلَّ إعداداتِ نِطاقٍ (قِسمٍ أو اللَوحةِ كامِلةً) لِافتِراضيِّها.
+ * قابِلٌ لِلتَراجُعِ عَبرَ نِظامِ Undo.
+ */
+function resetScope(root, label) {
+  if (!root) return 0;
+  const els = Array.from(root.querySelectorAll("input, select, textarea")).filter(_isResettable);
+  if (!els.length) { toast?.("لا إعداداتٍ في هذا القِسم", "info", 1600); return 0; }
+
+  const before = _captureState(els);
+  const changed = [];
+  for (const el of els) if (_resetOne(el)) changed.push(el);
+
+  if (!changed.length) { toast?.(`↺ ${label || "القِسم"} عَلى الوَضعِ الافتِراضيِّ أَصلاً`, "info", 1800); return 0; }
+
+  _fireChangeFor(els);
+  const after = _captureState(els);
+
+  if (typeof historyPush === "function") {
+    historyPush({
+      label: `إعادةُ ${label || "قِسم"} لِلافتِراضيّ`,
+      undo: () => _applyState(before),
+      redo: () => _applyState(after),
+    });
+  }
+  if (typeof saveAllSettings === "function") { try { saveAllSettings(); } catch (_) {} }
+  if (typeof markProjectDirty === "function") markProjectDirty();
+
+  toast?.(`↺ أُعيدَ ${changed.length} إعداداً لِلافتِراضيّ — ${label || ""} · ↩️ لِلتَراجُع`, "success", 3000);
+  return changed.length;
+}
+
+// يَحقِنُ زِرَّ ↺ في تَرويسةِ كُلِّ قِسم
+function injectResetButtons() {
+  document.querySelectorAll("details.sec > summary.sec-t").forEach(sum => {
+    if (sum.querySelector(".sec-reset")) return;
+    const details = sum.parentElement;
+    // تَخَطَّ الأَقسامَ التي لا إعداداتٍ فيها
+    const hasAny = Array.from(details.querySelectorAll("input, select, textarea")).some(_isResettable);
+    if (!hasAny) return;
+
+    const label = (sum.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "sec-reset";
+    btn.textContent = "↺";
+    btn.title = `إعادةُ إعداداتِ «${label}» إلى الوَضعِ الافتِراضيّ`;
+    btn.setAttribute("aria-label", btn.title);
+    btn.addEventListener("click", (e) => {
+      // داخِلَ <summary>: امنَع طَيَّ القِسمِ عِندَ النَقرِ عَلى الزِرّ
+      e.preventDefault();
+      e.stopPropagation();
+      resetScope(details, label);
+    });
+    sum.appendChild(btn);
+  });
+}
+
+/** إعادةٌ شامِلةٌ لِكُلِّ الإعدادات — فِعلٌ واسِعٌ فَيُستَأذَنُ فيه. */
+function resetAllSettings() {
+  const panel = document.getElementById("panel") || document.body;
+  const els = Array.from(panel.querySelectorAll("input, select, textarea")).filter(_isResettable);
+  const ok = confirm(
+    `إعادةُ جَميعِ الإعداداتِ (${els.length} إعداداً) إلى وَضعِها الافتِراضيّ؟\n\n` +
+    "لا يُمَسُّ مُحتَواك: النَصُّ الحُرُّ والمَقاطِعُ والصَوتُ والقَوالِبُ المَحفوظةُ تَبقى كَما هي.\n" +
+    "أمّا حُقولُ العَناوينِ القَصيرة (عُنوانُ المَقطَعِ والعَلامةُ المائيّة) فَتَعودُ لِنَصِّها الافتِراضيّ.\n" +
+    "والتَراجُعُ مُتاحٌ بِزِرِّ ↩️ أو Ctrl+Z."
+  );
+  if (!ok) return;
+  resetScope(panel, "جَميعُ الإعدادات");
+}
+
 // ══════════════════════════════════════════════════════
 //  EXPORT
 // ══════════════════════════════════════════════════════
@@ -8572,7 +8789,7 @@ async function loadVerses() {
       audioSecondary: [],
       manualDuration: dur,
       free: true,
-      source: `سورة ${surah?.name || ""} (نصّ فقط)`,
+      source: `سورة ${stripSurahPrefix(surah?.name) || ""}`,
     }));
     S.useFreeAsSource = true;
     // أوقف صوت القارئ إن كان يعمل
@@ -8600,8 +8817,8 @@ async function loadVerses() {
   }
 
   S.verses = verses; S.currentAya = 0; S.elapsed = 0; S.ayaDurations = [];
-  const suffix = textOnly ? " · 🔇 نصّ فقط" : "";
-  $("aya-info").textContent = `✅ ${verses.length} آية من سورة ${surah?.name || ""} ${source}${suffix}`;
+  const suffix = textOnly ? " · 🔇 نصّ فقط" : (ge("quran-audio-only") ? " · 🔊 صوت فقط" : "");
+  $("aya-info").textContent = `✅ ${verses.length} آية من سورة ${stripSurahPrefix(surah?.name) || ""} ${source}${suffix}`;
   updateAyaUI();
   await loadTranslations();
 }

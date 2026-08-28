@@ -90,6 +90,10 @@ details.sec > summary.sec-t::after{content:"▸";opacity:.5;margin-inline-start:
 details.sec[open] > summary.sec-t::after{content:"▾"}
 details.sec > summary.sec-t:hover{color:var(--p)}
 .sec-t{font-size:9px;font-weight:800;color:var(--a);text-transform:uppercase;letter-spacing:1.4px;margin-bottom:7px;padding-bottom:4px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:5px}
+.sec-reset{background:transparent;border:1px solid var(--b1);color:var(--t3);border-radius:5px;font-size:11px;line-height:1;padding:2px 5px;cursor:pointer;margin-inline-start:auto;transition:all .15s;flex:none}
+.sec-reset:hover{color:var(--a);border-color:var(--a);background:rgba(255,255,255,.05)}
+.sec-reset:active{transform:rotate(-90deg)}
+details.sec > summary.sec-t::after{margin-inline-start:6px !important}
 .fg{margin-bottom:7px}
 .fl{display:block;font-size:10px;color:var(--t2);margin-bottom:2px}
 
@@ -458,7 +462,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small>GnuTux Short Islamic Reels Maker v1.2.2</small>
+      <small>GnuTux Short Islamic Reels Maker v1.2.3</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -563,6 +567,10 @@ body.offline .offline-badge{display:block}
           <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px;margin-bottom:5px">
             <span class="tgl">🔇 استيراد النصّ فقط<br><small style="color:var(--t3)">عند التفعيل: تُحمَّل آيات القرآن نصّاً فقط بدون صوت قارئ، لاستخدامها مع تلاوة محليّة مخصّصة</small></span>
             <label class="tg"><input type="checkbox" id="quran-text-only"><span class="tgs"></span></label>
+          </div>
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px;margin-bottom:5px">
+            <span class="tgl">🔊 استيرادُ الصَوتِ فَقَط<br><small style="color:var(--t3)">عَكسُ ما فَوقَه: تُتلى الآياتُ بِصَوتِ القارئِ ولا يُرسَمُ نَصُّها. لِمَن عِندَهُ مَقطَعٌ جاهِزٌ نَصُّهُ مَحفورٌ فيهِ ويُريدُ تَركيبَ التِلاوةِ عَلَيه.</small></span>
+            <label class="tg"><input type="checkbox" id="quran-audio-only"><span class="tgs"></span></label>
           </div>
           <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px;margin-bottom:5px">
             <span class="tgl">🕋 البَسمَلة شَريحةً مُستَقِلّة<br><small style="color:var(--t3)">تُكتَبُ <b>وتُتلى</b> بِصَوتِ القارئ قَبلَ الآيةِ الأُولى. عِندَ الإطفاء تُحذَفُ مِنَ النَصّ فلا تُكتَبُ ولا تُتلى. (لا تَظهَرُ في الفاتِحةِ لأنّها آيةٌ فيها، ولا في بَراءة)</small></span>
@@ -1764,7 +1772,7 @@ body.offline .offline-badge{display:block}
             <div id="export-res-info" style="font-size:9px;color:var(--t3);margin-top:3px"></div>
           </div>
           <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px;margin-bottom:5px">
-            <span class="tgl">⚡ تَسريعُ خَلفيّةِ الفيديو<br><small style="color:var(--t3)">لا يَنتَظِرُ نَقلَ فيديو الخَلفيّةِ عِندَ كُلِّ إطار — أَسرَعُ بِكَثيرٍ عَلى الهاتِف. قَد تَتَأَخَّرُ الخَلفيّةُ إطاراً أو إطارَين، وهُوَ غَيرُ مَلحوظٍ في المَشاهِدِ الطَبيعيّة. فيديو التِلاوةِ يَبقى مُتَزامِناً دائِماً.</small></span>
+            <span class="tgl">⚡ تَسريعُ خَلفيّةِ الفيديو<br><small style="color:var(--t3)">لا يَنتَظِرُ فَكَّ تَرميزِ الخَلفيّةِ عِندَ كُلِّ إطار: تَتَقَدَّمُ بِأَقصى ما يَسمَحُ بِهِ الجِهاز، وتُعيدُ الإطاراتُ البَينيّةُ آخِرَ إطارٍ مَفكوك. فَتَكونُ الخَلفيّةُ أَقَلَّ سَلاسةً لَكِنَّ التَصديرَ أَسرَعُ بِكَثير. أَطفِئهُ لِخَلفيّةٍ كامِلةِ السَلاسةِ مَعَ تَصديرٍ أَبطَأ. فيديو التِلاوةِ يَبقى مُتَزامِناً دائِماً.</small></span>
             <label class="tg"><input type="checkbox" id="export-bg-fast" checked><span class="tgs"></span></label>
           </div>
           <div class="fg"><label class="fl">معدل الإطارات (FPS)</label>
@@ -1777,6 +1785,14 @@ body.offline .offline-badge{display:block}
           <div class="fg"><label class="fl">جودة الصورة (Mbps)</label>
             <div class="sg"><input type="range" min="2" max="20" value="8" id="export-vbr"><span class="sv" id="export-vbr-v">8 Mbps</span></div>
           </div>
+        </details>
+
+        <!-- v1.2.3 — إعادةٌ شامِلةٌ لِكُلِّ الإعدادات -->
+        <details class="sec">
+          <summary class="sec-t">↺ إعادةُ الإعدادات</summary>
+          <div class="note">لِكُلِّ قِسمٍ زِرُّ <b>↺</b> في تَرويسَتِهِ يُعيدُ إعداداتِهِ وَحدَها. وهذا الزِرُّ يُعيدُ كُلَّ الإعداداتِ دَفعةً واحِدة.</div>
+          <div class="note" style="color:var(--t3)">لا يُمَسُّ مُحتَواك: النَصُّ الحُرُّ والمَقاطِعُ والصَوتُ والقَوالِبُ المَحفوظةُ تَبقى كَما هي. أمّا حُقولُ العَناوينِ القَصيرةِ فَتَعودُ لِنَصِّها الافتِراضيّ. والتَراجُعُ مُتاحٌ بِزِرِّ ↩️ أو Ctrl+Z.</div>
+          <button class="btn btn-d bsm bfw" id="reset-all-settings-btn" data-no-reset>↺ أَعِد جَميعَ الإعداداتِ لِلافتِراضيّ</button>
         </details>
 
         <!-- 4) وحدات المحتوى -->
@@ -1913,11 +1929,11 @@ body.offline .offline-badge{display:block}
         <div class="about-logo">
           <img src="GT-SIRM-icons/icon-256.png" class="al-icon" alt="GT-SIRM" style="width:80px;height:80px;">
           <h2>GT-SIRM</h2>
-          <p>GnuTux Short Islamic Reels Maker v1.2.2</p>
+          <p>GnuTux Short Islamic Reels Maker v1.2.3</p>
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.2</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.3</span></div>
           <div style="margin:7px 0"><button class="btn btn-g bsm bfw" id="check-update-btn">🔄 تَحَقَّق مِن وُجودِ تَحديث</button></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>

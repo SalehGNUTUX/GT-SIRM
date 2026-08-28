@@ -254,6 +254,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   restoreLogo();
   restoreMixedAnimsOrder();
   applyCanvasSize();     // v1.2.1 — طَبِّق سَقفَ الدِقّةِ المُستَعادَ واعرِضِ الأَبعاد
+  injectResetButtons();  // v1.2.3 — زِرُّ ↺ في تَرويسةِ كُلِّ قِسم
+  ensureCanvasMode();    // v1.2.3 — لَوحةٌ مُعَجَّلةٌ بِالعَتادِ ما لَم تَلزَمِ القِراءةُ بِالبِكسِل
+  // أَعِد تَقييمَ الوَضعِ كُلَّما تَغَيَّرَ مُؤَثِّرٌ يَقرَأُ البِكسِلات
+  document.querySelectorAll('input[name="cf"]').forEach(r =>
+    r.addEventListener("change", () => ensureCanvasMode()));
+  PIXEL_FX_IDS.forEach(id => document.getElementById(id)
+    ?.addEventListener("change", () => ensureCanvasMode()));
   initAutoSave();
   initCapacitor();       // v0.13.2 — Android: زرّ الرُجوع + فَتح ملفّات .gtsirm
   // v1.2.2 — فَحصُ التَحديثاتِ في الخَلفيّةِ (لا يُعَطِّلُ الإقلاع)
@@ -2108,9 +2115,28 @@ function initEventListeners() {
     try { textOnlyCb.checked = localStorage.getItem("gt_sirm_quran_text_only") === "1"; } catch (_) {}
     textOnlyCb.addEventListener("change", () => {
       try { localStorage.setItem("gt_sirm_quran_text_only", textOnlyCb.checked ? "1" : "0"); } catch (_) {}
+      // v1.2.3 — الوَضعانِ مُتَنافِيان
+      const ao = document.getElementById("quran-audio-only");
+      if (textOnlyCb.checked && ao && ao.checked) { ao.checked = false; ao.dispatchEvent(new Event("change")); }
       toast?.(textOnlyCb.checked
         ? "🔇 وضع النصّ فقط مُفعَّل — اضغط 'تحميل الآيات' لتطبيقه"
         : "🔊 وضع النصّ فقط مُلغى — التحميل التالي يشمل صوت القارئ", "info", 2200);
+    });
+  }
+
+  // v1.2.3 — «استيرادُ الصَوتِ فَقَط»: نَقيضُ «النَصّ فَقَط»، فَلا يَجتَمِعان
+  const audioOnlyCb = $("quran-audio-only");
+  if (audioOnlyCb) {
+    try { audioOnlyCb.checked = localStorage.getItem("gt_sirm_quran_audio_only") === "1"; } catch (_) {}
+    audioOnlyCb.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_quran_audio_only", audioOnlyCb.checked ? "1" : "0"); } catch (_) {}
+      if (audioOnlyCb.checked && textOnlyCb && textOnlyCb.checked) {
+        textOnlyCb.checked = false;
+        textOnlyCb.dispatchEvent(new Event("change"));
+      }
+      toast?.(audioOnlyCb.checked
+        ? "🔊 صَوتٌ فَقَط — تُتلى الآياتُ ولا يُرسَمُ نَصُّها"
+        : "📝 عادَ رَسمُ نَصِّ الآيات", "info", 2400);
     });
   }
 
@@ -2150,6 +2176,10 @@ function initEventListeners() {
   // v1.2.1 — سَقفُ دِقّةِ التَصدير (كانَ عُنصُراً مَيِّتاً لا يَقرَؤُهُ أَحَد)
   const resEl = $("export-res");
   if (resEl) resEl.addEventListener("change", onExportResChange);
+
+  // v1.2.3 — إعادةٌ شامِلةٌ لِلإعدادات
+  const resetAllBtn = $("reset-all-settings-btn");
+  if (resetAllBtn) resetAllBtn.addEventListener("click", resetAllSettings);
 
   const toggleAddReciterBtn = $("toggle-add-reciter-btn");
   if (toggleAddReciterBtn) toggleAddReciterBtn.addEventListener("click", toggleAddReciter);
@@ -2855,9 +2885,62 @@ window.addEventListener("resize", fitCanvas);
 // ══════════════════════════════════════════════════════
 //  MAIN DRAW
 // ══════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════
+//  v1.2.3 — وَضعُ رَسمِ اللَوحة: مُعَجَّلٌ بِالعَتادِ أم مَقروءٌ بِالبِكسِل
+//  ───────────────────────────────────────────────────
+//  قِياسٌ حَقيقيٌّ مِن هاتِفِ المُستَخدِم (951 إطاراً): الرَسمُ 82.2ms لِلإطار
+//  مِن أَصلِ 120.5ms — أَي 68% مِنَ الزَمَن.
+//  السَبَب: اللَوحةُ تُنشَأُ دائِماً بِـ`willReadFrequently: true`، وهذا يُجبِرُ
+//  المُتَصَفِّحَ عَلى إبقائِها في ذاكِرةِ المُعالِجِ ويُلغي تَسريعَ العَتاد — فَيَصيرُ
+//  كُلُّ `drawImage` وتَدَرُّجٍ وظِلٍّ (shadowBlur في 18 مَوضِعاً) ونَصٍّ عَرَبيٍّ
+//  مَرسوماً بِالبَرمَجيّاتِ وَحدَها.
+//  لَكِنَّ القِراءةَ بِالبِكسِل لا يَحتاجُها إلّا: أَنماطُ اللَونِ (غَيرُ «بِدون»)،
+//  والحُبَيباتُ، والمُؤَثِّراتُ الثَمانِيةُ الثَقيلة. فَإن كانَت كُلُّها مُطفَأةً —
+//  وهُوَ الغالِبُ — فَالعَلَمُ خَسارةٌ خالِصة.
+//  خاصيّةُ `willReadFrequently` تُثَبَّتُ عِندَ أَوَّلِ `getContext` ولا تُغَيَّرُ
+//  بَعدَها، فَلا سَبيلَ إلّا استِبدالُ العُنصُرِ نَفسِه. وهُوَ آمِنٌ هُنا: لا
+//  مُستَمِعَ أَحداثٍ عَلى `#cv`، وكُلُّ المَواضِعِ تَطلُبُهُ بِـ`$("cv")` عِندَ الحاجة.
+// ══════════════════════════════════════════════════════
+const PIXEL_FX_IDS = ["fx-grain", "fx-pixel", "fx-mosaic", "fx-ripple",
+                      "fx-wave", "fx-swirl", "fx-kaleido", "fx-glitch", "fx-oldfilm"];
+
+function needsPixelReadback() {
+  try {
+    if (typeof radioVal === "function" && radioVal("cf") !== "none") return true;
+  } catch (_) { return true; }
+  for (const id of PIXEL_FX_IDS) {
+    const el = document.getElementById(id);
+    if (el && el.checked) return true;
+  }
+  return false;
+}
+
+// يُبَدِّلُ عُنصُرَ اللَوحةِ عِندَ تَغَيُّرِ الحاجةِ إلى القِراءةِ بِالبِكسِل.
+// ⚠️ لا يُبَدَّلُ أثناءَ التَصدير: مُحَرِّكُ التَصديرِ يُمسِكُ مَرجِعَ اللَوحةِ
+//    لِإنشاءِ VideoFrame، فَتَبديلُها تَحتَه يُنتِجُ إطاراتٍ فارِغة.
+function ensureCanvasMode() {
+  const cv = document.getElementById("cv");
+  if (!cv) return null;
+  if (S.exporting) return cv;
+  const want = needsPixelReadback();
+  if (cv._pixelMode === want) return cv;
+
+  const fresh = cv.cloneNode(false);       // يَنسَخُ id و class و width و height
+  fresh._pixelMode = want;
+  cv.replaceWith(fresh);
+  // ثَبِّتِ الوَضعَ بِأَوَّلِ نِداءِ getContext
+  fresh.getContext("2d", { willReadFrequently: want });
+  if (typeof fitCanvas === "function") fitCanvas();
+  console.log(`[SIRM] وَضعُ اللَوحة: ${want ? "قِراءةٌ بِالبِكسِل (بَرمَجيّ)" : "مُعَجَّلٌ بِالعَتاد"}`);
+  return fresh;
+}
+
 function drawFrame(ts) {
   const cv = $("cv");
-  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  // الوَضعُ مُثَبَّتٌ مُسبَقاً عَبرَ ensureCanvasMode؛ الوُسَطاءُ هُنا تُتَجاهَلُ
+  // بَعدَ أَوَّلِ نِداء، فَنَطلُبُ الوَضعَ الحاليَّ لا وَضعاً ثابِتاً.
+  const ctx = cv.getContext("2d", { willReadFrequently: cv._pixelMode !== false });
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
 
@@ -2891,7 +2974,10 @@ function drawFrame(ts) {
   if (ge("fx-oldfilm")) applyOldFilm(ctx, W, H, ts);
   if (recvidPos === "late") drawRecitationVideo(ctx, W, H);
   // اِرسِم النَصّ إن لَم يَكُن الفيديو فَعّالاً، أَو كان فَعّالاً مع تَوگل "إظهار النَصّ فَوق الفيديو"
-  if (S.verses.length && (!recvidActive || recvidShowText) && !(S.verses.length === 1 && S.verses[0]?.recvid)) drawVerse(ctx, W, H, ts);
+  // v1.2.3 — «استيرادُ الصَوتِ فَقَط»: تُتلى الآياتُ ولا يُرسَمُ نَصُّها
+  //   (ولا تَرجَمَتُها ولا رَقَمُها — كُلُّها داخِلَ drawVerse).
+  const audioOnly = ge("quran-audio-only");
+  if (!audioOnly && S.verses.length && (!recvidActive || recvidShowText) && !(S.verses.length === 1 && S.verses[0]?.recvid)) drawVerse(ctx, W, H, ts);
   drawSurahName(ctx, W, H);
   drawVideoTitle(ctx, W, H);
   drawWave(ctx, W, H, ts);
@@ -3063,6 +3149,13 @@ function bgVideoSource(vid) {
     if (!c) { c = document.createElement("canvas"); _bgFrameCache.set(vid, c); }
     if (c.width !== vid.videoWidth) c.width = vid.videoWidth;
     if (c.height !== vid.videoHeight) c.height = vid.videoHeight;
+    // v1.2.3 — عُدَّ الإطاراتِ المُتَمَيِّزةَ فِعلاً: يُخبِرُنا كَم إطاراً حَقيقيّاً
+    //   بَلَغَتهُ الخَلفيّةُ في التَصدير (سَلاسَتُها) بَدَلَ التَخمين.
+    if (vid._sirmLastCachedTime !== vid.currentTime) {
+      vid._sirmLastCachedTime = vid.currentTime;
+      const pf = window._sirmExportProfile;
+      if (pf) pf.bgFrames = (pf.bgFrames || 0) + 1;
+    }
     try { c.getContext("2d").drawImage(vid, 0, 0, c.width, c.height); } catch (_) {}
     return vid;
   }
@@ -3877,6 +3970,14 @@ function drawVideoTitle(ctx, W, H) {
   ctx.restore();
 }
 
+// v1.2.3 — مُشتَرَك: واجِهةُ alquran.cloud تُعيدُ الاسمَ مَسبوقاً بِـ«سُورَةُ»
+//   (مُشَكَّلةً)، فَإن أُضيفَت كَلِمةُ «سورة» أَمامَهُ تَكَرَّرَت: «سورة سُورَةُ الكَهْفِ».
+//   كانَت هذه المُعالَجةُ داخِلَ drawSurahName وَحدَها، فَتَسَرَّبَ التَكرارُ إلى
+//   اسمِ المَلَفِّ المُصَدَّر.
+function stripSurahPrefix(name) {
+  return String(name || "").replace(/^\s*(?:سُورَةُ|سُورَة|سُورة|سورة)\s+/u, "");
+}
+
 function drawSurahName(ctx, W, H) {
   if (!ge("sname-on")) return;
   if (!S.surahs || !S.surahs.length) return;
@@ -3886,7 +3987,7 @@ function drawSurahName(ctx, W, H) {
 
   const prefix = $("sname-prefix")?.value || "surah";
   const rawName = surah.name || "";
-  const cleanName = rawName.replace(/^\s*(?:سُورَةُ|سُورَة|سُورة|سورة)\s+/u, "");
+  const cleanName = stripSurahPrefix(rawName);
   const label = prefix === "surah" ? `سُورَةُ ${cleanName}`
               : prefix === "hizb"  ? `حِزْبُ ${cleanName}`
               :                       cleanName;
@@ -6847,7 +6948,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.2";
+const APP_VERSION = "1.2.3";
 let _updateInfo = null;
 
 function _appVersion() {
@@ -6974,6 +7075,188 @@ async function autoCheckForUpdates() {
   await checkForUpdates(true);
 }
 
+
+// ══════════════════════════════════════════════════════
+//  v1.2.3 — إعادةُ الإعداداتِ إلى وَضعِها الافتِراضيّ
+//  ───────────────────────────────────────────────────
+//  مَصدَرُ الافتِراضيّاتِ هُوَ HTML نَفسُه، لا جَدوَلٌ مُوازٍ يُنسى تَحديثُه:
+//  المُتَصَفِّحُ يَحفَظُ `defaultValue` و`defaultChecked` و`defaultSelected`
+//  مِن سِماتِ العُنصُرِ في الصَفحة، واستعادةُ الإعداداتِ تَكتُبُ `.value`
+//  و`.checked` ولا تَمَسُّ تِلكَ السِمات. فَكُلُّ عُنصُرٍ يَعرِفُ افتِراضِيَّهُ
+//  بِنَفسِه، وأَيُّ إعدادٍ جَديدٍ يُضافُ لاحِقاً يَنالُ الميزةَ تِلقائيّاً.
+//
+//  زِرُّ ↺ يُحقَنُ في تَرويسةِ كُلِّ قِسم، وزِرٌّ شامِلٌ في الإعدادات.
+//  الإعادةُ قابِلةٌ لِلتَراجُعِ عَبرَ نِظامِ Undo القائِم.
+// ══════════════════════════════════════════════════════
+
+// حاوِياتٌ مُوَلَّدةٌ ديناميكيّاً تَحمِلُ بَياناتِ المُستَخدِمِ لا إعداداتِه
+// (مَقاطِعُ الخَلفيّةِ وتَوقيتُ الشَرائِحِ ونَموذَجُ إضافةِ قارئ) — تُستَثنى كامِلةً.
+const RESET_SKIP_CONTAINERS = [
+  "#bg-vid-list", "#add-reciter-form", "#free-per-slice-list", "#verse-search-results",
+];
+// حاوِياتٌ مُوَلَّدةٌ لَكِنَّ اختيارَها إعدادٌ حَقيقيّ (الخَطّ والقارئ):
+// نَسمَحُ بِإعادةِ أَزرارِ الاختيارِ وَحدَها. ولَمّا كانَت مُوَلَّدةً بِـJS فَلا
+// تَحمِلُ سِمةَ `checked` في HTML، فَالافتِراضيُّ = أَوَّلُ خِيارٍ في المَجموعة
+// (وهُوَ أَوَّلُ عُنصُرٍ في BUILT_IN_FONTS و RECITERS_LIST — أَي المُدمَجُ الأَوَّل).
+const RESET_RADIO_ONLY_CONTAINERS = ["#font-grid", "#reciters-grid"];
+// حُقولُ مُحتَوىً لا إعدادات (نَصُّ المُستَخدِمِ وبَحثُه)
+const RESET_SKIP_IDS = [
+  "free-text-area", "surah-search", "verse-search-inp",
+  "tpl-name-inp", "ar-name", "ar-folder", "ar-flag",
+];
+
+function _isResettable(el) {
+  if (!el || el.disabled) return false;
+  const t = (el.type || "").toLowerCase();
+  if (t === "file" || t === "button" || t === "submit" || t === "reset" || t === "search") return false;
+  if (el.hasAttribute("data-no-reset")) return false;
+  if (el.id && RESET_SKIP_IDS.includes(el.id)) return false;
+  // نَصٌّ حُرٌّ طَويل = مُحتَوىً، إلّا أن يُطلَبَ صَراحةً
+  if (el.tagName === "TEXTAREA" && !el.hasAttribute("data-reset")) return false;
+  for (const sel of RESET_SKIP_CONTAINERS) {
+    if (el.closest(sel)) return false;
+  }
+  for (const sel of RESET_RADIO_ONLY_CONTAINERS) {
+    if (el.closest(sel)) return el.type === "radio" || el.type === "checkbox";
+  }
+  return true;
+}
+
+// يَلتَقِطُ الحالةَ الراهِنةَ لِيُمكِنَ التَراجُع
+function _captureState(els) {
+  return els.map(el => ({
+    el,
+    value: el.value,
+    checked: (el.type === "checkbox" || el.type === "radio") ? el.checked : null,
+  }));
+}
+
+function _applyState(snapshot) {
+  const touched = new Set();
+  for (const s of snapshot) {
+    if (s.checked !== null) s.el.checked = s.checked;
+    else s.el.value = s.value;
+    touched.add(s.el);
+  }
+  _fireChangeFor(Array.from(touched));
+}
+
+// يُعيدُ عُنصُراً واحِداً لِافتِراضيِّهِ المَأخوذِ مِن سِماتِ HTML
+function _resetOne(el) {
+  if (el.tagName === "SELECT") {
+    let target = null;
+    for (const o of el.options) if (o.defaultSelected) { target = o; break; }
+    if (!target && el.options.length) target = el.options[0];
+    if (target && el.value !== target.value) { el.value = target.value; return true; }
+    return false;
+  }
+  if (el.type === "radio") {
+    // مَجموعةٌ مُوَلَّدةٌ بِـJS لا سِمةَ checked في أَيٍّ مِن أَفرادِها:
+    // اعتَبِرِ الأَوَّلَ افتِراضِيَّها.
+    const group = el.name ? document.querySelectorAll(`input[name="${el.name}"]`) : [el];
+    let def = null;
+    for (const r of group) if (r.defaultChecked) { def = r; break; }
+    if (!def) def = group[0];
+    const want = (el === def);
+    if (el.checked !== want) { el.checked = want; return true; }
+    return false;
+  }
+  if (el.type === "checkbox") {
+    if (el.checked !== el.defaultChecked) { el.checked = el.defaultChecked; return true; }
+    return false;
+  }
+  if (el.value !== el.defaultValue) { el.value = el.defaultValue; return true; }
+  return false;
+}
+
+// إطلاقُ الأَحداثِ حَتّى تَستَجيبَ الواجِهةُ (تَسمياتُ الشَرائِطِ، إظهارُ اللَوحات…)
+function _fireChangeFor(els) {
+  const radiosDone = new Set();
+  for (const el of els) {
+    if (el.type === "radio") {
+      if (radiosDone.has(el.name)) continue;
+      radiosDone.add(el.name);
+      const checked = document.querySelector(`input[name="${el.name}"]:checked`);
+      if (checked) checked.dispatchEvent(new Event("change", { bubbles: true }));
+      continue;
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
+/**
+ * يُعيدُ كُلَّ إعداداتِ نِطاقٍ (قِسمٍ أو اللَوحةِ كامِلةً) لِافتِراضيِّها.
+ * قابِلٌ لِلتَراجُعِ عَبرَ نِظامِ Undo.
+ */
+function resetScope(root, label) {
+  if (!root) return 0;
+  const els = Array.from(root.querySelectorAll("input, select, textarea")).filter(_isResettable);
+  if (!els.length) { toast?.("لا إعداداتٍ في هذا القِسم", "info", 1600); return 0; }
+
+  const before = _captureState(els);
+  const changed = [];
+  for (const el of els) if (_resetOne(el)) changed.push(el);
+
+  if (!changed.length) { toast?.(`↺ ${label || "القِسم"} عَلى الوَضعِ الافتِراضيِّ أَصلاً`, "info", 1800); return 0; }
+
+  _fireChangeFor(els);
+  const after = _captureState(els);
+
+  if (typeof historyPush === "function") {
+    historyPush({
+      label: `إعادةُ ${label || "قِسم"} لِلافتِراضيّ`,
+      undo: () => _applyState(before),
+      redo: () => _applyState(after),
+    });
+  }
+  if (typeof saveAllSettings === "function") { try { saveAllSettings(); } catch (_) {} }
+  if (typeof markProjectDirty === "function") markProjectDirty();
+
+  toast?.(`↺ أُعيدَ ${changed.length} إعداداً لِلافتِراضيّ — ${label || ""} · ↩️ لِلتَراجُع`, "success", 3000);
+  return changed.length;
+}
+
+// يَحقِنُ زِرَّ ↺ في تَرويسةِ كُلِّ قِسم
+function injectResetButtons() {
+  document.querySelectorAll("details.sec > summary.sec-t").forEach(sum => {
+    if (sum.querySelector(".sec-reset")) return;
+    const details = sum.parentElement;
+    // تَخَطَّ الأَقسامَ التي لا إعداداتٍ فيها
+    const hasAny = Array.from(details.querySelectorAll("input, select, textarea")).some(_isResettable);
+    if (!hasAny) return;
+
+    const label = (sum.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "sec-reset";
+    btn.textContent = "↺";
+    btn.title = `إعادةُ إعداداتِ «${label}» إلى الوَضعِ الافتِراضيّ`;
+    btn.setAttribute("aria-label", btn.title);
+    btn.addEventListener("click", (e) => {
+      // داخِلَ <summary>: امنَع طَيَّ القِسمِ عِندَ النَقرِ عَلى الزِرّ
+      e.preventDefault();
+      e.stopPropagation();
+      resetScope(details, label);
+    });
+    sum.appendChild(btn);
+  });
+}
+
+/** إعادةٌ شامِلةٌ لِكُلِّ الإعدادات — فِعلٌ واسِعٌ فَيُستَأذَنُ فيه. */
+function resetAllSettings() {
+  const panel = document.getElementById("panel") || document.body;
+  const els = Array.from(panel.querySelectorAll("input, select, textarea")).filter(_isResettable);
+  const ok = confirm(
+    `إعادةُ جَميعِ الإعداداتِ (${els.length} إعداداً) إلى وَضعِها الافتِراضيّ؟\n\n` +
+    "لا يُمَسُّ مُحتَواك: النَصُّ الحُرُّ والمَقاطِعُ والصَوتُ والقَوالِبُ المَحفوظةُ تَبقى كَما هي.\n" +
+    "أمّا حُقولُ العَناوينِ القَصيرة (عُنوانُ المَقطَعِ والعَلامةُ المائيّة) فَتَعودُ لِنَصِّها الافتِراضيّ.\n" +
+    "والتَراجُعُ مُتاحٌ بِزِرِّ ↩️ أو Ctrl+Z."
+  );
+  if (!ok) return;
+  resetScope(panel, "جَميعُ الإعدادات");
+}
+
 // ══════════════════════════════════════════════════════
 //  EXPORT
 // ══════════════════════════════════════════════════════
@@ -7005,7 +7288,14 @@ function buildExportFileBase() {
       label = (n.split("—")[0] || "").replace(/^\s*\d+\.\s*/, "").trim();
     }
   } catch (_) {}
-  label = label.replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 40);
+  // v1.2.3 — نَظِّفِ الاسم: الأَقواسُ تَحمِلُ عَلاماتِ وَضعٍ داخِليّةً
+  //   (مِثلُ «نصّ فقط») لا شَأنَ لِلمُستَخدِمِ بِها في اسمِ مَلَفِّه.
+  label = label
+    .replace(/\s*\([^)]*\)\s*/g, " ")
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
   return label ? `GT-SIRM_${label}_${stamp}` : `GT-SIRM_${stamp}`;
 }
 
@@ -7066,7 +7356,10 @@ function showExportResult(res) {
         rows +
         `<div style="display:flex;justify-content:space-between;border-top:1px solid var(--b1);margin-top:4px;padding-top:4px;font-weight:700"><span>المَجموع</span><span dir="ltr">${totalPer} ms</span></div>` +
         `<div style="color:var(--t3);margin-top:4px">نَقَلاتٌ مُنَفَّذة: ${pf.seeks} · مُتَخَطّاة: ${pf.seekSkips}` +
-        (pf.seekTimeouts ? ` · <b style="color:var(--danger,#e05)">انقَضَت مُهلَتُها: ${pf.seekTimeouts}</b>` : "") + `</div>`;
+        (pf.seekTimeouts ? ` · <b style="color:var(--danger,#e05)">انقَضَت مُهلَتُها: ${pf.seekTimeouts}</b>` : "") + `</div>` +
+        `<div style="color:var(--t3)">إطاراتُ الخَلفيّةِ المُتَمَيِّزة: <b>${pf.bgFrames || 0}</b> مِن ${n}` +
+        (pf.bgFrames ? ` (≈${(pf.bgFrames / (n / 30)).toFixed(1)} إطار/ث)` : "") + `</div>` +
+        `<div style="color:var(--t3)">وَضعُ اللَوحة: <b>${(typeof needsPixelReadback === "function" && needsPixelReadback()) ? "قِراءةٌ بِالبِكسِل (بَرمَجيّ)" : "مُعَجَّلٌ بِالعَتاد"}</b></div>`;
       perfEl.style.display = "";
     } else {
       perfEl.style.display = "none";
@@ -7142,7 +7435,7 @@ async function saveAsLastExport() {
 // ══════════════════════════════════════════════════════
 //  v1.2.2 — نَتيجةُ حِفظِ المَشروع: نَفسُ نافِذةِ الناتِجِ مَعَ المُشارَكةِ والحَفظِ باسم
 // ══════════════════════════════════════════════════════
-function showProjectSavedResult(saved, blob, filename) {
+function showProjectSavedResult(saved, blob, filename, proj) {
   S.lastExport = { blob, filename, mime: "application/json", saved: saved || null, isProject: true };
   const modal = $("export-done-modal");
   const method = saved && saved.method;
@@ -7167,9 +7460,31 @@ function showProjectSavedResult(saved, blob, filename) {
 
   $("export-done-title").textContent = "💾 حُفِظَ المَشروع";
   $("export-done-where").innerHTML = `${where}<br><span style="color:var(--t3)">الحَجم: ${kb} كيلوبايت</span>`;
+  // v1.2.3 — أَبلِغ صَراحةً عَنِ الأُصولِ التي لَم تُضَمَّن. كانَ الأَصلُ الكَبيرُ
+  //   يُسَجَّلُ «مَفقوداً» في المَلَفِّ بِلا أَن يَعلَمَ المُستَخدِم، فَيُفاجَأُ عِندَ
+  //   الفَتحِ لاحِقاً بِمَشروعٍ بِلا خَلفيّة.
+  const missing = (proj && Array.isArray(proj.assets))
+    ? proj.assets.filter(a => a.mode === "missing") : [];
+  const embedded = (proj && Array.isArray(proj.assets))
+    ? proj.assets.filter(a => a.mode === "embedded").length : 0;
+  if (missing.length) {
+    note += (note ? "\n\n" : "") +
+      `⚠️ لَم تُضَمَّن ${missing.length} مِنَ الأُصول: ` +
+      missing.map(a => `${a.name} (${a.reason})`).join("، ") +
+      ". سَتَحتاجُ إلى إعادةِ اختيارِها عِندَ فَتحِ المَشروع.";
+  }
   $("export-done-note").textContent = note;
   const perfEl = $("export-done-perf");
-  if (perfEl) perfEl.style.display = "none";
+  if (perfEl) {
+    if (proj && Array.isArray(proj.assets) && proj.assets.length) {
+      perfEl.innerHTML =
+        `<div style="display:flex;justify-content:space-between"><span>أُصولٌ مُضَمَّنة</span><span dir="ltr">${embedded}</span></div>` +
+        `<div style="display:flex;justify-content:space-between"><span>أُصولٌ غَيرُ مُضَمَّنة</span><span dir="ltr">${missing.length}</span></div>`;
+      perfEl.style.display = "";
+    } else {
+      perfEl.style.display = "none";
+    }
+  }
 
   const shareBtn = $("export-done-share-btn");
   if (shareBtn) {
@@ -7285,6 +7600,9 @@ async function startExport(type) {
   const FRAME_MS = 1000 / FPS;
   const totalFrames = Math.ceil(totalDuration * FPS);
 
+  // v1.2.3 — ثَبِّتِ وَضعَ اللَوحةِ قَبلَ التِقاطِ مَرجِعِها: المُحَرِّكُ يُمسِكُ
+  //   هذا العُنصُرَ بِعَينِهِ طَوالَ التَصدير.
+  ensureCanvasMode();
   const cv = $("cv");
 
   // ═══════════════════════════════════════════════════
@@ -7739,7 +8057,7 @@ async function loadVerses() {
       audioSecondary: [],
       manualDuration: dur,
       free: true,
-      source: `سورة ${surah?.name || ""} (نصّ فقط)`,
+      source: `سورة ${stripSurahPrefix(surah?.name) || ""}`,
     }));
     S.useFreeAsSource = true;
     if (S.recAudioEl) { try { S.recAudioEl.pause(); S.recAudioEl.src = ""; } catch (_) {} }
@@ -7763,8 +8081,8 @@ async function loadVerses() {
   }
 
   S.verses = verses; S.currentAya = 0; S.elapsed = 0; S.ayaDurations = [];
-  const suffix = textOnly ? " · 🔇 نصّ فقط" : "";
-  $("aya-info").textContent = `✅ ${verses.length} آية من سورة ${surah?.name || ""} ${source}${suffix}`;
+  const suffix = textOnly ? " · 🔇 نصّ فقط" : (ge("quran-audio-only") ? " · 🔊 صوت فقط" : "");
+  $("aya-info").textContent = `✅ ${verses.length} آية من سورة ${stripSurahPrefix(surah?.name) || ""} ${source}${suffix}`;
   updateAyaUI();
   await loadTranslations();
 }
@@ -8547,7 +8865,16 @@ function toast(msg, type = "info", duration = 3600) {
 
 const PROJECT_FORMAT = "GT-SIRM-Project";
 const PROJECT_FORMAT_VERSION = 1;
-const ASSET_EMBED_MAX = 50 * 1024 * 1024;
+// v1.2.3 — حَدُّ تَضمينِ الأُصولِ داخِلَ مَلَفِّ المَشروع.
+//   كُلُّ أَصلٍ يُحَوَّلُ إلى base64 (‏+33٪) ثُمَّ يُسَلسَلُ في نَصِّ JSON ثُمَّ
+//   يُعادُ تَرميزُهُ base64 لِلكِتابةِ الأَصليّة — أَي ثَلاثُ نُسَخٍ في الذاكِرة.
+//   خَمسونَ ميغابايتاً تَعني قُرابةَ 200 م.ب مِنَ السَلاسِلِ النَصّيّة: يَنفَدُ
+//   حِزامُ ذاكِرةِ الـWebView فَيَسقُطُ الحَفظُ صامِتاً. الهاتِفُ يَأخُذُ حَدّاً
+//   أَصغَرَ، والأُصولُ الأَكبَرُ تُسَجَّلُ «مَفقودة» بِسَبَبٍ واضِحٍ بَدَلَ الفَشَل.
+const ASSET_EMBED_MAX = (typeof window !== "undefined" && window.PIO && window.PIO.isNativeAndroid())
+  ? 12 * 1024 * 1024
+  : 50 * 1024 * 1024;
+const ASSET_EMBED_MAX_LABEL = (ASSET_EMBED_MAX / (1024 * 1024)) + "MB";
 const PROJECT_APP_VERSION = "0.5.7";
 const IS_DESKTOP_BUILD = false;
 
@@ -8645,7 +8972,7 @@ async function serializeProject() {
         a.dataURL = await fileToDataURL(item.file);
       } else {
         a.mode = "missing";
-        a.reason = item.file ? "حجم أكبر من 50MB" : "غير متوفّر";
+        a.reason = item.file ? `حجم أكبر من ${ASSET_EMBED_MAX_LABEL}` : "غير متوفّر";
       }
       assets.push(a);
     }
@@ -8662,7 +8989,7 @@ async function serializeProject() {
       a.dataURL = await fileToDataURL(S.bgImgFile);
     } else {
       a.mode = "missing";
-      a.reason = "حجم أكبر من 50MB";
+      a.reason = `حجم أكبر من ${ASSET_EMBED_MAX_LABEL}`;
     }
     assets.push(a);
   }
@@ -8678,7 +9005,7 @@ async function serializeProject() {
       a.dataURL = await fileToDataURL(S.bgAudioFile);
     } else {
       a.mode = "missing";
-      a.reason = "حجم أكبر من 50MB";
+      a.reason = `حجم أكبر من ${ASSET_EMBED_MAX_LABEL}`;
     }
     assets.push(a);
   }
@@ -8695,7 +9022,7 @@ async function serializeProject() {
       a.dataURL = await fileToDataURL(S.recVidFile);
     } else {
       a.mode = "missing";
-      a.reason = "حجم أكبر من 50MB";
+      a.reason = `حجم أكبر من ${ASSET_EMBED_MAX_LABEL}`;
     }
     assets.push(a);
   }
@@ -8943,7 +9270,7 @@ async function saveProjectToPath(_filePath) {
     clearProjectDirty();
     // v1.2.2 — الحِفظُ اليَدَويُّ يَعرِضُ نافِذةً فيها «مُشارَكة» و«حِفظٌ باسم…».
     //   الحِفظُ التِلقائيُّ صامِتٌ (لا نُقاطِعُ المُستَخدِمَ كُلَّ بِضعِ دَقائِق).
-    if (!_silentProjectSave) showProjectSavedResult(saved, blob, fname);
+    if (!_silentProjectSave) showProjectSavedResult(saved, blob, fname, proj);
     return true;
   }
 
@@ -8958,6 +9285,30 @@ async function saveProjectToPath(_filePath) {
 
 // v1.1.0 — كَشف File System Access API (يُتيح الحَفظ الصامِت المُباشِر في نَفس المَلفّ)
 const HAS_FSA = typeof window !== "undefined" && typeof window.showSaveFilePicker === "function";
+
+// v1.2.3 — الغِلافُ الذي يَمنَعُ «لا استِجابةَ ولا رِسالة».
+//   كانَ نَقرُ 💾 يَستَدعي دالّةً غَيرَ مَحميّةٍ بِـtry: أَيُّ خَطَإٍ في تَسَلسُلِ
+//   الأُصول (أو نَفادُ الذاكِرةِ مَعَ فيديو كَبير) يَرفُضُ الوَعدَ بِصَمت،
+//   فَلا يَرى المُستَخدِمُ شَيئاً ويَظُنُّ الزِرَّ مُعَطَّلاً.
+//   وحَتّى في حالِ النَجاحِ كانَ التَسَلسُلُ يَستَغرِقُ ثَوانِيَ بِلا أَيِّ مُؤَشِّر.
+async function saveProjectInteractiveSafe(forcePrompt = false) {
+  const btn = document.getElementById("proj-save-btn");
+  const prevHTML = btn ? btn.innerHTML : null;
+  try {
+    if (btn) { btn.disabled = true; btn.innerHTML = "⏳ <span>جارٍ الحَفظ…</span>"; }
+    toast?.("⏳ جارٍ تَجهيزُ المَشروعِ لِلحَفظ…", "info", 1600);
+    await saveProjectInteractive(forcePrompt);
+  } catch (e) {
+    console.error("فَشِلَ حِفظُ المَشروع:", e);
+    const msg = String((e && e.message) || e);
+    const oom = /memory|allocation|Array buffer allocation|Invalid string length/i.test(msg);
+    toast?.(oom
+      ? "❌ تَعَذَّرَ الحَفظ: المَشروعُ أَكبَرُ مِن ذاكِرةِ الجِهاز. أَزِل مَقطَعَ خَلفيّةٍ كَبيراً ثُمَّ أَعِدِ المُحاوَلة."
+      : "❌ تَعَذَّرَ حِفظُ المَشروع: " + msg.slice(0, 90), "error", 7000);
+  } finally {
+    if (btn) { btn.disabled = false; if (prevHTML !== null) btn.innerHTML = prevHTML; }
+  }
+}
 
 async function saveProjectInteractive(forcePrompt = false) {
   // v1.1.0 — إن كان لَدَينا FSA handle مَعروف، احفَظ فيه مُباشرةً بلا حِوار
@@ -9140,7 +9491,7 @@ function showCloseConfirmModal(onQuit) {
 }
 
 function initProjectSystem() {
-  document.getElementById("proj-save-btn")?.addEventListener("click", saveProjectInteractive);
+  document.getElementById("proj-save-btn")?.addEventListener("click", () => saveProjectInteractiveSafe());
   document.getElementById("proj-open-btn")?.addEventListener("click", openProjectInteractive);
   document.getElementById("proj-open-input")?.addEventListener("change", (e) => {
     const f = e.target.files?.[0]; if (f) openProjectFromBlob(f);
