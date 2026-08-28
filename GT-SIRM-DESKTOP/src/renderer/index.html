@@ -525,7 +525,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.2.0</small>
+      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.2.1</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -633,6 +633,10 @@ body.offline .offline-badge{display:block}
           <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px;margin-bottom:5px">
             <span class="tgl">🔇 استيراد النصّ فقط<br><small style="color:var(--t3)">عند التفعيل: تُحمَّل آيات القرآن نصّاً فقط بدون صوت قارئ، لاستخدامها مع تلاوة محليّة مخصّصة</small></span>
             <label class="tg"><input type="checkbox" id="quran-text-only"><span class="tgs"></span></label>
+          </div>
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px;margin-bottom:5px">
+            <span class="tgl">🕋 البَسمَلة شَريحةً مُستَقِلّة<br><small style="color:var(--t3)">تُكتَبُ <b>وتُتلى</b> بِصَوتِ القارئ قَبلَ الآيةِ الأُولى. عِندَ الإطفاء تُحذَفُ مِنَ النَصّ فلا تُكتَبُ ولا تُتلى. (لا تَظهَرُ في الفاتِحةِ لأنّها آيةٌ فيها، ولا في بَراءة)</small></span>
+            <label class="tg"><input type="checkbox" id="basmala-on" checked><span class="tgs"></span></label>
           </div>
           <button class="btn btn-p bsm bfw" id="load-verses-btn">🔄 تحميل الآيات</button>
         </details>
@@ -2052,12 +2056,14 @@ body.offline .offline-badge{display:block}
         <!-- 3) جودة التصدير -->
         <details class="sec">
           <summary class="sec-t">🎬 جودة التصدير</summary>
-          <div class="fg"><label class="fl">دقة الفيديو</label>
+          <div class="fg"><label class="fl">سَقفُ الدِقّة <small style="color:var(--t3)">(يُصَغِّرُ ولا يُكَبِّر — أَقَلُّ دِقّةً = تَصديرٌ أَسرَع)</small></label>
             <select class="fc" id="export-res">
-              <option value="720">720p (HD)</option>
-              <option value="1080" selected>1080p (Full HD)</option>
-              <option value="1920">1920×1080 (مخصص)</option>
+              <option value="0" selected>كَما يَضبِطُهُ القالِب (بِلا سَقف)</option>
+              <option value="1920">حَدٌّ أَقصى 1080p</option>
+              <option value="1280">حَدٌّ أَقصى 720p — أَسرَع</option>
+              <option value="854">حَدٌّ أَقصى 480p — الأَسرَعُ لِلهَواتِف</option>
             </select>
+            <div id="export-res-info" style="font-size:9px;color:var(--t3);margin-top:3px"></div>
           </div>
           <div class="fg"><label class="fl">معدل الإطارات (FPS)</label>
             <select class="fc" id="export-fps">
@@ -2303,7 +2309,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.0</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.1</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

@@ -68,7 +68,7 @@ fi
 echo "📂 تحضير www/..."
 rm -rf www
 mkdir -p www
-for item in index.html app.js export-engine-web.js mp4-muxer.js webm-muxer.js fonts-data.js hadith-data.js azkar-data.js asma-data.js duas-data.js hikam-data.js manifest.json sw.js fonts GT-SIRM-icons; do
+for item in index.html app.js platform-io.js export-engine-web.js mp4-muxer.js webm-muxer.js fonts-data.js hadith-data.js azkar-data.js asma-data.js duas-data.js hikam-data.js manifest.json sw.js fonts GT-SIRM-icons; do
     [ -e "$item" ] && cp -r "$item" www/
 done
 echo "   ✅ نُسخت أصول الويب إلى www/ ($(du -sh www/ | cut -f1))"
@@ -82,6 +82,20 @@ fi
 # ── مزامنة ─────────────────────────────────────────────────────
 echo "🔄 مزامنة ملفّات الويب مع Android..."
 npx cap sync android
+
+# ── تَطبيق المَصادِر الأَصليّة المُتَتَبَّعة (v1.2.1) ────────────────
+# ⚠️ مُجَلَّد android/ كامِلاً في .gitignore ويُعيدُ `cap add` تَوليدَه، فَتَضيعُ
+#    أَيُّ تَعديلاتٍ تُكتَبُ فيهِ مُباشَرةً (Manifest، MainActivity، الإضافات).
+#    المَصدَرُ المُعتَمَدُ في android-src/ ويُنسَخُ فَوقَ المُوَلَّدِ بَعدَ كُلِّ sync.
+if [ -d android-src ]; then
+    echo "🧩 تَطبيق المَصادِر الأَصليّة مِن android-src/ ..."
+    cp -f  android-src/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+    mkdir -p android/app/src/main/java/org/gnutux/gtsirm
+    cp -f  android-src/java/org/gnutux/gtsirm/*.java android/app/src/main/java/org/gnutux/gtsirm/
+    echo "   ✅ Manifest + MainActivity + GtsirmNative + ExportService"
+else
+    echo "⚠️ android-src/ غَير مَوجود — سَيُبنى بِالمُوَلَّدِ الافتِراضيّ (بِلا حَفظٍ أَصليٍّ ولا تَصديرٍ في الخَلفيّة)"
+fi
 
 # ── إعادة تَوليد الأَيقونات (v0.13.2) ──────────────────────────
 # cap sync قد يَكتب فوق الأَيقونات بالافتراضيّة — أَعِد تَوليدها

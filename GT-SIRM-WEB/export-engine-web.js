@@ -65,22 +65,73 @@ function isWebCodecsSupported() {
 }
 
 // v0.7.3 — seek HTMLVideoElement مع انتظار اكتمال الإطار
-function seekVideoToTimeWeb(v, t) {
+// v1.2.1 — تَسريع: تَخَطَّ الـseek إذا كانَ الهَدَفُ داخِلَ نَفسِ إطارِ المَصدَر.
+//   الـseek أَغلى ما في حَلقةِ التَصدير (يُعيدُ فَكَّ التَرميزِ مِن آخِرِ مِفتاح)،
+//   وحينَ يَكونُ إطارُ التَصديرِ أَسرَعَ مِن إطارِ المَصدَر (30 مِن 25 مَثَلاً)
+//   تَقَعُ إطاراتٌ مُتَتالِيةٌ عَلى نَفسِ إطارِ المَصدَر — فَلا داعِيَ لِتَكرارِه.
+//   السَماحُ الافتِراضيُّ 20ms (سُلوكُ ما قَبل v1.2.1) ما لَم يُمَرَّر غَيرُه.
+function seekVideoToTimeWeb(v, t, tolerance) {
   return new Promise(resolve => {
     if (!v || !isFinite(v.duration)) return resolve();
+    const tol = (typeof tolerance === "number" && tolerance > 0) ? tolerance : 0.02;
     const target = Math.min(t, Math.max(0, v.duration - 1e-4));
-    if (Math.abs(v.currentTime - target) < 0.02) return resolve();
+    if (Math.abs(v.currentTime - target) < tol) return resolve();
     let done = false;
+    let timer = null;
     const finish = () => {
       if (done) return;
       done = true;
+      if (timer) { clearTimeout(timer); timer = null; }
       try { v.removeEventListener("seeked", onSeeked); } catch (_) {}
       resolve();
     };
     const onSeeked = () => finish();
     v.addEventListener("seeked", onSeeked);
     try { v.currentTime = target; } catch (_) { finish(); return; }
-    setTimeout(finish, 800);
+    timer = setTimeout(finish, 800);
+  });
+}
+
+// v1.2.1 — تَقديرُ مُدّةِ إطارِ فيديو المَصدَر، لِضَبطِ سَماحِ الـseek أَعلاه.
+//   لا تَكشِفُ المُتَصَفِّحاتُ مُعَدَّلَ إطاراتِ الفيديو مُباشَرةً؛ نَستَعمِلُ
+//   webkitDecodedFrameCount إن وُجِد، وإلّا نَفتَرِضُ 30 إطاراً (سَماحٌ مُحافِظ).
+function estimateFrameDurWeb(v) {
+  try {
+    if (v && v.getVideoPlaybackQuality) {
+      const q = v.getVideoPlaybackQuality();
+      if (q && q.totalVideoFrames > 10 && v.currentTime > 0.5) {
+        const fps = q.totalVideoFrames / v.currentTime;
+        if (fps > 5 && fps < 121) return 1 / fps;
+      }
+    }
+  } catch (_) {}
+  return 1 / 30;
+}
+
+// v1.2.1 — انتِظارُ انحِسارِ طابورِ المُرَمِّزِ بِلا setTimeout.
+//   setTimeout يُخنَقُ إلى نِداءٍ كُلَّ ثانيةٍ حينَ تَكونُ الصَفحةُ مَخفيّة،
+//   فَكانَ التَصديرُ يَهبِطُ إلى ~إطارٍ في الثانِيةِ بِمُجَرَّدِ مُغادَرةِ البَرنامَج.
+//   حَدَثُ dequeue لا يُخنَق.
+function waitForEncoderQueue(enc, maxQueue) {
+  if (!enc || enc.encodeQueueSize <= maxQueue) return Promise.resolve();
+  if (typeof enc.addEventListener !== "function") {
+    return (window.PIO ? window.PIO.yieldToBrowser() : Promise.resolve());
+  }
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(guard);
+      try { enc.removeEventListener("dequeue", onDequeue); } catch (_) {}
+      resolve();
+    };
+    const onDequeue = () => { if (enc.encodeQueueSize <= maxQueue) finish(); };
+    // شَبَكةُ أَمان: لَو تَعَثَّرَ المُرَمِّزُ فَلَم يُطلِق dequeue أَبَداً، لا نُعَلِّقُ
+    //   التَصديرَ إلى الأَبَد — نَمضي بَعدَ ثانِيَتَين.
+    const guard = setTimeout(finish, 2000);
+    enc.addEventListener("dequeue", onDequeue);
+    onDequeue();
   });
 }
 
@@ -539,8 +590,14 @@ async function startWebExportV2(opts) {
 
   // ── 4.5) احسب بيانات الموجة الصوتية لكل إطار ────────
   //   حتى تظهر ذبذبات الصوت في المخرج (vs أنّها فارغة)
-  onProgress(6, "📊 حساب بيانات الموجة الصوتية…");
-  const exportWaveData = precomputeWaveDataForExport(mixed, totalFrames, FPS);
+  //   v1.2.1 — تَخَطَّ الحِسابَ كامِلاً إن كانَتِ الموجاتُ مُطفَأة: FFT لِكُلِّ
+  //   إطارٍ (آلافُ التَحويلات) بِلا فائِدةٍ تُذكَر، وهي مِن أَسبابِ البُطء.
+  const _waveNeeded = !(typeof ge === "function") || ge("wave-on");
+  let exportWaveData = null;
+  if (_waveNeeded) {
+    onProgress(6, "📊 حساب بيانات الموجة الصوتية…");
+    exportWaveData = precomputeWaveDataForExport(mixed, totalFrames, FPS);
+  }
 
   // ── 5) ترميز الصوت (مقطع-بمقطع) ─────────────────────
   onProgress(7, "🔊 جاري ترميز الصوت…");
@@ -549,8 +606,15 @@ async function startWebExportV2(opts) {
   // ادمج القنوات في مصفوفة interleaved Float32 (AudioData يتوقع planar أو interleaved حسب layout)
   const chans = [];
   for (let c = 0; c < channels; c++) chans.push(mixed.getChannelData(c));
+  let _aChunk = 0;
   for (let off = 0; off < mixed.length; off += audioChunkSamples) {
     if (cancelRef?.canceled) break;
+    // v1.2.1 — كانَ هذا الطَورُ يَحقِنُ آلافَ AudioData دُفعةً واحِدةً دونَ
+    //   تَنازُلٍ عَنِ المُعالِج: تَتَضَخَّمُ الذاكِرةُ وتَتَجَمَّدُ الواجِهةُ عَلى الهاتِف.
+    if ((++_aChunk % 64) === 0) {
+      await waitForEncoderQueue(audioEncoder, 32);
+      if (window.PIO) await window.PIO.yieldToBrowser();
+    }
     const len = Math.min(audioChunkSamples, mixed.length - off);
     // planar: كل قناة في جزء منفصل من البافر
     const data = new Float32Array(len * channels);
@@ -604,22 +668,33 @@ async function startWebExportV2(opts) {
     S.bgVidFadeProgress = 0;
   }
 
+  // v1.2.1 — سَماحُ الـseek = مُدّةُ إطارِ المَصدَر. الطَلَبُ الواقِعُ داخِلَ
+  //   الإطارِ نَفسِهِ لا يُغَيِّرُ البِكسِلاتِ فَلا داعِيَ لِإعادةِ فَكِّ التَرميز.
+  const bgSeekTol   = visibleBgClips.length ? estimateFrameDurWeb(visibleBgClips[0].vid) * 0.9 : 0.02;
+  const recSeekTol  = S.recVidEl ? estimateFrameDurWeb(S.recVidEl) * 0.9 : 0.02;
+  const recVidOn    = !!(S.recVidEl && typeof ge === "function" && ge("recvid-on"));
+  const tStartMs    = performance.now();
+
   for (let i = 0; i < totalFrames; i++) {
     if (cancelRef?.canceled) break;
     const t = i / FPS;
 
     // v1.2 Bug#1 — deterministic seek لِمَقطع(مَقاطع) الخَلفيّة
+    // v1.2.1 — تُجرى نَقَلاتُ الخَلفيّةِ وفيديو التِلاوةِ مَعاً لا تَعاقُباً:
+    //   الـseek هُوَ عُنُقُ الزُجاجةِ الأَوَّلُ في التَصدير، وانتِظارُهُما
+    //   بِالتَوازي يَحذِفُ نِصفَ زَمَنِ الانتِظارِ حينَ يَجتَمِعان.
+    const seekJobs = [];
     if (visibleBgClips.length) {
       const cinfo = getBgClipAtTimeWeb(t, bgClipDurations, bgXf);
       if (cinfo) {
         S.bgVid = visibleBgClips[cinfo.clipIndex].vid;
         // Feature#2 — seek إلى (trimStart + localTime)
         const seekPos = bgClipTrimStarts[cinfo.clipIndex] + cinfo.localTime;
-        await seekVideoToTimeWeb(S.bgVid, seekPos);
+        seekJobs.push(seekVideoToTimeWeb(S.bgVid, seekPos, bgSeekTol));
         if (cinfo.inXfade) {
           S.bgVidNext = visibleBgClips[cinfo.nextClipIndex].vid;
           const nextSeekPos = bgClipTrimStarts[cinfo.nextClipIndex] + cinfo.nextLocalTime;
-          await seekVideoToTimeWeb(S.bgVidNext, nextSeekPos);
+          seekJobs.push(seekVideoToTimeWeb(S.bgVidNext, nextSeekPos, bgSeekTol));
           const ease = (typeof easeInOutCubic === "function") ? easeInOutCubic : (x => x);
           S.bgVidFadeProgress = ease(cinfo.xfadeAlpha);
         } else {
@@ -628,14 +703,13 @@ async function startWebExportV2(opts) {
         }
       }
     }
-
-    // بيانات الموجة الصوتية للإطار الحالي
-    S._exportWaveData = exportWaveData[i];
-    if (setStateForTime) setStateForTime(t);
     // v0.7.3 — مزامنة فيديو التلاوة مع زمن الإطار
-    if (S.recVidEl && typeof ge === "function" && ge("recvid-on")) {
-      await seekVideoToTimeWeb(S.recVidEl, t);
-    }
+    if (recVidOn) seekJobs.push(seekVideoToTimeWeb(S.recVidEl, t, recSeekTol));
+    if (seekJobs.length) await Promise.all(seekJobs);
+
+    // بيانات الموجة الصوتية للإطار الحالي (null إن كانَتِ الموجاتُ مُطفَأة)
+    S._exportWaveData = exportWaveData ? exportWaveData[i] : null;
+    if (setStateForTime) setStateForTime(t);
     drawFrame(t);
 
     // VideoFrame من الـ canvas بـ timestamp دقيق
@@ -648,16 +722,27 @@ async function startWebExportV2(opts) {
     videoEncoder.encode(videoFrame, { keyFrame });
     videoFrame.close();
 
-    // backpressure — لا تترك الطابور يكبر بلا حدود
-    if (videoEncoder.encodeQueueSize > 8) {
-      await new Promise(r => setTimeout(r, 5));
-    }
+    // v1.2.1 — ضَغطُ الطابورِ عَبرَ حَدَثِ dequeue بَدَلَ setTimeout المَخنوق،
+    //   ثُمَّ تَنازُلٌ واحِدٌ عَنِ المُعالِجِ عَبرَ MessageChannel (لا يُخنَقُ في
+    //   الخَلفيّة) حَتّى تَجريَ رُدودُ المُرَمِّزِ وتَتَحَدَّثَ الواجِهة.
+    await waitForEncoderQueue(videoEncoder, 8);
+    if (window.PIO) await window.PIO.yieldToBrowser();
 
     const now = performance.now();
     if (now - lastUiTick > 200 || i === totalFrames - 1) {
       lastUiTick = now;
       const pct = 10 + Math.round(((i + 1) / totalFrames) * 85);
-      onProgress(pct, `🎞 إطار ${i + 1}/${totalFrames}  ·  ${formatTime(t)} / ${formatTime(totalDuration)}`);
+      // v1.2.1 — زَمَنٌ مُتَبَقٍّ مُقَدَّرٌ: التَصديرُ عَلى الهاتِفِ طَويل،
+      //   ومَعرِفةُ المُدّةِ خَيرٌ مِنَ انتِظارٍ مَجهول.
+      let eta = "";
+      if (i > 4) {
+        const per = (now - tStartMs) / (i + 1);
+        const left = Math.round((per * (totalFrames - i - 1)) / 1000);
+        eta = `  ·  مُتَبَقٍّ ~${formatTime(left)}`;
+      }
+      onProgress(pct, `🎞 إطار ${i + 1}/${totalFrames}  ·  ${formatTime(t)} / ${formatTime(totalDuration)}${eta}`);
+      // أَبقِ إشعارَ الخِدمةِ (Android) مُواكِباً حَتّى والبَرنامَجُ في الخَلفيّة
+      if (window.PIO) window.PIO.keepAwakeProgress(pct, `إطار ${i + 1}/${totalFrames}${eta}`);
     }
   }
 
@@ -688,19 +773,38 @@ async function startWebExportV2(opts) {
   videoEncoder.close();
   audioEncoder.close();
 
-  // ── 8) تنزيل الناتج ─────────────────────────────────
+  // ── 8) تَسليمُ الناتِج ───────────────────────────────
+  //  ⚠️ v1.2.1 — كانَ هذا الطَورُ يَكتَفي بِـ`<a download>`. داخِلَ WebView
+  //     (نُسخةُ الهاتِف) لا مُديرَ تَنزيلاتٍ يَلتَقِطُه، فَكانَ الفيديو يَختَفي
+  //     صامِتاً بَعدَ تَصديرٍ طَويل — وهُوَ عَينُ ما أَبلَغَ بِهِ المُستَخدِم.
+  //     الآنَ نَمُرُّ بِطَبَقةِ PIO: MediaStore ← Capacitor FS ← FSA ← تَنزيل.
   const buffer = muxer.target.buffer;
   const mime = (fmt.muxer === "mp4") ? "video/mp4" : "video/webm";
   const blob = new Blob([buffer], { type: mime });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `GT-SIRM_${Date.now()}.${fmt.ext}`;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  const filename = (opts.filenameBase || `GT-SIRM_${Date.now()}`) + "." + fmt.ext;
+
+  onProgress(97, "💾 جارٍ حِفظُ المَلَفّ…");
+  let saved = null;
+  if (window.PIO) {
+    saved = await window.PIO.deliverFile(blob, filename, mime, {
+      kind: "video",
+      target: opts.saveTarget,
+      onProgress: (r) => onProgress(97 + Math.round(r * 3), `💾 حِفظُ المَلَفّ… ${Math.round(r * 100)}%`),
+    });
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    saved = { method: "download", path: filename };
+  }
 
   onProgress(100, "✅ اكتمل التصدير!");
-  return { ok: true, size: buffer.byteLength };
+  // نُعيدُ الـblob كَذلِك: يَحتَفِظُ بِهِ التَطبيقُ لِزِرِّ «احفَظ مَرّةً أُخرى»
+  // فَلا يَضيعُ الناتِجُ إن فَشِلَت وَسيلةُ الحَفظِ المُختارة.
+  return { ok: true, size: buffer.byteLength, blob, filename, mime, saved };
 }
 
 function formatTime(s) {

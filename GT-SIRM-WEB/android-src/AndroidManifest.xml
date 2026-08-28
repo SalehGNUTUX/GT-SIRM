@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ═══════════════════════════════════════════════════════════════
+   GT-SIRM — AndroidManifest المُعتَمَد (مَصدَرٌ مُتَتَبَّعٌ في git)
+   ⚠️ مُجَلَّد android/ كامِلاً في .gitignore ويُعادُ تَوليدُهُ بِـ`cap add`،
+      فَلا تُعَدِّل android/app/src/main/AndroidManifest.xml مُباشَرةً —
+      عَدِّل هذا المَلَفَّ، ويَنسَخُهُ build-apk.sh بَعدَ `cap sync`.
+  ═══════════════════════════════════════════════════════════════
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:requestLegacyExternalStorage="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <!-- المُشغّل العادي -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- v0.13.2 — ربط ملفّات .gtsirm بالبَرنامج -->
+            <intent-filter android:label="@string/app_name" android:priority="100">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:mimeType="*/*" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.gtsirm" />
+                <data android:pathPattern=".*\\..*\\.gtsirm" />
+                <data android:pathPattern=".*\\..*\\..*\\.gtsirm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.gtsirm" />
+            </intent-filter>
+            <intent-filter android:label="@string/app_name" android:priority="100">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/json" />
+                <data android:pathPattern=".*\\.gtsirm" />
+            </intent-filter>
+
+        </activity>
+
+        <!--
+          v1.2.1 — خِدمةُ المُقَدِّمة أثناءَ التَصدير.
+          تُبقي العَمليّةَ حَيّةً وذاتَ أَولَويّةٍ عالِيةٍ حينَ يُغادِرُ المُستَخدِمُ
+          البَرنامَجَ أو تَنطَفِئُ الشاشة، وتَحمِلُ PARTIAL_WAKE_LOCK حَتّى لا
+          يَنامَ المُعالِج. بِلا هذا يُجَمِّدُ النِظامُ الـWebView فَيَقِفُ التَصدير.
+        -->
+        <service
+            android:name=".ExportService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- v0.13.2 — Permissions للبَرنامج -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- ميكروفون لتَسجيل الصَوت -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- تَخزين (Android 12 وأَقدم) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- وُصول للوَسائط (Android 13+) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+
+    <!-- اهتزاز (لتَأكيد الأَفعال) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- v1.2.1 — استمرارُ التَصدير في الخَلفيّة وعِندَ انطِفاءِ الشاشة -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- إشعارُ الخِدمة (Android 13+ يَطلُبُهُ لِعَرضِ الإشعار، والخِدمةُ تَعمَلُ بِدونِه) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- إعلان تَوفّر الميكروفون كميزة اختياريّة (لا يَفشل التَثبيت بدونه) -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+</manifest>

@@ -1,6 +1,6 @@
-// GT-SIRM Service Worker v64 — إصدار v1.2.0 (مقاطع خَلفيّة مُتَعدّدة مُتَقَدّمة + Undo/Redo + إصلاحات جَوهريّة)
+// GT-SIRM Service Worker v65 — إصدار v1.2.1 (حَفظٌ حَقيقيٌّ لِلناتِج + تَصديرٌ في الخَلفيّة + تَسريع + البَسمَلة)
 // يجب رفع رقم الإصدار عند كل تحديث للملفات
-const CACHE_VER = "gt-sirm-v64";
+const CACHE_VER = "gt-sirm-v65";
 
 // الأصول المطلوبة لعمل التطبيق بدون إنترنت
 // ⚠️ أي ملف هنا غير موجود سيمنع تسجيل SW بالكامل
@@ -17,6 +17,8 @@ const OPTIONAL = [
   "./GT-SIRM-icons/icon-512.png",
   "./GT-SIRM-icons/icon-32.png",
   "./GT-SIRM-icons/icon-16.png",
+  // طَبَقةُ المِلَفّاتِ واليَقَظة (v1.2.1)
+  "./platform-io.js",
   // محرّك التصدير الحتمي V2 + WebCodecs muxers (v2.1.0)
   "./mp4-muxer.js",
   "./webm-muxer.js",

@@ -22,6 +22,68 @@ function buildAudioUrl(folder, surahNum, ayaNum) {
   return `${AUDIO_BASE}/${cleanFolder}/${String(surahNum).padStart(3,"0")}${String(ayaNum).padStart(3,"0")}.mp3`;
 }
 
+// ══════════════════════════════════════════════════════
+//  v1.2.1 — البَسمَلة: تُكتَبُ ولا تُتلى (إصلاح)
+//  نَصّ alquran.cloud (quran-uthmani) يُدمِجُ البَسمَلةَ في نَصّ الآيةِ الأُولى
+//  لِكُلّ سورة، عَدا الفاتِحة (البَسمَلةُ فيها آيةٌ مُستَقِلّةٌ بِرَقمِ 1)
+//  وبَراءة (لا بَسمَلةَ في أَوَّلِها).
+//  أمّا ملفّاتُ everyayah فالآيةُ الأُولى فيها بِلا بَسمَلة — فكانَ البَرنامَجُ
+//  يَكتُبُها ولا يَتلوها. الحَلّ: فَصلُها شَريحةً مُستَقِلّةً صَوتُها 001001.mp3
+//  لِنَفسِ القارئ المُختار.
+// ══════════════════════════════════════════════════════
+const BASMALA_NORM = "بسم الله الرحمن الرحيم";   // = normalizeArabic(البَسمَلة الرَسميّة)
+
+// يَفصِلُ البَسمَلةَ عَن بَقيّةِ نَصّ الآية. يُعيدُ null إن لَم تَكُن في أَوَّلِه
+// أَو إن كانَ النَصُّ بَسمَلةً وَحدَها (حالُ الفاتِحة).
+function splitBasmalaPrefix(text) {
+  if (!text || typeof normalizeWithMap !== "function") return null;
+  const { norm, map } = normalizeWithMap(text);
+  if (!norm.startsWith(BASMALA_NORM)) return null;
+  const cutNorm = BASMALA_NORM.length;
+  if (norm.length <= cutNorm) return null;        // بَسمَلةٌ فَقَط — لا شَيءَ بَعدَها
+  const cut = map[cutNorm];                        // مَوضِعُ الفاصِلِ في النَصّ الأَصليّ
+  if (cut == null) return null;
+  const head = text.slice(0, cut).trim();
+  const rest = text.slice(cut).trim();
+  if (!head || !rest) return null;
+  return { basmala: head, rest };
+}
+
+// يُطَبِّقُ الفَصلَ عَلى قائمةِ الآيات المُحَمَّلة (يُعيدُ قائمةً جَديدة)
+function applyBasmalaSlice(verses, surahNum) {
+  if (!Array.isArray(verses) || !verses.length) return verses;
+  if (surahNum === 1 || surahNum === 9) return verses;   // الفاتِحة / بَراءة
+  const first = verses[0];
+  if (!first || first.numberInSurah !== 1) return verses; // الاختيارُ لَم يَبدَأ مِن أَوّلِ السورة
+  const split = splitBasmalaPrefix(first.text || "");
+  if (!split) return verses;
+
+  const out = verses.slice();
+  out[0] = Object.assign({}, first, { text: split.rest });
+
+  const el = document.getElementById("basmala-on");
+  const wantBasmala = el ? el.checked : true;             // الافتراض: مُفَعَّلة
+  if (wantBasmala) {
+    out.unshift({
+      numberInSurah: 0,
+      text: split.basmala,
+      basmala: true,
+      audioSurah: 1,     // البَسمَلةُ تُؤخَذُ مِن 001001.mp3 لِنَفسِ القارئ
+      audioAya: 1,
+    });
+  }
+  return out;
+}
+
+// عُنوانُ صَوتِ شَريحةٍ بِعَينِها — يَحتَرِمُ تَجاوُزَ audioSurah/audioAya (البَسمَلة)
+function ayaAudioUrl(reciterFolder, surahNum, aya) {
+  return buildAudioUrl(
+    reciterFolder,
+    (aya && aya.audioSurah) || surahNum,
+    (aya && aya.audioAya)   || (aya && aya.numberInSurah) || 1
+  );
+}
+
 const BUILT_IN_FONTS = [
   { id: "amiri",     name: "Amiri Quran",     css: "'Amiri Quran'",       sample: "بِسْمِ اللَّهِ" },
 { id: "reem",      name: "Reem Kufi",        css: "'Reem Kufi'",         sample: "بِسْمِ اللَّهِ" },
@@ -191,6 +253,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   restoreAllSettings();
   restoreLogo();
   restoreMixedAnimsOrder();
+  applyCanvasSize();     // v1.2.1 — طَبِّق سَقفَ الدِقّةِ المُستَعادَ واعرِضِ الأَبعاد
   initAutoSave();
   initCapacitor();       // v0.13.2 — Android: زرّ الرُجوع + فَتح ملفّات .gtsirm
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
@@ -2049,6 +2112,33 @@ function initEventListeners() {
     });
   }
 
+  // v1.2.1 — توگل البَسمَلة (اِفتِراضُهُ مُفَعَّل)
+  const basmalaCb = $("basmala-on");
+  if (basmalaCb) {
+    try {
+      const saved = localStorage.getItem("gt_sirm_basmala_on");
+      basmalaCb.checked = (saved === null) ? true : (saved === "1");
+    } catch (_) {}
+    basmalaCb.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_basmala_on", basmalaCb.checked ? "1" : "0"); } catch (_) {}
+      toast?.(basmalaCb.checked
+        ? "🕋 البَسمَلةُ ستُكتَبُ وتُتلى — اضغط 'تحميل الآيات' لِتَطبيقِه"
+        : "البَسمَلةُ لَن تُكتَبَ ولا تُتلى — اضغط 'تحميل الآيات' لِتَطبيقِه", "info", 2400);
+    });
+  }
+
+  // v1.2.1 — أَزرارُ نافِذةِ نَتيجةِ التَصدير
+  const edClose = $("export-done-close-btn");
+  if (edClose) edClose.addEventListener("click", closeExportDoneModal);
+  const edDl = $("export-done-download-btn");
+  if (edDl) edDl.addEventListener("click", resaveLastExport);
+  const edShare = $("export-done-share-btn");
+  if (edShare) edShare.addEventListener("click", shareLastExport);
+
+  // v1.2.1 — سَقفُ دِقّةِ التَصدير (كانَ عُنصُراً مَيِّتاً لا يَقرَؤُهُ أَحَد)
+  const resEl = $("export-res");
+  if (resEl) resEl.addEventListener("change", onExportResChange);
+
   const toggleAddReciterBtn = $("toggle-add-reciter-btn");
   if (toggleAddReciterBtn) toggleAddReciterBtn.addEventListener("click", toggleAddReciter);
 
@@ -2643,14 +2733,62 @@ const FMT_SIZES = {
   "4:5":  { w: 1080, h: 1350 },
 };
 
+
+// ══════════════════════════════════════════════════════
+//  v1.2.1 — سَقفُ دِقّةِ التَصدير (كانَ عُنصُرَ واجِهةٍ مَيِّتاً)
+//  ───────────────────────────────────────────────────
+//  كانَ <select id="export-res"> مَوجوداً في «جودة التصدير» ولا يَقرَؤُهُ
+//  أَحَد: يَختارُ المُستَخدِمُ 720p فَيُصَدَّرُ بِـ1080p كَما هُوَ. وهذا أَحَدُ
+//  أَسبابِ بُطءِ التَصديرِ عَلى الهاتِف — زَمَنُ الإطارِ يَتَناسَبُ طَردِيّاً مَعَ
+//  عَدَدِ البِكسِلات، فَالنُزولُ مِن 1080×1920 إلى 720×1280 يَقتَطِعُ 55٪ مِنَ
+//  العَمَل.
+//  السَقفُ يُصَغِّرُ ولا يُكَبِّر، ويُشتَقُّ دائِماً مِن FMT_SIZES فَتَطبيقُهُ
+//  مِراراً لا يُراكِمُ التَصغير.
+// ══════════════════════════════════════════════════════
+function getExportResCap() {
+  const el = document.getElementById("export-res");
+  const v = el ? parseInt(el.value) : 0;
+  return (v && isFinite(v) && v > 0) ? v : 0;   // 0 = بِلا سَقف
+}
+
+function computeCanvasSize() {
+  const fmt = (typeof radioVal === "function") ? radioVal("fmt") : "9:16";
+  const base = FMT_SIZES[fmt] || FMT_SIZES["9:16"];
+  let w = base.w, h = base.h;
+  const cap = getExportResCap();
+  const longEdge = Math.max(w, h);
+  if (cap && longEdge > cap) {
+    const k = cap / longEdge;
+    w = Math.round(w * k);
+    h = Math.round(h * k);
+  }
+  // H.264 يَشتَرِطُ أَبعاداً زَوجيّة
+  w = Math.max(2, w - (w % 2));
+  h = Math.max(2, h - (h % 2));
+  return { w, h };
+}
+
+function applyCanvasSize() {
+  const cv = $("cv");
+  if (!cv) return;
+  const { w, h } = computeCanvasSize();
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const info = document.getElementById("export-res-info");
+  if (info) info.textContent = `الأبعاد الفعليّة: ${w}×${h}`;
+  if (typeof fitCanvas === "function") fitCanvas();
+}
+
+function onExportResChange() {
+  applyCanvasSize();
+  const { w, h } = computeCanvasSize();
+  toast?.(`🎬 أبعاد التصدير: ${w}×${h}`, "info", 2000);
+}
+
 function onFmtChange() {
   const fmt = radioVal("fmt");
-  const cv = $("cv");
-  const sz = FMT_SIZES[fmt] || FMT_SIZES["9:16"];
-  cv.width = sz.w; cv.height = sz.h;
   const lbl = $("fmt-lbl");
   if (lbl) lbl.textContent = fmt;
-  fitCanvas();
+  applyCanvasSize();   // v1.2.1 — يَحتَرِمُ سَقفَ الدِقّةِ المُختار
 }
 
 // ── القوالب الجاهزة للمنصات الشهيرة ──────────────────
@@ -2670,11 +2808,9 @@ function applyPreset(name) {
   FMT_SIZES[p.fmt] = { w: p.w, h: p.h };
   const fmtRadio = document.querySelector(`input[name="fmt"][value="${p.fmt}"]`);
   if (fmtRadio) fmtRadio.checked = true;
-  const cv = $("cv");
-  cv.width = p.w; cv.height = p.h;
   const lbl = $("fmt-lbl");
   if (lbl) lbl.textContent = p.fmt;
-  fitCanvas();
+  applyCanvasSize();   // v1.2.1 — يَحتَرِمُ سَقفَ الدِقّةِ المُختار
   const fpsEl = $("export-fps");
   if (fpsEl) fpsEl.value = String(p.fps);
   const vbrEl = $("export-vbr");
@@ -3828,8 +3964,8 @@ function drawVerse(ctx, W, H, ts) {
     tLines.forEach((tl, i) => ctx.fillText(tl, W / 2, tStart + i * tfs * 1.4));
   }
 
-  // رقم الآية يظهر فقط للآيات القرآنيّة الحقيقيّة (ليس للنصّ الحرّ)
-  if (!aya.free) {
+  // رقم الآية يظهر فقط للآيات القرآنيّة الحقيقيّة (ليس للنصّ الحرّ ولا البَسمَلة)
+  if (!aya.free && !aya.basmala) {
     ctx.globalAlpha = alpha * .6;
     ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
     ctx.font = `bold ${W * .022}px 'Cairo'`;
@@ -4376,7 +4512,7 @@ async function playRecitationAudio() {
   const myGen = ++_recGen;
   const surahNum = parseInt($("surah-sel").value) || 1;
   const reciter = S.reciters.find(r => r.id === radioVal("reciter")) || S.reciters[0];
-  const url = buildAudioUrl(reciter.folder, surahNum, aya.numberInSurah);
+  const url = ayaAudioUrl(reciter.folder, surahNum, aya);
   $("audio-status").textContent = `⏳ جاري التحميل — ${reciter.name} الآية ${aya.numberInSurah}`;
 
   const onEnded = () => {
@@ -6646,6 +6782,125 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 // ══════════════════════════════════════════════════════
 //  EXPORT
 // ══════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════
+//  v1.2.1 — تَسليمُ الناتِجِ وإنقاذُه
+//  ───────────────────────────────────────────────────
+//  أَبلَغَ المُستَخدِم: «بَعدَ انتِهاءِ عَمَليّةِ التَصديرِ الطَويلةِ لا يُحفَظُ
+//  المَلَفُّ المُنتَجُ في مِساحةِ التَخزينِ ولا أَجِدُ لَهُ أَثَراً».
+//  السَبَبُ أنَّ التَسليمَ كانَ بِـ`<a download>` وَحدَه — لا يَعمَلُ داخِلَ
+//  WebView وقَد يَفشَلُ صامِتاً في PWA المُستَقِلّ. الآنَ:
+//    • يُحفَظُ عَبرَ MediaStore/Filesystem تِلقائيّاً في الهاتِف،
+//    • ويَبقى الناتِجُ في الذاكِرةِ مَعَ نافِذةٍ تُخبِرُ أَينَ حُفِظَ وتَعرِضُ
+//      «حِفظٌ آخَر» و«مُشارَكة» — فَلا يَضيعُ ثَمَرُ ساعةٍ مِنَ الانتِظار.
+// ══════════════════════════════════════════════════════
+
+// اسمٌ مَقروءٌ لِلمَلَفِّ بَدَلَ طابَعٍ زَمَنيٍّ مُجَرَّد
+function buildExportFileBase() {
+  const d = new Date();
+  const p2 = (n) => String(n).padStart(2, "0");
+  const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}-${p2(d.getMinutes())}`;
+  let label = "";
+  try {
+    const first = S.verses && S.verses[0];
+    if (first && first.source) label = String(first.source);
+    else if (isModuleActive && isModuleActive("quran")) {
+      const sel = $("surah-sel");
+      const n = sel && sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : "";
+      label = (n.split("—")[0] || "").replace(/^\s*\d+\.\s*/, "").trim();
+    }
+  } catch (_) {}
+  label = label.replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 40);
+  return label ? `GT-SIRM_${label}_${stamp}` : `GT-SIRM_${stamp}`;
+}
+
+// يَعرِضُ نَتيجةَ التَصدير: أَينَ حُفِظَ + وَسائِلُ الإنقاذ
+function showExportResult(res) {
+  if (!res || !res.ok) { toast("✅ تم التصدير بنجاح! (محرّك V2 حتمي)", "success"); return; }
+
+  // احتَفِظ بِالناتِجِ لِأَزرارِ «حِفظٌ آخَر» و«مُشارَكة»
+  S.lastExport = { blob: res.blob || null, filename: res.filename, mime: res.mime, saved: res.saved || null };
+
+  const modal = $("export-done-modal");
+  const method = res.saved && res.saved.method;
+  const sizeMB = res.size ? (res.size / 1048576).toFixed(1) : "؟";
+
+  let where, note;
+  if (method === "native") {
+    where = `📁 حُفِظَ في: <b>${res.saved.path}</b>`;
+    note = "تَجِدُهُ في مَعرِضِ الصُوَرِ والفيديو أو في تَطبيقِ «المِلَفّات». إن لَم يَظهَر فَوراً فَأَعِد فَتحَ المَعرِض.";
+  } else if (method === "capacitor-fs") {
+    where = `📁 حُفِظَ في مُجَلَّدِ البَرنامَج: <b>${res.saved.path}</b>`;
+    note = "تَعَذَّرَ الحَفظُ في المَعرِض، فَحُفِظَ في مُجَلَّدِ البَرنامَجِ الخارِجيّ. استَعمِل «مُشارَكة» لِنَقلِهِ حَيثُ تَشاء.";
+  } else if (method === "fsa") {
+    where = `📁 حُفِظَ في المَكانِ الذي اختَرتَه: <b>${res.saved.path}</b>`;
+    note = "";
+  } else {
+    where = `⬇️ أُرسِلَ إلى تَنزيلاتِ المُتَصَفِّح: <b>${res.filename}</b>`;
+    note = "إن لَم تَجِدهُ في التَنزيلات (يَحدُثُ في وَضعِ التَطبيقِ المُثَبَّتِ عَلى الهاتِف) فاستَعمِل «مُشارَكة / حِفظ» أَدناه — الناتِجُ ما زالَ مَحفوظاً في الذاكِرة.";
+  }
+
+  if (!modal) {
+    toast(`✅ اكتَمَلَ التَصدير (${sizeMB} م.ب) — ${String(where).replace(/<[^>]+>/g, "")}`, "success", 6000);
+    return;
+  }
+
+  $("export-done-where").innerHTML = `${where}<br><span style="color:var(--t3)">الحَجم: ${sizeMB} ميغابايت</span>`;
+  $("export-done-note").textContent = note;
+
+  const shareBtn = $("export-done-share-btn");
+  if (shareBtn) {
+    const canShare = !!(window.PIO && (res.saved?.uri || (res.blob && window.PIO.canShareFiles())));
+    shareBtn.style.display = canShare ? "" : "none";
+  }
+  const dlBtn = $("export-done-download-btn");
+  if (dlBtn) dlBtn.style.display = res.blob ? "" : "none";
+
+  modal.style.display = "flex";
+}
+
+function closeExportDoneModal() {
+  const m = $("export-done-modal");
+  if (m) m.style.display = "none";
+}
+
+// «حِفظٌ آخَر» — يُعيدُ مُحاوَلةَ الحَفظِ لِنَفسِ الناتِجِ المُحتَفَظِ بِهِ
+async function resaveLastExport() {
+  const le = S.lastExport;
+  if (!le || !le.blob) { toast("لا يوجَدُ ناتِجٌ مَحفوظٌ في الذاكِرة", "warn", 2500); return; }
+  try {
+    // في المُتَصَفِّحِ اطلُب مَكانَ الحَفظِ الآنَ — النَقرُ إيماءةٌ صالِحة
+    let target = null;
+    if (window.PIO && window.PIO.HAS_FSA_SAVE && !window.PIO.isNativeAndroid()) {
+      target = await window.PIO.prepareSaveTarget(le.filename, le.mime);
+      if (target && target.kind === "aborted") return;
+    }
+    const saved = await window.PIO.deliverFile(le.blob, le.filename, le.mime, { kind: "video", target });
+    if (saved) {
+      toast(`💾 حُفِظَ: ${saved.path}`, "success", 3500);
+      S.lastExport.saved = saved;
+    } else {
+      toast("❌ تَعَذَّرَ الحَفظ — جَرِّب «مُشارَكة»", "error", 3500);
+    }
+  } catch (e) {
+    toast("❌ فَشِلَ الحَفظ: " + String(e.message || e).slice(0, 60), "error", 3500);
+  }
+}
+
+// «مُشارَكة / حِفظ» — ورَقةُ المُشارَكةِ الأَصليّة (تُتيحُ الحِفظَ في المِلَفّاتِ أيضاً)
+async function shareLastExport() {
+  const le = S.lastExport;
+  if (!le) { toast("لا يوجَدُ ناتِجٌ لِلمُشارَكة", "warn", 2500); return; }
+  let ok = false;
+  if (le.saved && le.saved.uri && window.PIO) {
+    ok = await window.PIO.shareSavedFile(le.saved.uri, le.filename);
+  }
+  if (!ok && le.blob && window.PIO) {
+    ok = await window.PIO.shareBlob(le.blob, le.filename, le.mime);
+  }
+  if (!ok) toast("تَعَذَّرَتِ المُشارَكةُ عَلى هذا الجِهاز — استَعمِل «حِفظٌ آخَر»", "warn", 3500);
+}
+
 async function startExport(type) {
   if (!S.verses.length) { toast("⚠️ لا توجد آيات", "error"); return; }
 
@@ -6682,7 +6937,7 @@ async function startExport(type) {
       $("rec-sub").textContent = `⏳ تحضير الشرائح… ${loaded}/${S.verses.length}`;
       return null;
     }
-    const url = buildAudioUrl(reciter.folder, surahNum, aya.numberInSurah);
+    const url = ayaAudioUrl(reciter.folder, surahNum, aya);
     try {
       const res = await fetch(url, { cache: "force-cache" });
       if (!res.ok) throw new Error("HTTP " + res.status);
@@ -6754,7 +7009,13 @@ async function startExport(type) {
   //  لا تقطّع، لا انجراف زمني — مكافئ للنسخة المكتبية
   // ═══════════════════════════════════════════════════
   let v2Completed = false;  // علم صارم: إن صار true → ممنوع MediaRecorder
+  let _v2Result = null;
   if (typeof startWebExportV2 === "function" && typeof isWebCodecsSupported === "function" && isWebCodecsSupported()) {
+    // v1.2.1 — قَبلَ أَيِّ شَيء: امنَعِ النِظامَ مِن تَجميدِ التَصدير.
+    //   قُفلُ يَقَظةِ الشاشة (ويب/PWA) + إبقاءُ الشاشةِ مُضاءة وخِدمةُ مُقَدِّمةٍ
+    //   ذاتُ PARTIAL_WAKE_LOCK (Android). بِلا هذا يَقِفُ التَصديرُ فَورَ
+    //   انطِفاءِ الشاشةِ أو فَتحِ بَرنامَجٍ آخَر.
+    if (window.PIO) { try { await window.PIO.keepAwakeStart("جارٍ تَصديرُ الفيديو…"); } catch (_) {} }
     try {
       $("rec-sub").textContent = "🚀 محرّك حتمي V2 (WebCodecs)…";
       // فكّ ترميز صوت الخلفية لخلطه في OfflineAudioContext
@@ -6790,8 +7051,9 @@ async function startExport(type) {
         S.bgMotionT  = t;
       };
 
-      await window.startWebExportV2({
+      _v2Result = await window.startWebExportV2({
         canvas: cv,
+        filenameBase: buildExportFileBase(),
         drawFrame,
         setStateForTime,
         totalDuration,
@@ -6819,7 +7081,7 @@ async function startExport(type) {
         },
       });
       v2Completed = true;  // ⚠️ مهم: V2 أنتج الملف بنجاح
-      toast("✅ تم التصدير بنجاح! (محرّك V2 حتمي)", "success");
+      showExportResult(_v2Result);
     } catch (e) {
       if (e && e.message === "cancelled") {
         toast("تم إلغاء التصدير", "info");
@@ -6830,6 +7092,7 @@ async function startExport(type) {
       }
     } finally {
       S.exportCancelRef = null;
+      if (window.PIO) { try { await window.PIO.keepAwakeStop(); } catch (_) {} }
     }
     // تنظيف صارم بعد V2 — في كل الأحوال (نجاح/إلغاء)
     if (v2Completed) {
@@ -6913,7 +7176,7 @@ async function startExport(type) {
         setTimeout(() => playExportAya(idx + 1), (aya2.manualDuration || manualDur) * 1000);
         return;
       }
-      const url2 = buildAudioUrl(reciter.folder, surahNum, aya2.numberInSurah);
+      const url2 = ayaAudioUrl(reciter.folder, surahNum, aya2);
       const a2 = new Audio(url2);
       a2.volume = gainVal;
       try {
@@ -7179,6 +7442,10 @@ async function loadVerses() {
     }
   }
 
+  // v1.2.1 — افصِلِ البَسمَلةَ شَريحةً مُستَقِلّةً (نَصّاً وتِلاوةً) إن بَدَأَ
+  //   الاختيارُ مِن أَوّلِ السورة. بِلا هذا تُكتَبُ ولا تُتلى.
+  verses = applyBasmalaSlice(verses, surahNum);
+
   // v0.4.3 — وضع "النصّ فقط"
   const textOnly = !!ge("quran-text-only");
   if (textOnly) {
@@ -7254,6 +7521,9 @@ async function loadTranslations() {
   S.translations = allAyahs
     .filter(a => a.n >= from && a.n <= to)
     .map(a => a.t);
+  // v1.2.1 — شَريحةُ البَسمَلةِ تَتَقَدَّمُ الآياتِ فَتُزيحُ الفِهرِس: أَدرِج تَرجَمةً
+  //   فارِغةً في رَأسِ القائمةِ حَتّى تُقابِلَ كُلُّ تَرجَمةٍ آيَتَها.
+  if (S.verses[0] && S.verses[0].basmala) S.translations.unshift("");
 }
 
 // ══════════════════════════════════════════════════════
@@ -8373,9 +8643,26 @@ async function saveProjectToPath(_filePath) {
     }
   }
   const blob = new Blob([json], { type: "application/json" });
+  const fname = (S.projectFileName || `gt-sirm-project-${Date.now()}.gtsirm`).replace(/\.json$/, ".gtsirm");
+
+  // ⚠️ v1.2.1 — كانَ الحَفظُ هُنا بِـ`<a download>` وَحدَه. داخِلَ WebView
+  //   (نُسخةُ الهاتِف) لا يُنَفَّذُ ولا يُبَلِّغُ بِخَطَأ، فَكانَ المُستَخدِمُ يَضغَطُ
+  //   💾 فَلا يُحفَظُ شَيءٌ ولا يَعلَم. الآنَ يَمُرُّ بِطَبَقةِ PIO التي تَكتُبُ
+  //   عَبرَ MediaStore إلى Download/GT-SIRM في الهاتِف.
+  if (window.PIO) {
+    const saved = await window.PIO.deliverFile(blob, fname, "application/json", { kind: "file" });
+    if (!saved) { toast("❌ تَعَذَّرَ حِفظُ المَشروع", "error", 3000); return false; }
+    S.projectFileName = fname;
+    S.lastProjectSavePath = saved.path || fname;
+    clearProjectDirty();
+    if (saved.method === "native" || saved.method === "capacitor-fs") {
+      toast(`💾 حُفِظَ المَشروع: ${saved.path}`, "success", 3500);
+    }
+    return true;
+  }
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  const fname = (S.projectFileName || `gt-sirm-project-${Date.now()}.gtsirm`).replace(/\.json$/, ".gtsirm");
   a.href = url; a.download = fname;
   a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   S.projectFileName = fname;
@@ -8418,9 +8705,12 @@ async function saveProjectInteractive(forcePrompt = false) {
     }
   }
 
-  // Fallback: تَنزيل blob (السُلوك القَديم — لا يُتيح حَفظاً تلقائيّاً صامتاً)
+  // Fallback: تَسليمٌ عَبرَ PIO (تَنزيلٌ في المُتَصَفِّح، وكِتابةٌ حَقيقيّةٌ في الهاتِف)
   const ok = await saveProjectToPath(null);
-  if (ok) toast("💾 تمّ تنزيل ملفّ المشروع", "success", 2200);
+  // في الهاتِفِ يُبَلِّغُ saveProjectToPath بِنَفسِهِ عَنِ المَسارِ — لا تُكَرِّرِ الرِسالة
+  if (ok && !(window.PIO && window.PIO.isNativeAndroid())) {
+    toast("💾 تمّ تنزيل ملفّ المشروع", "success", 2200);
+  }
 }
 
 // v1.1.0 — يُفعِّل الحَفظ التلقائيّ بَعد أوّل حَفظ ناجِح
@@ -8502,6 +8792,21 @@ function startAutoSave() {
         if (ok) { toast(`💾 حفظ تلقائيّ — ${new Date().toLocaleTimeString("ar")}`, "info", 1500); return; }
       } catch (_) {}
     }
+    // v1.2.1 — الهاتِف: اكتُب مَلَفّاً حَقيقيّاً باسمٍ ثابِتٍ في مُجَلَّدِ البَرنامَج.
+    //   قَبلَ هذا كانَ الحَفظُ التِلقائيُّ في الهاتِفِ يَقتَصِرُ عَلى localStorage —
+    //   يَضيعُ بِمَسحِ بَياناتِ التَطبيقِ ولا يُرى مِن خارِجِه.
+    if (window.PIO && window.PIO.isNativeAndroid()) {
+      try {
+        const proj = await serializeProject();
+        const res = await window.PIO.writeAppTextFile(
+          "GT-SIRM/autosave.gtsirm", JSON.stringify(proj));
+        if (res) {
+          toast(`💾 حفظ تلقائيّ — ${res.path}`, "info", 1800);
+          return;
+        }
+      } catch (e) { console.warn("autosave (Android) فَشِل:", e); }
+    }
+
     // v1.1.0 — لا handle بَعد. توگَل نَبِّه المُستخدم مَرّة واحدة (المُتَصفّح لا يَسمَح بِطلَب FSA مِن setInterval)
     if (typeof HAS_FSA !== "undefined" && HAS_FSA && !S._autoSavePromptDismissed) {
       S._autoSavePromptDismissed = true;
