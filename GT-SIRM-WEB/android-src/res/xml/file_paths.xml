@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  مَسارات FileProvider. أُضيفَ `updates` (v1.2.2) لِيَقدِرَ مُثَبِّتُ النِظام
+  عَلى قِراءةِ حُزمةِ التَحديثِ المُنَزَّلة — بِلا هذا يَفشَلُ التَثبيتُ بِـ
+  IllegalArgumentException: Failed to find configured root.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="my_images" path="." />
+    <cache-path name="my_cache_images" path="." />
+    <external-files-path name="updates" path="updates/" />
+    <external-files-path name="gtsirm_files" path="." />
+</paths>

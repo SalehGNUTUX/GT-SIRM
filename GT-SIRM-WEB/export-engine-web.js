@@ -73,12 +73,20 @@ function isWebCodecsSupported() {
 // v1.2.2 — يُعيدُ الآنَ وَصفاً لِما جَرى، لِيَعرِفَ المُصَدِّرُ أَينَ يَضيعُ الزَمَن:
 //   { skipped } لَم يَلزَمِ النَقل · { timedOut } انقَضَتِ المُهلةُ ولَم يَصِل
 //   حَدَثُ seeked (الإطارُ المَرسومُ عِندَئِذٍ قَديم) · { ms } الزَمَنُ المُستَغرَق.
-function seekVideoToTimeWeb(v, t, tolerance, guardMs) {
+function seekVideoToTimeWeb(v, t, tolerance, guardMs, noWait) {
   return new Promise(resolve => {
     if (!v || !isFinite(v.duration)) return resolve({ skipped: true, ms: 0 });
     const tol = (typeof tolerance === "number" && tolerance > 0) ? tolerance : 0.02;
     const target = Math.min(t, Math.max(0, v.duration - 1e-4));
     if (Math.abs(v.currentTime - target) < tol) return resolve({ skipped: true, ms: 0 });
+    // v1.2.2 — الوَضعُ السَريع: اطلُبِ النَقلَ ولا تَنتَظِر. يَلحَقُ فاكُّ التَرميزِ
+    //   مُتَأَخِّراً بِإطارٍ أو إطارَين، ويَرسُمُ `drawBg` آخِرَ إطارٍ صالِحٍ رَيثَما
+    //   يَصِل — وهذا مَقبولٌ تَماماً لِخَلفيّةٍ مَشهَديّة، ويَحذِفُ أَثقَلَ انتِظارٍ
+    //   في الحَلقة. لا يُستَعمَلُ لِفيديو التِلاوةِ (يَجِبُ أن يُطابِقَ الصَوت).
+    if (noWait) {
+      try { v.currentTime = target; } catch (_) {}
+      return resolve({ skipped: false, noWait: true, ms: 0 });
+    }
     const t0 = performance.now();
     let done = false;
     let timer = null;
@@ -684,10 +692,19 @@ async function startWebExportV2(opts) {
   //   الأَضعافِ بِاختِلافِ المَشروعِ والجِهاز.
   const prof = {
     seek: 0, draw: 0, encode: 0, wait: 0, yield: 0,
-    seeks: 0, seekTimeouts: 0, seekSkips: 0, frames: 0,
+    seeks: 0, seekTimeouts: 0, seekSkips: 0, seekNoWait: 0, frames: 0,
   };
   window._sirmExportProfile = prof;
   let seekDisabled = false;
+
+  // v1.2.2 — وَضعُ الخَلفيّةِ السَريع + مُهلةُ نَقلٍ أَقصَر.
+  //   صارَ تَقصيرُ المُهلةِ آمِناً بَعدَ ذاكِرةِ آخِرِ إطارٍ صالِح: أَسوَأُ ما يَقَعُ
+  //   عِندَ انقِضائِها تَكرارُ إطارٍ، لا ظُهورُ الخَلفيّةِ المُتَدَرِّجةِ كَما كان.
+  const bgFastMode = (typeof ge === "function") ? ge("export-bg-fast") : false;
+  const BG_SEEK_GUARD = 400;
+  if (bgFastMode && visibleBgClips.length) {
+    console.log("[V2] وَضعُ خَلفيّةٍ سَريع: لا انتِظارَ لِنَقلِ الفيديو");
+  }
 
   for (let i = 0; i < totalFrames; i++) {
     if (cancelRef?.canceled) break;
@@ -718,11 +735,11 @@ async function startWebExportV2(opts) {
         S.bgVid = visibleBgClips[cinfo.clipIndex].vid;
         // Feature#2 — seek إلى (trimStart + localTime)
         const seekPos = bgClipTrimStarts[cinfo.clipIndex] + cinfo.localTime;
-        seekJobs.push(seekVideoToTimeWeb(S.bgVid, seekPos, bgSeekTol));
+        seekJobs.push(seekVideoToTimeWeb(S.bgVid, seekPos, bgSeekTol, BG_SEEK_GUARD, bgFastMode));
         if (cinfo.inXfade) {
           S.bgVidNext = visibleBgClips[cinfo.nextClipIndex].vid;
           const nextSeekPos = bgClipTrimStarts[cinfo.nextClipIndex] + cinfo.nextLocalTime;
-          seekJobs.push(seekVideoToTimeWeb(S.bgVidNext, nextSeekPos, bgSeekTol));
+          seekJobs.push(seekVideoToTimeWeb(S.bgVidNext, nextSeekPos, bgSeekTol, BG_SEEK_GUARD, bgFastMode));
           const ease = (typeof easeInOutCubic === "function") ? easeInOutCubic : (x => x);
           S.bgVidFadeProgress = ease(cinfo.xfadeAlpha);
         } else {
@@ -732,6 +749,7 @@ async function startWebExportV2(opts) {
       }
     }
     // v0.7.3 — مزامنة فيديو التلاوة مع زمن الإطار
+    // فيديو التِلاوةِ يَبقى دَقيقاً دائِماً — تَأخُّرُهُ يَعني اختِلالَ المُزامَنةِ مَعَ الصَوت
     if (!seekDisabled && recVidOn) seekJobs.push(seekVideoToTimeWeb(S.recVidEl, t, recSeekTol));
     if (seekJobs.length) {
       const tSeek = performance.now();
@@ -740,6 +758,7 @@ async function startWebExportV2(opts) {
       for (const r of results) {
         if (!r) continue;
         if (r.skipped) prof.seekSkips++;
+        else if (r.noWait) prof.seekNoWait++;
         else { prof.seeks++; if (r.timedOut) prof.seekTimeouts++; }
       }
     }

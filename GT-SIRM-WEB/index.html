@@ -416,7 +416,25 @@ body.offline .offline-badge{display:block}
     <div class="modal-btns" style="flex-wrap:wrap;gap:6px">
       <button class="btn btn-g" id="export-done-close-btn">إغلاق</button>
       <button class="btn btn-g" id="export-done-download-btn">⬇️ حِفظٌ آخَر</button>
-      <button class="btn btn-a" id="export-done-share-btn">📤 مُشارَكة / حِفظ</button>
+      <button class="btn btn-g" id="export-done-saveas-btn">📁 حِفظٌ باسم…</button>
+      <button class="btn btn-a" id="export-done-share-btn">📤 مُشارَكة</button>
+    </div>
+  </div>
+</div>
+
+<!-- v1.2.2 — تَوَفُّرُ إصدارٍ جَديد: رِسالةٌ واضِحةٌ وزِرّان لا غَير -->
+<div class="modal-bg" id="update-modal">
+  <div class="modal">
+    <h3 id="update-title">🎉 يَتَوَفَّرُ إصدارٌ جَديد</h3>
+    <div id="update-body" style="font-size:11px;line-height:1.8;margin-bottom:8px"></div>
+    <div id="update-notes" style="display:none;font-size:10px;line-height:1.7;color:var(--t2);background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-bottom:8px;max-height:170px;overflow-y:auto;white-space:pre-line"></div>
+    <div id="update-progress" style="display:none;margin-bottom:8px">
+      <div class="rec-bar"><div class="rec-fill" id="update-fill" style="width:0%"></div></div>
+      <div id="update-progress-txt" style="font-size:10px;color:var(--t3);text-align:center;margin-top:4px"></div>
+    </div>
+    <div class="modal-btns" id="update-btns" style="flex-wrap:wrap;gap:6px">
+      <button class="btn btn-g" id="update-later-btn">لاحِقاً</button>
+      <button class="btn btn-a" id="update-now-btn">⬇️ تَحديثٌ الآن</button>
     </div>
   </div>
 </div>
@@ -440,7 +458,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small>GnuTux Short Islamic Reels Maker v1.2.1</small>
+      <small>GnuTux Short Islamic Reels Maker v1.2.2</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -1745,6 +1763,10 @@ body.offline .offline-badge{display:block}
             </select>
             <div id="export-res-info" style="font-size:9px;color:var(--t3);margin-top:3px"></div>
           </div>
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px;margin-bottom:5px">
+            <span class="tgl">⚡ تَسريعُ خَلفيّةِ الفيديو<br><small style="color:var(--t3)">لا يَنتَظِرُ نَقلَ فيديو الخَلفيّةِ عِندَ كُلِّ إطار — أَسرَعُ بِكَثيرٍ عَلى الهاتِف. قَد تَتَأَخَّرُ الخَلفيّةُ إطاراً أو إطارَين، وهُوَ غَيرُ مَلحوظٍ في المَشاهِدِ الطَبيعيّة. فيديو التِلاوةِ يَبقى مُتَزامِناً دائِماً.</small></span>
+            <label class="tg"><input type="checkbox" id="export-bg-fast" checked><span class="tgs"></span></label>
+          </div>
           <div class="fg"><label class="fl">معدل الإطارات (FPS)</label>
             <select class="fc" id="export-fps">
               <option value="24">24 fps (سينما)</option>
@@ -1891,11 +1913,12 @@ body.offline .offline-badge{display:block}
         <div class="about-logo">
           <img src="GT-SIRM-icons/icon-256.png" class="al-icon" alt="GT-SIRM" style="width:80px;height:80px;">
           <h2>GT-SIRM</h2>
-          <p>GnuTux Short Islamic Reels Maker v1.2.1</p>
+          <p>GnuTux Short Islamic Reels Maker v1.2.2</p>
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.1</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.2</span></div>
+          <div style="margin:7px 0"><button class="btn btn-g bsm bfw" id="check-update-btn">🔄 تَحَقَّق مِن وُجودِ تَحديث</button></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>

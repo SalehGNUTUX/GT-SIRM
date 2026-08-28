@@ -256,6 +256,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   applyCanvasSize();     // v1.2.1 — طَبِّق سَقفَ الدِقّةِ المُستَعادَ واعرِضِ الأَبعاد
   initAutoSave();
   initCapacitor();       // v0.13.2 — Android: زرّ الرُجوع + فَتح ملفّات .gtsirm
+  // v1.2.2 — فَحصُ التَحديثاتِ في الخَلفيّةِ (لا يُعَطِّلُ الإقلاع)
+  setTimeout(() => { try { autoCheckForUpdates(); } catch (_) {} }, 4000);
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js").catch(() => { });
   }
@@ -2134,6 +2136,16 @@ function initEventListeners() {
   if (edDl) edDl.addEventListener("click", resaveLastExport);
   const edShare = $("export-done-share-btn");
   if (edShare) edShare.addEventListener("click", shareLastExport);
+  const edSaveAs = $("export-done-saveas-btn");
+  if (edSaveAs) edSaveAs.addEventListener("click", saveAsLastExport);
+
+  // v1.2.2 — التَحديثات
+  const upLater = $("update-later-btn");
+  if (upLater) upLater.addEventListener("click", updateLater);
+  const upNow = $("update-now-btn");
+  if (upNow) upNow.addEventListener("click", updateNow);
+  const upCheck = $("check-update-btn");
+  if (upCheck) upCheck.addEventListener("click", () => checkForUpdates(false));
 
   // v1.2.1 — سَقفُ دِقّةِ التَصدير (كانَ عُنصُراً مَيِّتاً لا يَقرَؤُهُ أَحَد)
   const resEl = $("export-res");
@@ -2911,21 +2923,26 @@ function drawBg(ctx, W, H, ts) {
       targetCtx.restore();
       return true;
     } else if (bgt === "video" && S.bgVid) {
-      if (S.bgVid.readyState < 2) return false;
+      // v1.2.2 — المَصدَرُ إمّا الفيديو (جاهِزاً) أو آخِرُ إطارٍ صالِحٍ مَحفوظ.
+      //   قَبلَ هذا كانَ `readyState < 2` يُعيدُ false فَتَحِلُّ الخَلفيّةُ
+      //   المُتَدَرِّجةُ مَحَلَّ الفيديو — وهُوَ سَبَبُ تَقَطُّعِ الخَلفيّةِ المُبَلَّغِ عَنه.
+      const curSrc = bgVideoSource(S.bgVid);
+      if (!curSrc) return false;
       updateBgVidCrossfade();
       const alpha = S.bgVidFadeProgress;
       targetCtx.save();
       if (applyMotion) applyBgMotion(targetCtx, W, H, bgm, ts);
       // v1.2 — نَمط الاِنتقال (per-clip إن حُدّد، وإلا العامّ) + نُعومة الحَواف
-      const hasNext = S.bgVidNext && S.bgVidNext.readyState >= 2 && alpha > 0;
-      drawBgTransition(targetCtx, S.bgVid, hasNext ? S.bgVidNext : null, alpha, W, H, getEffectiveBgTransition(), getBgTransitionSoftness());
+      const nextSrc = (S.bgVidNext && alpha > 0) ? bgVideoSource(S.bgVidNext) : null;
+      drawBgTransition(targetCtx, curSrc, nextSrc, alpha, W, H, getEffectiveBgTransition(), getBgTransitionSoftness());
       targetCtx.restore();
       return true;
     }
     return false;
   };
 
-  const hasMedia = (bgt === "image" && S.bgImg) || (bgt === "video" && S.bgVid && S.bgVid.readyState >= 2);
+  // v1.2.2 — «مُتاح» يَشمَلُ آخِرَ إطارٍ صالِحٍ مَحفوظاً، لا الفيديو الجاهِزَ وَحدَه
+  const hasMedia = (bgt === "image" && S.bgImg) || (bgt === "video" && bgVideoDrawable(S.bgVid));
   if (bgt === "gradient" || !hasMedia) {
     drawGradient(ctx, W, H);
   } else if (chromaOn) {
@@ -3023,9 +3040,53 @@ function applyBgMotion(ctx, W, H, bgm, ts) {
   if (bgm === "pan") { const p = (Math.sin(t * .25) + 1) / 2; ctx.translate(-p * 60, 0); ctx.scale(1.12, 1); }
 }
 
+
+// ══════════════════════════════════════════════════════
+//  v1.2.2 — ذاكِرةُ آخِرِ إطارٍ صالِحٍ مِن فيديو الخَلفيّة
+//  ───────────────────────────────────────────────────
+//  العِلّة (ظَهَرَت في الفيديو المُصَدَّر): تَنقَطِعُ الخَلفيّةُ فَتَحِلُّ مَحَلَّها
+//  الخَلفيّةُ المُتَدَرِّجةُ المُلَوَّنةُ في أَوَّلِ المَقطَعِ ووَسَطِهِ وآخِرِه.
+//  السَبَب: `drawBg` تَسقُطُ إلى `drawGradient` كُلَّما كانَ
+//  `S.bgVid.readyState < 2`. وهذا يَحدُثُ كَثيراً أثناءَ التَصدير: كُلُّ نَقلةٍ
+//  (seek) تُنزِلُ readyState مُؤَقَّتاً، فَإن لَم يَكتَمِلِ النَقلُ قَبلَ الرَسمِ
+//  خَرَجَ الإطارُ بِخَلفيّةٍ مُتَدَرِّجةٍ بَدَلَ الفيديو.
+//  الحَلّ: نَحتَفِظُ بِآخِرِ إطارٍ صالِحٍ لِكُلِّ عُنصُرِ فيديو، فَنَرسُمُهُ بَدَلَ
+//  التَدَرُّجِ حينَ لا يَكونُ الفيديو جاهِزاً. الفائِدةُ الثانِية: يَصيرُ تَقصيرُ
+//  مُهلةِ النَقلِ آمِناً — أَسوَأُ ما يَقَعُ تَكرارُ إطارٍ لا وَميضُ خَلفيّة.
+// ══════════════════════════════════════════════════════
+const _bgFrameCache = new WeakMap();   // عُنصُرُ الفيديو → canvas بِآخِرِ إطارٍ صالِح
+
+function bgVideoSource(vid) {
+  if (!vid) return null;
+  if (vid.readyState >= 2 && vid.videoWidth > 0) {
+    let c = _bgFrameCache.get(vid);
+    if (!c) { c = document.createElement("canvas"); _bgFrameCache.set(vid, c); }
+    if (c.width !== vid.videoWidth) c.width = vid.videoWidth;
+    if (c.height !== vid.videoHeight) c.height = vid.videoHeight;
+    try { c.getContext("2d").drawImage(vid, 0, 0, c.width, c.height); } catch (_) {}
+    return vid;
+  }
+  const cached = _bgFrameCache.get(vid);
+  return (cached && cached.width > 0) ? cached : null;
+}
+
+// هَل يُمكِنُ رَسمُ هذا الفيديو الآنَ (مُباشَرةً أو مِنَ الذاكِرة)؟
+function bgVideoDrawable(vid) {
+  return !!bgVideoSourcePeek(vid);
+}
+function bgVideoSourcePeek(vid) {
+  if (!vid) return null;
+  if (vid.readyState >= 2 && vid.videoWidth > 0) return vid;
+  const cached = _bgFrameCache.get(vid);
+  return (cached && cached.width > 0) ? cached : null;
+}
+
 function imgCover(ctx, src, x, y, w, h) {
-  const sw = src.naturalWidth || src.videoWidth || w;
-  const sh = src.naturalHeight || src.videoHeight || h;
+  // v1.2.2 — `src.width` مُضافٌ لِيَقبَلَ canvas مَصدَراً (ذاكِرةُ آخِرِ إطارٍ صالِح).
+  //   التَرتيبُ مَقصود: <video> لَهُ `width` (سِمةُ HTML، غالِباً 0) فَيَجِبُ أن
+  //   يُجَرَّبَ videoWidth قَبلَها.
+  const sw = src.naturalWidth || src.videoWidth || src.width || w;
+  const sh = src.naturalHeight || src.videoHeight || src.height || h;
   if (!sw || !sh) return;
   const ir = sw / sh, cr = w / h;
   let dw, dh, dx, dy;
@@ -6780,6 +6841,140 @@ function updateAyaUI() {
 function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`; }
 
 // ══════════════════════════════════════════════════════
+//  v1.2.2 — التَحَقُّقُ مِن إصدارٍ جَديدٍ في المُستَودَع
+//  ───────────────────────────────────────────────────
+//  عِندَ تَوَفُّرِ تَحديثٍ تَظهَرُ رِسالةٌ واضِحةٌ وزِرّان لا غَير:
+//  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
+//  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
+// ══════════════════════════════════════════════════════
+const APP_VERSION = "1.2.2";
+let _updateInfo = null;
+
+function _appVersion() {
+  const el = document.querySelector(".info-v");
+  const t = el ? el.textContent.trim() : "";
+  return /^\d+\.\d+/.test(t) ? t : APP_VERSION;
+}
+
+// silent=true عِندَ الفَحصِ التِلقائيِّ عِندَ الإقلاع (لا نُزعِجُ بِلا داعٍ)
+async function checkForUpdates(silent) {
+  if (!window.PIO || !window.PIO.checkForUpdate) return;
+  const btn = $("check-update-btn");
+  try {
+    if (!silent && btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ الفَحص…"; }
+    const info = await window.PIO.checkForUpdate(_appVersion());
+    _updateInfo = info;
+    if (info.available) {
+      showUpdateModal(info);
+    } else if (!silent) {
+      toast(`✅ أنتَ عَلى أَحدَثِ إصدار (${info.current})`, "success", 3000);
+    }
+  } catch (e) {
+    if (!silent) toast("⚠️ تَعَذَّرَ الفَحص: " + String(e.message || e).slice(0, 60), "warn", 3500);
+    console.warn("تَعَذَّرَ فَحصُ التَحديثات:", e);
+  } finally {
+    if (!silent && btn) { btn.disabled = false; btn.textContent = "🔄 تَحَقَّق مِن وُجودِ تَحديث"; }
+  }
+}
+
+function showUpdateModal(info) {
+  const modal = $("update-modal");
+  if (!modal) return;
+  const isAndroid = !!(window.PIO && window.PIO.isNativeAndroid() && window.PIO.hasNativeBridge());
+  const canInstall = isAndroid && !!info.apkUrl;
+
+  $("update-body").innerHTML =
+    `يَتَوَفَّرُ الإصدار <b>${info.latest}</b> — وأنتَ عَلى <b>${info.current}</b>.` +
+    (canInstall && info.apkSize
+      ? `<br><span style="color:var(--t3)">حَجمُ الحُزمة: ${(info.apkSize / 1048576).toFixed(1)} ميغابايت</span>` : "");
+
+  const notesEl = $("update-notes");
+  if (notesEl) {
+    const notes = (info.notes || "").trim();
+    notesEl.textContent = notes.slice(0, 1200);
+    notesEl.style.display = notes ? "" : "none";
+  }
+  $("update-progress").style.display = "none";
+  $("update-btns").style.display = "";
+  const nowBtn = $("update-now-btn");
+  nowBtn.disabled = false;
+  nowBtn.textContent = canInstall ? "⬇️ تَحديثٌ الآن" : "🌐 افتَح صَفحةَ الإصدار";
+  modal.style.display = "flex";
+}
+
+function closeUpdateModal() {
+  const m = $("update-modal");
+  if (m) m.style.display = "none";
+}
+
+// «لاحِقاً» — لا نُذَكِّرُ بِنَفسِ الإصدارِ مَرّةً أُخرى في هذا اليَوم
+function updateLater() {
+  try {
+    if (_updateInfo) {
+      localStorage.setItem("gt_sirm_update_snooze",
+        JSON.stringify({ v: _updateInfo.latest, until: Date.now() + 86400000 }));
+    }
+  } catch (_) {}
+  closeUpdateModal();
+}
+
+async function updateNow() {
+  const info = _updateInfo;
+  if (!info) return;
+  const isAndroid = !!(window.PIO && window.PIO.isNativeAndroid() && window.PIO.hasNativeBridge());
+
+  if (!isAndroid || !info.apkUrl) {
+    window.open(info.url, "_blank");
+    closeUpdateModal();
+    return;
+  }
+
+  const nowBtn = $("update-now-btn");
+  nowBtn.disabled = true;
+  $("update-btns").style.display = "none";
+  $("update-progress").style.display = "";
+  $("update-progress-txt").textContent = "جارٍ التَنزيل…";
+
+  try {
+    const res = await window.PIO.downloadAndInstall(info.apkUrl, info.apkName, (pct, got, total) => {
+      const p = Math.max(0, Math.min(100, pct));
+      $("update-fill").style.width = (p < 0 ? 0 : p) + "%";
+      $("update-progress-txt").textContent = total > 0
+        ? `${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} م.ب  ·  ${p}%`
+        : `${(got / 1048576).toFixed(1)} م.ب`;
+    });
+    if (res.needsPermission) {
+      $("update-progress-txt").textContent =
+        "يَلزَمُ السَماحُ لِلبَرنامَجِ بِتَثبيتِ التَطبيقات. فُتِحَت شاشةُ الإعدادات — امنَحِ الإذنَ ثُمَّ أَعِدِ المُحاوَلة.";
+      $("update-btns").style.display = "";
+      nowBtn.disabled = false;
+      return;
+    }
+    $("update-progress-txt").textContent = "✅ اكتَمَلَ التَنزيل — أَكمِلِ التَثبيتَ مِن شاشةِ النِظام.";
+    setTimeout(closeUpdateModal, 2500);
+  } catch (e) {
+    $("update-progress-txt").textContent = "❌ " + String(e.message || e).slice(0, 120);
+    $("update-btns").style.display = "";
+    nowBtn.disabled = false;
+  }
+}
+
+// فَحصٌ تِلقائيٌّ هادِئٌ عِندَ الإقلاع (مَرّةً كُلَّ 24 ساعةً كَحَدٍّ أَقصى)
+async function autoCheckForUpdates() {
+  try {
+    const raw = localStorage.getItem("gt_sirm_update_snooze");
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s && s.until > Date.now()) return;   // أَجَّلَ المُستَخدِمُ هذا الإصدار
+    }
+    const lastRaw = localStorage.getItem("gt_sirm_update_lastcheck");
+    if (lastRaw && Date.now() - parseInt(lastRaw, 10) < 86400000) return;
+    localStorage.setItem("gt_sirm_update_lastcheck", String(Date.now()));
+  } catch (_) {}
+  await checkForUpdates(true);
+}
+
+// ══════════════════════════════════════════════════════
 //  EXPORT
 // ══════════════════════════════════════════════════════
 
@@ -6845,7 +7040,10 @@ function showExportResult(res) {
     return;
   }
 
+  $("export-done-title").textContent = "✅ اكتَمَلَ التَصدير";
   $("export-done-where").innerHTML = `${where}<br><span style="color:var(--t3)">الحَجم: ${sizeMB} ميغابايت</span>`;
+  const saveAsBtn = $("export-done-saveas-btn");
+  if (saveAsBtn) saveAsBtn.style.display = (window.PIO && res.saved?.uri && window.PIO.isNativeAndroid()) ? "" : "none";
   $("export-done-note").textContent = note;
 
   // v1.2.2 — تَشريحُ زَمَنِ التَصدير: أَينَ ذَهَبَتِ الثَواني فِعلاً
@@ -6920,12 +7118,70 @@ async function shareLastExport() {
   if (!le) { toast("لا يوجَدُ ناتِجٌ لِلمُشارَكة", "warn", 2500); return; }
   let ok = false;
   if (le.saved && le.saved.uri && window.PIO) {
-    ok = await window.PIO.shareSavedFile(le.saved.uri, le.filename);
+    ok = await window.PIO.shareSavedFile(le.saved.uri, le.filename, le.mime);
   }
   if (!ok && le.blob && window.PIO) {
     ok = await window.PIO.shareBlob(le.blob, le.filename, le.mime);
   }
-  if (!ok) toast("تَعَذَّرَتِ المُشارَكةُ عَلى هذا الجِهاز — استَعمِل «حِفظٌ آخَر»", "warn", 3500);
+  if (!ok) toast("تَعَذَّرَتِ المُشارَكةُ عَلى هذا الجِهاز — استَعمِل «حِفظٌ باسم…»", "warn", 3500);
+}
+
+// v1.2.2 — «حِفظٌ باسم…»: مُنتَقي النِظام (SAF) يَختارُ فيهِ المُستَخدِمُ المُجَلَّدَ والاسم
+async function saveAsLastExport() {
+  const le = S.lastExport;
+  if (!le) { toast("لا يوجَدُ مَلَفٌّ لِلحَفظ", "warn", 2500); return; }
+  if (window.PIO && le.saved && le.saved.uri && window.PIO.isNativeAndroid()) {
+    const res = await window.PIO.saveAsDialog(le.saved.uri, le.filename, le.mime);
+    if (res && res.canceled) return;
+    if (res && res.uri) { toast("💾 حُفِظَ في المَوضِعِ الذي اختَرت", "success", 3000); return; }
+  }
+  // المُتَصَفِّح: نَفسُ مَسارِ «حِفظٌ آخَر» (يَفتَحُ مُنتَقيَ FSA إن تَوَفَّر)
+  await resaveLastExport();
+}
+
+// ══════════════════════════════════════════════════════
+//  v1.2.2 — نَتيجةُ حِفظِ المَشروع: نَفسُ نافِذةِ الناتِجِ مَعَ المُشارَكةِ والحَفظِ باسم
+// ══════════════════════════════════════════════════════
+function showProjectSavedResult(saved, blob, filename) {
+  S.lastExport = { blob, filename, mime: "application/json", saved: saved || null, isProject: true };
+  const modal = $("export-done-modal");
+  const method = saved && saved.method;
+  const kb = blob ? (blob.size / 1024).toFixed(0) : "؟";
+
+  let where, note;
+  if (method === "native") {
+    where = `📁 حُفِظَ المَشروعُ في: <b>${saved.path}</b>`;
+    note = "تَجِدُهُ في تَطبيقِ «المِلَفّات» ضِمنَ مُجَلَّدِ التَنزيلات.";
+  } else if (method === "capacitor-fs") {
+    where = `📁 حُفِظَ في مُجَلَّدِ البَرنامَج: <b>${saved.path}</b>`;
+    note = "استَعمِل «مُشارَكة» أو «حِفظٌ باسم…» لِنَقلِهِ حَيثُ تَشاء.";
+  } else if (method === "fsa") {
+    where = `📁 حُفِظَ في: <b>${saved.path}</b>`;
+    note = "";
+  } else {
+    where = `⬇️ أُرسِلَ إلى تَنزيلاتِ المُتَصَفِّح: <b>${filename}</b>`;
+    note = "إن لَم تَجِدهُ فاستَعمِل «مُشارَكة» أو «حِفظٌ باسم…» أَدناه.";
+  }
+
+  if (!modal) { toast(`💾 ${String(where).replace(/<[^>]+>/g, "")}`, "success", 5000); return; }
+
+  $("export-done-title").textContent = "💾 حُفِظَ المَشروع";
+  $("export-done-where").innerHTML = `${where}<br><span style="color:var(--t3)">الحَجم: ${kb} كيلوبايت</span>`;
+  $("export-done-note").textContent = note;
+  const perfEl = $("export-done-perf");
+  if (perfEl) perfEl.style.display = "none";
+
+  const shareBtn = $("export-done-share-btn");
+  if (shareBtn) {
+    const canShare = !!(window.PIO && (saved?.uri || (blob && window.PIO.canShareFiles())));
+    shareBtn.style.display = canShare ? "" : "none";
+  }
+  const saveAsBtn = $("export-done-saveas-btn");
+  if (saveAsBtn) saveAsBtn.style.display = (window.PIO && saved?.uri && window.PIO.isNativeAndroid()) ? "" : "none";
+  const dlBtn = $("export-done-download-btn");
+  if (dlBtn) dlBtn.style.display = blob ? "" : "none";
+
+  modal.style.display = "flex";
 }
 
 async function startExport(type) {
@@ -8647,6 +8903,9 @@ function showMissingAssetsModal(missing) {
   };
 }
 
+// v1.2.2 — يَرفَعُهُ الحَفظُ التِلقائيُّ فَلا تَظهَرُ نافِذةُ النَتيجة
+let _silentProjectSave = false;
+
 async function saveProjectToPath(_filePath) {
   const proj = await serializeProject();
   const json = JSON.stringify(proj, null, 2);
@@ -8682,9 +8941,9 @@ async function saveProjectToPath(_filePath) {
     S.projectFileName = fname;
     S.lastProjectSavePath = saved.path || fname;
     clearProjectDirty();
-    if (saved.method === "native" || saved.method === "capacitor-fs") {
-      toast(`💾 حُفِظَ المَشروع: ${saved.path}`, "success", 3500);
-    }
+    // v1.2.2 — الحِفظُ اليَدَويُّ يَعرِضُ نافِذةً فيها «مُشارَكة» و«حِفظٌ باسم…».
+    //   الحِفظُ التِلقائيُّ صامِتٌ (لا نُقاطِعُ المُستَخدِمَ كُلَّ بِضعِ دَقائِق).
+    if (!_silentProjectSave) showProjectSavedResult(saved, blob, fname);
     return true;
   }
 
@@ -8815,9 +9074,10 @@ function startAutoSave() {
     // v1.1.0 — إن كان FSA handle مَعروفاً، احفَظ صامِتاً إلى نَفس المَلفّ
     if (typeof HAS_FSA !== "undefined" && HAS_FSA && S.projectFileHandle) {
       try {
+        _silentProjectSave = true;
         const ok = await saveProjectToPath(null);
         if (ok) { toast(`💾 حفظ تلقائيّ — ${new Date().toLocaleTimeString("ar")}`, "info", 1500); return; }
-      } catch (_) {}
+      } catch (_) {} finally { _silentProjectSave = false; }
     }
     // v1.2.1 — الهاتِف: اكتُب مَلَفّاً حَقيقيّاً باسمٍ ثابِتٍ في مُجَلَّدِ البَرنامَج.
     //   قَبلَ هذا كانَ الحَفظُ التِلقائيُّ في الهاتِفِ يَقتَصِرُ عَلى localStorage —

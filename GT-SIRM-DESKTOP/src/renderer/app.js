@@ -3228,23 +3228,25 @@ function drawBg(ctx, W, H, ts) {
       targetCtx.restore();
       return true;
     } else if (bgt === "video" && (S._exportBgFrameImg || S.bgVid)) {
-      const src = S._exportBgFrameImg || S.bgVid;
-      const ready = (src instanceof HTMLVideoElement) ? src.readyState >= 2 : !!src;
-      if (!ready) return false;
+      // v1.2.2 — إطاراتُ ffmpeg المُستَخرَجةُ لَها الأَولَويّةُ في التَصدير؛ وإلّا
+      //   الفيديو الجاهِزُ، وإلّا آخِرُ إطارٍ صالِحٍ مَحفوظ (يَمنَعُ ظُهورَ التَدَرُّج).
+      const src = S._exportBgFrameImg || bgVideoSource(S.bgVid);
+      if (!src) return false;
       updateBgVidCrossfade();
       const alpha = S.bgVidFadeProgress;
       targetCtx.save();
       if (applyMotion) applyBgMotion(targetCtx, W, H, bgm, ts);
       // v1.2 — نَمط الاِنتقال (per-clip إن حُدّد، وإلا العامّ) + نُعومة الحَواف
-      const hasNext = S.bgVidNext && S.bgVidNext.readyState >= 2 && alpha > 0;
-      drawBgTransition(targetCtx, src, hasNext ? S.bgVidNext : null, alpha, W, H, getEffectiveBgTransition(), getBgTransitionSoftness());
+      const nextSrc = (S.bgVidNext && alpha > 0) ? bgVideoSource(S.bgVidNext) : null;
+      drawBgTransition(targetCtx, src, nextSrc, alpha, W, H, getEffectiveBgTransition(), getBgTransitionSoftness());
       targetCtx.restore();
       return true;
     }
     return false;
   };
 
-  const hasMedia = (bgt === "image" && S.bgImg) || (bgt === "video" && (S._exportBgFrameImg || S.bgVid));
+  // v1.2.2 — «مُتاح» يَشمَلُ آخِرَ إطارٍ صالِحٍ مَحفوظاً
+  const hasMedia = (bgt === "image" && S.bgImg) || (bgt === "video" && (S._exportBgFrameImg || bgVideoDrawable(S.bgVid)));
   if (bgt === "gradient" || !hasMedia) {
     drawGradient(ctx, W, H);
   } else if (chromaOn) {
@@ -3357,6 +3359,42 @@ function applyBgMotion(ctx, W, H, bgm, ts) {
   if (bgm === "drift") { const d = t * 12 % 80; ctx.translate(d * .5, d * .3); ctx.scale(1.15, 1.15); ctx.translate(-W * .075, -H * .06); }
   if (bgm === "zoom") { const sc = 1 + ((t * .04) % 0.15); ctx.translate(W / 2, H / 2); ctx.scale(sc, sc); ctx.translate(-W / 2, -H / 2); }
   if (bgm === "pan") { const p = (Math.sin(t * .25) + 1) / 2; ctx.translate(-p * 60, 0); ctx.scale(1.12, 1); }
+}
+
+
+// ══════════════════════════════════════════════════════
+//  v1.2.2 — ذاكِرةُ آخِرِ إطارٍ صالِحٍ مِن فيديو الخَلفيّة
+//  ───────────────────────────────────────────────────
+//  `drawBg` تَسقُطُ إلى `drawGradient` كُلَّما كانَ `readyState < 2`، فَتَنقَطِعُ
+//  الخَلفيّةُ وتَحِلُّ مَحَلَّها الخَلفيّةُ المُتَدَرِّجةُ المُلَوَّنة. في سَطحِ المَكتَبِ
+//  لا يُصيبُ هذا التَصديرَ (ffmpeg يَستَخرِجُ الإطاراتِ مُسبَقاً) لَكِنَّهُ يُصيبُ
+//  المُعاينة. نَحتَفِظُ بِآخِرِ إطارٍ صالِحٍ ونَرسُمُهُ بَدَلَ التَدَرُّج.
+//  (النُسخةُ نَفسُها في GT-SIRM-WEB — تَماثُلٌ مَقصود.)
+// ══════════════════════════════════════════════════════
+const _bgFrameCache = new WeakMap();   // عُنصُرُ الفيديو → canvas بِآخِرِ إطارٍ صالِح
+
+function bgVideoSource(vid) {
+  if (!vid) return null;
+  if (vid.readyState >= 2 && vid.videoWidth > 0) {
+    let c = _bgFrameCache.get(vid);
+    if (!c) { c = document.createElement("canvas"); _bgFrameCache.set(vid, c); }
+    if (c.width !== vid.videoWidth) c.width = vid.videoWidth;
+    if (c.height !== vid.videoHeight) c.height = vid.videoHeight;
+    try { c.getContext("2d").drawImage(vid, 0, 0, c.width, c.height); } catch (_) {}
+    return vid;
+  }
+  const cached = _bgFrameCache.get(vid);
+  return (cached && cached.width > 0) ? cached : null;
+}
+
+function bgVideoDrawable(vid) {
+  return !!bgVideoSourcePeek(vid);
+}
+function bgVideoSourcePeek(vid) {
+  if (!vid) return null;
+  if (vid.readyState >= 2 && vid.videoWidth > 0) return vid;
+  const cached = _bgFrameCache.get(vid);
+  return (cached && cached.width > 0) ? cached : null;
 }
 
 function imgCover(ctx, src, x, y, w, h) {

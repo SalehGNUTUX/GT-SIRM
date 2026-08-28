@@ -258,17 +258,47 @@
     } catch (_) { return false; }
   }
 
-  /** يَفتَحُ ورَقةَ المُشارَكةِ الأَصليّةَ لِمَلَفٍّ حُفِظَ تَوّاً (Android). */
-  async function shareSavedFile(uri, title) {
-    const Sh = capShare();
-    if (!Sh || !uri) return false;
-    try {
-      await Sh.share({ title: title || "GT-SIRM", url: uri });
-      return true;
-    } catch (e) {
-      console.warn("[PIO] المُشارَكةُ فَشِلَت:", e);
-      return false;
+  /**
+   * يَفتَحُ ورَقةَ المُشارَكةِ الأَصليّةَ لِمَلَفٍّ حُفِظَ تَوّاً (Android).
+   *
+   * ⚠️ v1.2.2 — لِمَ لا نَبدَأُ بِـ@capacitor/share؟
+   * لأنَّ SharePlugin.java يَرفُضُ صَراحةً كُلَّ عُنوانٍ لا يَبدَأُ بِـ`file:` أو
+   * `http:` («Unsupported url»)، وعَناوينُ MediaStore التي نَحفَظُ بِها تَبدَأُ
+   * بِـ`content:` — فَكانَ زِرُّ المُشارَكةِ يَفشَلُ ولا تَظهَرُ قائِمةُ التَطبيقات.
+   * لِذا نُقَدِّمُ جِسرَنا الأَصليَّ (GtsirmNative.shareFile) الذي يَبني
+   * ACTION_SEND بِنَفسِهِ ويَمنَحُ إذنَ القِراءة، ونُبقي Capacitor احتِياطاً
+   * لِعَناوينِ file: وَحدَها.
+   */
+  async function shareSavedFile(uri, title, mime) {
+    if (!uri) return false;
+    const P = nativePlugin();
+    if (P && P.shareFile) {
+      try {
+        await P.shareFile({ uri, mime: mime || "*/*", title: title || "GT-SIRM" });
+        return true;
+      } catch (e) {
+        console.warn("[PIO] المُشارَكةُ الأَصليّةُ فَشِلَت:", e);
+      }
     }
+    const Sh = capShare();
+    if (Sh && /^file:/i.test(uri)) {
+      try { await Sh.share({ title: title || "GT-SIRM", url: uri }); return true; }
+      catch (e) { console.warn("[PIO] مُشارَكةُ Capacitor فَشِلَت:", e); }
+    }
+    return false;
+  }
+
+  /**
+   * «حِفظٌ باسم» عَبرَ مُنتَقي النِظام: يَختارُ المُستَخدِمُ المُجَلَّدَ والاسمَ
+   * (ذاكِرةٌ خارِجيّة، Drive، أَيُّ مُزَوِّد). يُعيدُ { canceled } أو { uri }.
+   */
+  async function saveAsDialog(uri, name, mime) {
+    const P = nativePlugin();
+    if (P && P.saveAs && uri) {
+      try { return await P.saveAs({ uri, name, mime: mime || "application/octet-stream" }); }
+      catch (e) { console.warn("[PIO] «حِفظٌ باسم» فَشِل:", e); }
+    }
+    return null;
   }
 
   // ══════════════════════════════════════════════════════════
@@ -367,14 +397,93 @@
     });
   }
 
+  // ══════════════════════════════════════════════════════════
+  //  التَحديثُ الذاتيّ مِن مُستَودَعِ GitHub
+  //  ───────────────────────────────────────────────────────
+  //  نَقرَأُ آخِرَ إصدارٍ مِن واجِهةِ GitHub، ونُقارِنُهُ بِإصدارِ البَرنامَجِ الحاليّ.
+  //  في الهاتِف: نُنَزِّلُ الحُزمةَ ونَفتَحُ شاشةَ تَثبيتِ النِظام (المُستَخدِمُ
+  //  يُؤَكِّدُ بِنَفسِه — لا تَثبيتَ صامِتاً أَبَداً).
+  //  في سَطحِ المَكتَبِ والويب: نَعرِضُ رابِطَ صَفحةِ الإصدار.
+  // ══════════════════════════════════════════════════════════
+  const GITHUB_REPO = "SalehGNUTUX/GT-SIRM";
+
+  // يُقارِنُ "1.2.10" و"1.2.9" مُقارَنةً رَقَميّةً لا نَصّيّة
+  function compareVersions(a, b) {
+    const pa = String(a).replace(/^v/i, "").split(/[.\-+]/);
+    const pb = String(b).replace(/^v/i, "").split(/[.\-+]/);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const na = parseInt(pa[i] || "0", 10) || 0;
+      const nb = parseInt(pb[i] || "0", 10) || 0;
+      if (na !== nb) return na > nb ? 1 : -1;
+    }
+    return 0;
+  }
+
+  /**
+   * يَسأَلُ GitHub عَن آخِرِ إصدار.
+   * يُعيد: { available, latest, current, notes, url, apkUrl, apkName, size }
+   */
+  async function checkForUpdate(currentVersion) {
+    const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+      headers: { "Accept": "application/vnd.github+json" },
+      cache: "no-store",
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const rel = await r.json();
+    const latest = String(rel.tag_name || "").replace(/^v/i, "");
+    if (!latest) throw new Error("لا وَسمَ لِلإصدار");
+
+    // اختَر حُزمةَ APK المُناسِبةَ مِن مُرفَقاتِ الإصدار.
+    //   نُفَضِّلُ حُزمةَ release عَلى debug إن وُجِدَتا مَعاً.
+    const apks = (rel.assets || []).filter(a => /\.apk$/i.test(a.name || ""));
+    const apk = apks.find(a => !/debug/i.test(a.name)) || apks[0] || null;
+    return {
+      available: compareVersions(latest, currentVersion) > 0,
+      latest,
+      current: String(currentVersion),
+      notes: rel.body || "",
+      url: rel.html_url,
+      publishedAt: rel.published_at,
+      apkUrl: apk ? apk.browser_download_url : null,
+      apkName: apk ? apk.name : null,
+      apkSize: apk ? apk.size : 0,
+    };
+  }
+
+  /** يُنَزِّلُ الحُزمةَ (بِتَقَدُّمٍ) ثُمَّ يَفتَحُ مُثَبِّتَ النِظام. */
+  async function downloadAndInstall(apkUrl, apkName, onProgress) {
+    const P = nativePlugin();
+    if (!P || !P.downloadUpdate) throw new Error("التَثبيتُ المُباشَرُ غَيرُ مُتاحٍ في هذه النُسخة");
+    let handle = null;
+    if (onProgress && window.Capacitor && window.Capacitor.Plugins) {
+      try {
+        handle = await P.addListener("updateProgress", (ev) => {
+          onProgress(ev.percent, ev.received, ev.total);
+        });
+      } catch (_) {}
+    }
+    try {
+      const res = await P.downloadUpdate({ url: apkUrl, name: apkName });
+      const inst = await P.installApk({ path: res.path });
+      return { path: res.path, needsPermission: !!inst.needsPermission };
+    } finally {
+      if (handle && handle.remove) { try { await handle.remove(); } catch (_) {} }
+    }
+  }
+
   // ── التَصدير ────────────────────────────────────────────────
   window.PIO = {
+    checkForUpdate,
+    downloadAndInstall,
+    compareVersions,
+    GITHUB_REPO,
     isNativeAndroid,
     hasNativeBridge: () => !!nativePlugin(),
     HAS_FSA_SAVE,
     prepareSaveTarget,
     deliverFile,
     shareSavedFile,
+    saveAsDialog,
     shareBlob,
     canShareFiles,
     writeAppTextFile,

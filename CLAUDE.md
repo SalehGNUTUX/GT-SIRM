@@ -496,6 +496,27 @@ The `app-subtitle` and small/p in about-tab were missed in earlier version bumps
 `FMT_SIZES` فَتَطبيقُهُ مِراراً لا يُراكِمُ التَصغير، ويُقَرِّبُ لِأَبعادٍ زَوجيّةٍ (شَرطُ H.264).
 `grep -c 'export-res' app.js` قَبلَ أَيِّ ادِّعاءٍ بِأَنَّ عُنصُراً يَعمَل.
 
+### `@capacitor/share` يَرفُضُ عَناوينَ `content:` (v1.2.2)
+`SharePlugin.java` فيهِ صَراحةً:
+```java
+if (url != null && !isFileUrl(url) && !isHttpUrl(url)) { call.reject("Unsupported url"); return; }
+```
+`isFileUrl` = يَبدَأُ بِـ`file:` فَقَط. وعَناوينُ MediaStore تَبدَأُ بِـ`content:` — فَكانَ
+زِرُّ المُشارَكةِ يُرفَضُ دائِماً ولا تَظهَرُ قائِمةُ التَطبيقات. **لا تَمُرَّ بِـ@capacitor/share
+لِمَلَفٍّ حَفِظتَهُ بِـMediaStore**؛ استَعمِل `GtsirmNative.shareFile` (يَبني `ACTION_SEND`
+مَعَ `ClipData` و`FLAG_GRANT_READ_URI_PERMISSION`). Capacitor يَبقى احتِياطاً لِـ`file:` وَحدَها.
+
+### `readyState < 2` يُسقِطُ الخَلفيّةَ إلى التَدَرُّج (v1.2.2)
+`drawBg` كانَت تَستَدعي `drawGradient` كُلَّما `S.bgVid.readyState < 2`. وكُلُّ نَقلةٍ (seek)
+تُنزِلُ `readyState` مُؤَقَّتاً — فَظَهَرَ في الفيديو المُصَدَّرِ **تَقَطُّعُ الخَلفيّةِ وحُلولُ
+التَدَرُّجِ المُلَوَّنِ مَحَلَّها**. الحَلّ: `bgVideoSource(vid)` تَحتَفِظُ بِآخِرِ إطارٍ صالِحٍ في
+canvas (WeakMap) وتُعيدُهُ بَدَلاً مِنَ الفيديو حينَ لا يَكونُ جاهِزاً؛ و`imgCover` تَقبَلُ
+canvas مَصدَراً (`src.width` بَعدَ `videoWidth` — التَرتيبُ مَقصودٌ لأنَّ `<video>.width`
+سِمةُ HTML غالِباً 0).
+**فائِدةٌ ثانِية:** بَعدَ هذه الذاكِرةِ صارَ تَقصيرُ مُهلةِ النَقلِ آمِناً (800ms ← 400ms)،
+بَل وصارَ **تَركُ الانتِظارِ كُلِّهِ** خِياراً مَعقولاً لِلخَلفيّة (توگل `#export-bg-fast`) —
+أَسوَأُ ما يَقَعُ تَكرارُ إطار. فيديو التِلاوةِ يَبقى مُنتَظَراً دائِماً (مُزامَنةُ الصَوت).
+
 ### Inherited gotchas from GT-SQRM
 All gotchas in `../CLAUDE.md` apply: surah name prefix handling, CSP blocks `fetch("blob:")`, fonts must `FontFace.load()`, ffmpeg progress IPC throttling, render loop must yield during V2 export, web AAC codec fallback chain, web works under file://, electron-builder cache corruption.
 

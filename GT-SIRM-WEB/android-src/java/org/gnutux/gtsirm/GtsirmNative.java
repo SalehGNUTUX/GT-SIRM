@@ -11,15 +11,25 @@ import android.provider.MediaStore;
 import android.util.Base64;
 import android.view.WindowManager;
 
+import android.app.Activity;
+import android.content.ClipData;
+
+import androidx.activity.result.ActivityResult;
+import androidx.core.content.FileProvider;
+
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -284,6 +294,214 @@ public class GtsirmNative extends Plugin {
             getContext().startService(i);
         } catch (Exception ignored) {}
         call.resolve();
+    }
+
+    // ── 4) المُشارَكة ────────────────────────────────────────────
+    //
+    //  ⚠️ لِمَ لا نَستَعمِلُ @capacitor/share هُنا؟
+    //  لأنَّ SharePlugin.java يَرفُضُ صَراحةً كُلَّ عُنوانٍ لا يَبدَأُ بِـfile: أو
+    //  http: («Unsupported url»)، وعَناوينُ MediaStore التي نَحفَظُ بِها تَبدَأُ
+    //  بِـcontent:. فَكانَ زِرُّ المُشارَكةِ يَفشَلُ صامِتاً. نَبني الـIntent هُنا.
+    @PluginMethod
+    public void shareFile(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String mime = call.getString("mime", "*/*");
+        String title = call.getString("title", "GT-SIRM");
+        String text = call.getString("text");
+        if (uriStr == null || uriStr.trim().isEmpty()) { call.reject("لا عُنوانَ لِلمَلَفّ"); return; }
+        try {
+            Uri uri = Uri.parse(uriStr);
+            // مَلَفّاتُ file:// تَحتاجُ FileProvider وإلّا رُفِضَت بِـFileUriExposedException
+            if ("file".equals(uri.getScheme())) {
+                uri = FileProvider.getUriForFile(
+                        getActivity(), getContext().getPackageName() + ".fileprovider",
+                        new File(uri.getPath()));
+            }
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType(mime);
+            send.putExtra(Intent.EXTRA_STREAM, uri);
+            send.putExtra(Intent.EXTRA_SUBJECT, title);
+            if (text != null && !text.isEmpty()) send.putExtra(Intent.EXTRA_TEXT, text);
+            // ClipData + FLAG يَمنَحانِ التَطبيقَ المُستَقبِلَ إذنَ القِراءة
+            send.setClipData(ClipData.newRawUri("", uri));
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            Intent chooser = Intent.createChooser(send, title);
+            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(chooser);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("تَعَذَّرَتِ المُشارَكة: " + e.getMessage(), e);
+        }
+    }
+
+    // ── 5) «حِفظٌ باسم» عَبرَ مُنتَقي النِظام (SAF) ────────────────
+    //
+    //  يَفتَحُ ACTION_CREATE_DOCUMENT فَيَختارُ المُستَخدِمُ المُجَلَّدَ والاسمَ بِنَفسِه
+    //  (وِحدةُ تَخزينٍ خارِجيّة، Drive، أَيُّ مُزَوِّد) ثُمَّ نَنسَخُ البايتات.
+    private String pendingSaveAsSourceUri = null;
+
+    @PluginMethod
+    public void saveAs(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String name = call.getString("name", "GT-SIRM");
+        String mime = call.getString("mime", "application/octet-stream");
+        if (uriStr == null) { call.reject("لا عُنوانَ لِلمَصدَر"); return; }
+        try {
+            pendingSaveAsSourceUri = uriStr;
+            Intent create = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            create.addCategory(Intent.CATEGORY_OPENABLE);
+            create.setType(mime);
+            create.putExtra(Intent.EXTRA_TITLE, sanitize(name));
+            startActivityForResult(call, create, "saveAsResult");
+        } catch (Exception e) {
+            call.reject("تَعَذَّرَ فَتحُ مُنتَقي الحَفظ: " + e.getMessage(), e);
+        }
+    }
+
+    @ActivityCallback
+    private void saveAsResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        String srcStr = pendingSaveAsSourceUri;
+        pendingSaveAsSourceUri = null;
+        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
+            JSObject ret = new JSObject();
+            ret.put("canceled", true);
+            call.resolve(ret);
+            return;
+        }
+        InputStream in = null;
+        OutputStream out = null;
+        try {
+            Uri dest = result.getData().getData();
+            Uri src = Uri.parse(srcStr);
+            ContentResolver cr = getContext().getContentResolver();
+            in = "file".equals(src.getScheme())
+                    ? new java.io.FileInputStream(new File(src.getPath()))
+                    : cr.openInputStream(src);
+            out = cr.openOutputStream(dest);
+            if (in == null || out == null) throw new Exception("تَعَذَّرَ فَتحُ المَجرى");
+            byte[] buf = new byte[65536];
+            int n; long total = 0;
+            while ((n = in.read(buf)) > 0) { out.write(buf, 0, n); total += n; }
+            out.flush();
+            JSObject ret = new JSObject();
+            ret.put("canceled", false);
+            ret.put("uri", dest.toString());
+            ret.put("bytes", total);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("فَشِلَ النَسخُ إلى الوِجهة: " + e.getMessage(), e);
+        } finally {
+            try { if (in != null) in.close(); } catch (Exception ignored) {}
+            try { if (out != null) out.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    // ── 6) التَحديثُ الذاتيّ: تَنزيلُ الحُزمةِ ثُمَّ تَسليمُها لِمُثَبِّتِ النِظام ──
+    //
+    //  ⚠️ لا يُثَبَّتُ شَيءٌ تِلقائيّاً. نُنَزِّلُ بِطَلَبِ المُستَخدِم، ثُمَّ نَفتَحُ
+    //     شاشةَ التَثبيتِ الرَسميّةَ التي يُؤَكِّدُ فيها بِنَفسِه.
+    @PluginMethod
+    public void downloadUpdate(final PluginCall call) {
+        final String url = call.getString("url");
+        final String name = call.getString("name", "GT-SIRM-update.apk");
+        if (url == null || !url.startsWith("https://")) {
+            call.reject("رابِطُ التَحديثِ يَجِبُ أن يَكونَ https");
+            return;
+        }
+        new Thread(() -> {
+            HttpURLConnection conn = null;
+            InputStream in = null;
+            OutputStream out = null;
+            try {
+                File dir = new File(getContext().getExternalFilesDir(null), "updates");
+                if (!dir.exists() && !dir.mkdirs()) throw new Exception("تَعَذَّرَ إنشاءُ مُجَلَّدِ التَحديثات");
+                // نَظِّف الحُزَمَ القَديمةَ حَتّى لا تَتَراكَم
+                File[] old = dir.listFiles();
+                if (old != null) for (File f : old) { if (f.isFile()) f.delete(); }
+
+                File apk = new File(dir, sanitize(name));
+                conn = (HttpURLConnection) new URL(url).openConnection();
+                conn.setInstanceFollowRedirects(true);
+                conn.setConnectTimeout(30000);
+                conn.setReadTimeout(60000);
+                conn.connect();
+                int code = conn.getResponseCode();
+                if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
+                final int total = conn.getContentLength();
+
+                in = conn.getInputStream();
+                out = new FileOutputStream(apk);
+                byte[] buf = new byte[65536];
+                int n; long got = 0; long lastEmit = 0;
+                while ((n = in.read(buf)) > 0) {
+                    out.write(buf, 0, n);
+                    got += n;
+                    long now = System.currentTimeMillis();
+                    if (now - lastEmit > 400) {
+                        lastEmit = now;
+                        JSObject ev = new JSObject();
+                        ev.put("received", got);
+                        ev.put("total", total);
+                        ev.put("percent", total > 0 ? (int) (got * 100 / total) : -1);
+                        notifyListeners("updateProgress", ev);
+                    }
+                }
+                out.flush();
+
+                JSObject ret = new JSObject();
+                ret.put("path", apk.getAbsolutePath());
+                ret.put("bytes", got);
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("فَشِلَ تَنزيلُ التَحديث: " + e.getMessage(), e);
+            } finally {
+                try { if (in != null) in.close(); } catch (Exception ignored) {}
+                try { if (out != null) out.close(); } catch (Exception ignored) {}
+                if (conn != null) conn.disconnect();
+            }
+        }).start();
+    }
+
+    /** يَفتَحُ شاشةَ تَثبيتِ النِظام لِلحُزمةِ المُنَزَّلة. */
+    @PluginMethod
+    public void installApk(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null) { call.reject("لا مَسارَ لِلحُزمة"); return; }
+        try {
+            File apk = new File(path);
+            if (!apk.exists()) throw new Exception("المَلَفُّ غَيرُ مَوجود");
+
+            // Android 8+ يَشتَرِطُ إذنَ «تَثبيتُ تَطبيقاتٍ مَجهولةِ المَصدَر» لِهذا
+            // التَطبيقِ بِعَينِه — إن لَم يُمنَح، افتَح شاشةَ الإعداداتِ لِيَمنَحَه.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    && !getContext().getPackageManager().canRequestPackageInstalls()) {
+                Intent settings = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:" + getContext().getPackageName()));
+                settings.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(settings);
+                JSObject ret = new JSObject();
+                ret.put("needsPermission", true);
+                call.resolve(ret);
+                return;
+            }
+
+            Uri uri = FileProvider.getUriForFile(
+                    getActivity(), getContext().getPackageName() + ".fileprovider", apk);
+            Intent install = new Intent(Intent.ACTION_VIEW);
+            install.setDataAndType(uri, "application/vnd.android.package-archive");
+            install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(install);
+
+            JSObject ret = new JSObject();
+            ret.put("needsPermission", false);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("تَعَذَّرَ فَتحُ مُثَبِّتِ النِظام: " + e.getMessage(), e);
+        }
     }
 
     /** لِلـJS: هَل الجِسرُ الأَصليُّ حاضِرٌ فِعلاً؟ */

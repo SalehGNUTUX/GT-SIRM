@@ -110,6 +110,9 @@
     <!-- إشعارُ الخِدمة (Android 13+ يَطلُبُهُ لِعَرضِ الإشعار، والخِدمةُ تَعمَلُ بِدونِه) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- v1.2.2 — تَثبيتُ حُزمةِ التَحديثِ المُنَزَّلة (المُستَخدِمُ يُؤَكِّدُ في شاشةِ النِظام) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!-- إعلان تَوفّر الميكروفون كميزة اختياريّة (لا يَفشل التَثبيت بدونه) -->
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
