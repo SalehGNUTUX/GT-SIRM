@@ -434,13 +434,24 @@
    * يَسأَلُ GitHub عَن آخِرِ إصدار.
    * يُعيد: { available, latest, current, notes, url, apkUrl, apkName, size }
    */
-  async function checkForUpdate(currentVersion) {
-    const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+  async function checkForUpdate(currentVersion, includeBeta) {
+    // v1.2.16 — قَناتان: المُستَقِرُّ وَحدَه (`/releases/latest` يَتَجاهَلُ
+    //   الإصداراتِ الاختِباريّةَ تِلقائيّاً)، أو كُلُّ الإصدارات (`/releases`)
+    //   فَيُؤخَذُ أَحدَثُها ولَو كانَ اختِباريّاً.
+    const url = includeBeta
+      ? `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=10`
+      : `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+    const r = await fetch(url, {
       headers: { "Accept": "application/vnd.github+json" },
       cache: "no-store",
     });
     if (!r.ok) throw new Error("HTTP " + r.status);
-    const rel = await r.json();
+    let rel = await r.json();
+    if (Array.isArray(rel)) {
+      rel = rel.filter(x => !x.draft);
+      if (!rel.length) throw new Error("لا إصداراتٍ مَنشورة");
+      rel = rel[0];                    // GitHub يُرَتِّبُها بِالأَحدَثِ أَوَّلاً
+    }
     const latest = String(rel.tag_name || "").replace(/^v/i, "");
     if (!latest) throw new Error("لا وَسمَ لِلإصدار");
 
@@ -451,6 +462,8 @@
     return {
       available: compareVersions(latest, currentVersion) > 0,
       latest,
+      prerelease: !!rel.prerelease,     // v1.2.16 — إصدارٌ اختِباريٌّ غَيرُ مُستَقِرّ
+      name: rel.name || "",
       current: String(currentVersion),
       notes: rel.body || "",
       url: rel.html_url,

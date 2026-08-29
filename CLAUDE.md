@@ -7,6 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **GT-SIRM (GnuTux Short Islamic Reels Maker)** — at **v1.2.1**. Triple-platform Electron+PWA+Capacitor Islamic reels maker forked from GT-SQRM/GT-SQR v3.0.
 
 ### Current state
+- **v1.2.16 (beta) على `main`** — قَناتا تَحديث (مُستَقِرّ/اختِباريّ) + yt-dlp في أندرويد +
+  7 خُطوطٍ OFL + تَسريعُ التَصدير + تَكافُؤُ المَزايا بَينَ النُسَخِ الثَلاث
 - v1.2.1 على `main` — إصلاحاتُ الهاتِف/الويب (حَفظٌ حَقيقيّ + تَصديرٌ في الخَلفيّة + تَسريع + البَسمَلة). **لم تُختَبَر عَلى جِهازٍ حَقيقيّ بَعد** — بُنيَ APK بِنَجاحٍ مَحَلّيّاً فَقَط
 - v1.2.0 مُوَحَّد على `main` — جاهز لِلبِناء والنَشر (لم يُرفَع بَعد كـrelease على GitHub)
 - آخر release مَنشور: **v1.1.0** — https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.1.0
@@ -562,6 +564,25 @@ canvas مَصدَراً (`src.width` بَعدَ `videoWidth` — التَرتي�
 `session.clearCache()` وَحدَها لا تَكفي — الـSW يُقَدِّمُ `app.js` قَديماً فَتَظهَرُ
 أَخطاءٌ وَهمِيّةٌ مِن نَوعِ «الدالّةُ غَيرُ مُعَرَّفة». أَضِف:
 `clearStorageData({ storages: ["serviceworkers","cachestorage"] })`.
+
+### قَناتا التَحديث: `/releases/latest` يَتَجاهَلُ الاختِباريّاتِ تِلقائيّاً (v1.2.16)
+`GET /repos/:o/:r/releases/latest` يُعيدُ **أَحدَثَ مُستَقِرٍّ فَقَط** ويَتَخَطّى كُلَّ ما
+`prerelease: true`. ولِجَلبِ الاختِباريّاتِ يَلزَمُ `GET /releases` (مُرَتَّبةً بِالأَحدَثِ
+أَوَّلاً) مَعَ تَصفيةِ `draft`. توگل `#update-include-beta` يَختارُ القَناةَ، وهُوَ
+**مُطفَأٌ افتِراضيّاً**.
+
+### MediaStore يَرفُضُ اللاحِقةَ التي لا تُطابِقُ نَوعَ المُحتَوى (v1.2.13)
+`.gtsirm` + `application/json` ⇒ يُضيفُ MediaProvider لاحِقةَ `.json`. وفَرضُ
+`application/octet-stream` هَرَباً مِن ذلِكَ يُصَنِّفُ المَلَفَّ **BIN** فَيَنقَطِعُ
+ارتِباطُهُ بِالبَرنامَجِ ويَخفُتُ في مُتَصَفِّحِ المِلَفّات. الصَوابُ: سَمِّ المَلَفَّ
+`<base>.gtsirm.json` ومَرِّر `application/json` — تُطابِقُ اللاحِقةُ النَوعَ فَلا تَشويه.
+وأَضِف `pathPattern` لِـ`.*\.gtsirm\.json` وإلّا اختَفى البَرنامَجُ مِن «الفَتحُ بِاستِخدام».
+
+### لا تَدَّعِ نَجاحَ حِفظٍ لَم يَقَع (v1.2.10)
+`saveViaDownload` (`<a download>`) كانَت تُعيدُ كائِنَ نَجاحٍ في الهاتِفِ وهي لا تَفعَلُ
+شَيئاً داخِلَ WebView — فَظَهَرَت رِسالةُ حَفظٍ بِلا مَلَفّ، وضاعَت مَشاريعُ المُستَخدِم.
+**مَسارُ احتِياطٍ لا يَعمَلُ أَسوَأُ مِن عَدَمِه** لأنَّهُ يُخفي الفَشَل. الآنَ تُعيدُ
+`null` في الهاتِف، ولا يُعلَنُ النَجاحُ إلّا بَعدَ التَحَقُّقِ مِنَ البايتاتِ ووُجودِ المَلَفّ.
 
 ### Inherited gotchas from GT-SQRM
 All gotchas in `../CLAUDE.md` apply: surah name prefix handling, CSP blocks `fetch("blob:")`, fonts must `FontFace.load()`, ffmpeg progress IPC throttling, render loop must yield during V2 export, web AAC codec fallback chain, web works under file://, electron-builder cache corruption.

@@ -2231,6 +2231,7 @@ function initEventListeners() {
   if (upNow) upNow.addEventListener("click", updateNow);
   const upCheck = $("check-update-btn");
   if (upCheck) upCheck.addEventListener("click", () => checkForUpdates(false));
+  initBetaUpdateToggle();   // v1.2.16 — قَناةُ التَحديث
 
   // v1.2.1 — سَقفُ دِقّةِ التَصدير (كانَ عُنصُراً مَيِّتاً لا يَقرَؤُهُ أَحَد)
   const resEl = $("export-res");
@@ -7186,8 +7187,30 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.15";
+const APP_VERSION = "1.2.16";
 let _updateInfo = null;
+
+// v1.2.16 — قَناةُ التَحديث: مُستَقِرٌّ وَحدَه (الافتِراض) أَو مَعَ الاختِباريّ.
+//   الاختِباريُّ يَحمِلُ أَحدَثَ المَزايا وقَد يَحمِلُ أَعطاباً، فَلا يُفرَضُ عَلى أَحَد.
+function betaUpdatesEnabled() {
+  const el = document.getElementById("update-include-beta");
+  if (el) return !!el.checked;
+  try { return localStorage.getItem("gt_sirm_update_beta") === "1"; } catch (_) { return false; }
+}
+
+function initBetaUpdateToggle() {
+  const el = document.getElementById("update-include-beta");
+  if (!el) return;
+  try { el.checked = localStorage.getItem("gt_sirm_update_beta") === "1"; } catch (_) {}
+  el.addEventListener("change", () => {
+    try { localStorage.setItem("gt_sirm_update_beta", el.checked ? "1" : "0"); } catch (_) {}
+    // تَبديلُ القَناةِ يُلغي تَأجيلَ إصدارٍ سابِقٍ حَتّى يُفحَصَ مِن جَديد
+    try { localStorage.removeItem("gt_sirm_update_snooze"); localStorage.removeItem("gt_sirm_update_lastcheck"); } catch (_) {}
+    toast?.(el.checked
+      ? "🧪 ستَصِلُكَ الإصداراتُ الاختِباريّةُ أيضاً — وهي غَيرُ مُستَقِرّة"
+      : "✅ الإصداراتُ المُستَقِرّةُ وَحدَها", "info", 3000);
+  });
+}
 
 function _appVersion() {
   const el = document.querySelector(".info-v");
@@ -7201,12 +7224,12 @@ async function checkForUpdates(silent) {
   const btn = $("check-update-btn");
   try {
     if (!silent && btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ الفَحص…"; }
-    const info = await window.PIO.checkForUpdate(_appVersion());
+    const info = await window.PIO.checkForUpdate(_appVersion(), betaUpdatesEnabled());
     _updateInfo = info;
     if (info.available) {
       showUpdateModal(info);
     } else if (!silent) {
-      toast(`✅ أنتَ عَلى أَحدَثِ إصدار (${info.current})`, "success", 3000);
+      toast(`✅ أنتَ عَلى أَحدَثِ إصدار (${info.current}) — قَناةُ ${betaUpdatesEnabled() ? "الاختِباريّ" : "المُستَقِرّ"}`, "success", 3000);
     }
   } catch (e) {
     if (!silent) toast("⚠️ تَعَذَّرَ الفَحص: " + String(e.message || e).slice(0, 60), "warn", 3500);
@@ -7222,10 +7245,17 @@ function showUpdateModal(info) {
   const isAndroid = !!(window.PIO && window.PIO.isNativeAndroid() && window.PIO.hasNativeBridge());
   const canInstall = isAndroid && !!info.apkUrl;
 
+  const betaWarn = info.prerelease
+    ? `<div style="margin-top:6px;padding:6px 8px;border:1px solid var(--warn,#e9b949);border-radius:var(--r);color:var(--warn,#e9b949);font-size:10px;line-height:1.7">
+         🧪 <b>إصدارٌ اختِباريٌّ (beta)</b> — يَحمِلُ أَحدَثَ المَزايا وقَد يَحمِلُ أَعطاباً.
+         لِلعَمَلِ اليَوميِّ الزَم المُستَقِرّ. يُمكِنُكَ إطفاءُ إشعاراتِ الاختِباريِّ مِن «حَول».
+       </div>` : "";
+  $("update-title").textContent = info.prerelease ? "🧪 إصدارٌ اختِباريٌّ جَديد" : "🎉 يَتَوَفَّرُ إصدارٌ جَديد";
   $("update-body").innerHTML =
-    `يَتَوَفَّرُ الإصدار <b>${info.latest}</b> — وأنتَ عَلى <b>${info.current}</b>.` +
+    `يَتَوَفَّرُ الإصدار <b>${info.latest}</b>${info.prerelease ? " <b style=\"color:var(--warn,#e9b949)\">(beta)</b>" : ""} — وأنتَ عَلى <b>${info.current}</b>.` +
     (canInstall && info.apkSize
-      ? `<br><span style="color:var(--t3)">حَجمُ الحُزمة: ${(info.apkSize / 1048576).toFixed(1)} ميغابايت</span>` : "");
+      ? `<br><span style="color:var(--t3)">حَجمُ الحُزمة: ${(info.apkSize / 1048576).toFixed(1)} ميغابايت</span>` : "") +
+    betaWarn;
 
   const notesEl = $("update-notes");
   if (notesEl) {

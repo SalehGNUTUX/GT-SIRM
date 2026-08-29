@@ -675,27 +675,60 @@ function _currentAppVersion() {
   return /^\d+\.\d+/.test(t) ? t : "0.0.0";
 }
 
+// v1.2.16 — قَناةُ التَحديث: مُستَقِرٌّ وَحدَه (الافتِراض) أَو مَعَ الاختِباريّ
+function betaUpdatesEnabled() {
+  const el = document.getElementById("update-include-beta");
+  if (el) return !!el.checked;
+  try { return localStorage.getItem("gt_sirm_update_beta") === "1"; } catch (_) { return false; }
+}
+
+function initBetaUpdateToggle() {
+  const el = document.getElementById("update-include-beta");
+  if (!el) return;
+  try { el.checked = localStorage.getItem("gt_sirm_update_beta") === "1"; } catch (_) {}
+  el.addEventListener("change", () => {
+    try { localStorage.setItem("gt_sirm_update_beta", el.checked ? "1" : "0"); } catch (_) {}
+    toast?.(el.checked
+      ? "🧪 ستَصِلُكَ الإصداراتُ الاختِباريّةُ أيضاً — وهي غَيرُ مُستَقِرّة"
+      : "✅ الإصداراتُ المُستَقِرّةُ وَحدَها", "info", 3000);
+  });
+}
+
 async function checkForUpdates(silent) {
   const note = document.getElementById("update-status-note");
   const btn = document.getElementById("check-update-btn");
   const say = (t) => { if (note) note.textContent = t; };
+  const beta = betaUpdatesEnabled();
   try {
     if (!silent && btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ الفَحص…"; }
     say("⏳ جارٍ الفَحص…");
-    const r = await fetch("https://api.github.com/repos/SalehGNUTUX/GT-SIRM/releases/latest",
-                          { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
+    // `/releases/latest` يَتَجاهَلُ الاختِباريّاتِ تِلقائيّاً؛ و`/releases` يَشمَلُها
+    const url = beta
+      ? "https://api.github.com/repos/SalehGNUTUX/GT-SIRM/releases?per_page=10"
+      : "https://api.github.com/repos/SalehGNUTUX/GT-SIRM/releases/latest";
+    const r = await fetch(url, { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
     if (!r.ok) throw new Error("HTTP " + r.status);
-    const rel = await r.json();
+    let rel = await r.json();
+    if (Array.isArray(rel)) {
+      rel = rel.filter(x => !x.draft);
+      if (!rel.length) throw new Error("لا إصداراتٍ مَنشورة");
+      rel = rel[0];
+    }
     const latest = String(rel.tag_name || "").replace(/^v/i, "");
+    const isBeta = !!rel.prerelease;
     const cur = _currentAppVersion();
     if (latest && _cmpVer(latest, cur) > 0) {
-      say(`🎉 يَتَوَفَّرُ الإصدار ${latest} (لَدَيكَ ${cur})`);
-      if (confirm(`يَتَوَفَّرُ الإصدار ${latest} — وأنتَ عَلى ${cur}.\n\nفَتحُ صَفحةِ الإصدارِ لِتَنزيلِه؟`)) {
+      const tag = isBeta ? " 🧪 (اختِباريّ)" : "";
+      say(`🎉 يَتَوَفَّرُ الإصدار ${latest}${tag} (لَدَيكَ ${cur})`);
+      const warn = isBeta
+        ? "\n\n🧪 هذا إصدارٌ اختِباريٌّ (beta): أَحدَثُ المَزايا وقَد يَحمِلُ أَعطاباً.\nلِلعَمَلِ اليَوميِّ الزَمِ المُستَقِرّ."
+        : "";
+      if (confirm(`يَتَوَفَّرُ الإصدار ${latest} — وأنتَ عَلى ${cur}.${warn}\n\nفَتحُ صَفحةِ الإصدارِ لِتَنزيلِه؟`)) {
         if (window.SIRM?.openExternal) window.SIRM.openExternal(rel.html_url);
         else window.open(rel.html_url, "_blank");
       }
     } else {
-      say(`✅ أنتَ عَلى أَحدَثِ إصدار (${cur})`);
+      say(`✅ أنتَ عَلى أَحدَثِ إصدار (${cur}) — قَناةُ ${beta ? "الاختِباريّ" : "المُستَقِرّ"}`);
       if (!silent) toast?.(`✅ أنتَ عَلى أَحدَثِ إصدار (${cur})`, "success", 2500);
     }
   } catch (e) {
@@ -2837,6 +2870,7 @@ function initEventListeners() {
 
   // v1.2.15 — فَحصُ تَحديثِ البَرنامَج
   $("check-update-btn")?.addEventListener("click", () => checkForUpdates(false));
+  initBetaUpdateToggle();   // v1.2.16 — قَناةُ التَحديث
 
   // v1.2.15 — مَشروعٌ جَديد
   $("proj-new-btn")?.addEventListener("click", newProjectPrompt);
