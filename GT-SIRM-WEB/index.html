@@ -496,7 +496,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small>GnuTux Short Islamic Reels Maker v1.2.8</small>
+      <small>GnuTux Short Islamic Reels Maker v1.2.9</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -536,7 +536,6 @@ body.offline .offline-badge{display:block}
 
       <!-- RECITATION -->
       <div class="tp" id="tab-rec">
-
 
         <!-- ═══ ✍️ النصّ الحرّ — قسم أداة مرئيّ دائماً (v0.8.16) ═══ -->
         <details class="sec" open>
@@ -840,7 +839,6 @@ body.offline .offline-badge{display:block}
               <button class="btn btn-g bsm" id="free-audio-restart-btn" style="display:none;padding:3px 10px">↺ إعادة</button>
               <button class="btn btn-g bsm" id="free-audio-remove-btn" style="display:none;padding:3px 10px;color:var(--danger)">🗑️ إزالة</button>
             </div>
-
 
           <!-- v1.2.6 — تَنزيلٌ مِن رابِطٍ مُباشِر -->
           <details class="sec" style="margin-top:6px;border:1px dashed var(--b1)">
@@ -1404,6 +1402,14 @@ body.offline .offline-badge{display:block}
             <div class="rc"><input type="radio" name="bgm" id="bgm3" value="zoom"><label for="bgm3"><span class="ri">🔍</span><span>تكبير</span></label></div>
             <div class="rc"><input type="radio" name="bgm" id="bgm4" value="pan"><label for="bgm4"><span class="ri">↔️</span><span>تحريك</span></label></div>
           </div>
+          <!-- v1.2.9 — التَحَكُّمُ في شِدّةِ الحَرَكةِ وبُطئِها -->
+          <div class="fg" style="margin-top:7px"><label class="fl">شِدّةُ الحَرَكة (مِقدارُ التَكبير/الإزاحة)</label>
+            <div class="sg"><input type="range" min="2" max="60" value="15" id="bgm-amount"><span class="sv" id="bgm-amount-v">15%</span></div>
+          </div>
+          <div class="fg"><label class="fl">مُدّةُ الدَورةِ الكامِلة (ذَهابٌ وإياب)</label>
+            <div class="sg"><input type="range" min="2" max="30" step="0.5" value="8" id="bgm-period"><span class="sv" id="bgm-period-v">8s</span></div>
+          </div>
+          <div class="note" style="color:var(--t3)">الحَرَكةُ تَذهَبُ وتَعودُ بِتَباطُؤٍ طَبيعيٍّ عِندَ الطَرَفَين — بِلا قَفزةٍ عِندَ العَودةِ لِلحَجمِ الأَصليّ. كُلَّما طالَتِ الدَورةُ كانَتِ الحَرَكةُ أَهدَأ.</div>
         </details>
         <details class="sec">
           <summary class="sec-t">🌈 أنماط اللون</summary>
@@ -1809,6 +1815,36 @@ body.offline .offline-badge{display:block}
         <!-- v0.12.1 — كلّ قسم في "جيب" (details) قابل للطيّ -->
 
         <!-- 1) نسبة العرض — للأعلى لأنّها أوّل قرار في صناعة المقطع -->
+        <details class="sec">
+          <summary class="sec-t">📦 وحدات المحتوى <span class="badge-new" style="background:linear-gradient(135deg,#ffd700,#ff9500);color:#3a2700;font-weight:800;text-shadow:0 1px 0 rgba(255,255,255,.4)">⭐ رَئيسيّ</span></summary>
+          <div class="note">فعّل/ألغِ كلّ وحدة محتوى حسب حاجتك. التغييرات تُحفظ تلقائياً وتُطبَّق فوراً.</div>
+          <div class="tgg">
+            <span class="tgl">📖 وحدة القرآن الكريم<br><small style="color:var(--t3)">السور · القرّاء · الترجمات · صوت التلاوة</small></span>
+            <label class="tg"><input type="checkbox" id="mod-quran" checked><span class="tgs"></span></label>
+          </div>
+          <div class="tgg">
+            <span class="tgl">📜 وحدة الحديث الشريف <span class="badge-new">v0.8</span><br><small style="color:var(--t3)">الأربعون النووية + بحث + تطبيق</small></span>
+            <label class="tg"><input type="checkbox" id="mod-hadith" checked><span class="tgs"></span></label>
+          </div>
+          <div class="tgg">
+            <span class="tgl">🕊️ وحدة الأذكار <span class="badge-new">v0.9</span><br><small style="color:var(--t3)">132 فئة · 267 ذكراً من حصن المسلم</small></span>
+            <label class="tg"><input type="checkbox" id="mod-azkar"><span class="tgs"></span></label>
+          </div>
+          <div class="tgg">
+            <span class="tgl">✨ وحدة أسماء الله الحسنى <span class="badge-new">v0.10</span><br><small style="color:var(--t3)">99+1 اسماً مع المعاني والشواهد القرآنيّة</small></span>
+            <label class="tg"><input type="checkbox" id="mod-asma"><span class="tgs"></span></label>
+          </div>
+          <div class="tgg">
+            <span class="tgl">🤲 وحدة الأدعية المأثورة <span class="badge-new">v0.10</span><br><small style="color:var(--t3)">32 دعاءً من القرآن والسنّة الصحيحة</small></span>
+            <label class="tg"><input type="checkbox" id="mod-duas"><span class="tgs"></span></label>
+          </div>
+          <div class="tgg">
+            <span class="tgl">🌟 وحدة الحِكَم والمواعظ <span class="badge-new">v0.10</span><br><small style="color:var(--t3)">32 قولاً للسلف بإسناد لقائله</small></span>
+            <label class="tg"><input type="checkbox" id="mod-hikam"><span class="tgs"></span></label>
+          </div>
+          <div class="note" style="margin-top:8px">✍️ <strong>محرّر النصّ الحرّ</strong> متاح دائماً — يظهر تلقائياً عند إلغاء وحدة القرآن.</div>
+        </details>
+
         <details class="sec" open>
           <summary class="sec-t">📐 نسبة العرض</summary>
           <div class="rcg" id="ratio-grp">
@@ -1896,35 +1932,6 @@ body.offline .offline-badge{display:block}
         </details>
 
         <!-- 4) وحدات المحتوى -->
-        <details class="sec">
-          <summary class="sec-t">📦 وحدات المحتوى <span class="badge-new" style="background:linear-gradient(135deg,#ffd700,#ff9500);color:#3a2700;font-weight:800;text-shadow:0 1px 0 rgba(255,255,255,.4)">⭐ رَئيسيّ</span></summary>
-          <div class="note">فعّل/ألغِ كلّ وحدة محتوى حسب حاجتك. التغييرات تُحفظ تلقائياً وتُطبَّق فوراً.</div>
-          <div class="tgg">
-            <span class="tgl">📖 وحدة القرآن الكريم<br><small style="color:var(--t3)">السور · القرّاء · الترجمات · صوت التلاوة</small></span>
-            <label class="tg"><input type="checkbox" id="mod-quran" checked><span class="tgs"></span></label>
-          </div>
-          <div class="tgg">
-            <span class="tgl">📜 وحدة الحديث الشريف <span class="badge-new">v0.8</span><br><small style="color:var(--t3)">الأربعون النووية + بحث + تطبيق</small></span>
-            <label class="tg"><input type="checkbox" id="mod-hadith" checked><span class="tgs"></span></label>
-          </div>
-          <div class="tgg">
-            <span class="tgl">🕊️ وحدة الأذكار <span class="badge-new">v0.9</span><br><small style="color:var(--t3)">132 فئة · 267 ذكراً من حصن المسلم</small></span>
-            <label class="tg"><input type="checkbox" id="mod-azkar"><span class="tgs"></span></label>
-          </div>
-          <div class="tgg">
-            <span class="tgl">✨ وحدة أسماء الله الحسنى <span class="badge-new">v0.10</span><br><small style="color:var(--t3)">99+1 اسماً مع المعاني والشواهد القرآنيّة</small></span>
-            <label class="tg"><input type="checkbox" id="mod-asma"><span class="tgs"></span></label>
-          </div>
-          <div class="tgg">
-            <span class="tgl">🤲 وحدة الأدعية المأثورة <span class="badge-new">v0.10</span><br><small style="color:var(--t3)">32 دعاءً من القرآن والسنّة الصحيحة</small></span>
-            <label class="tg"><input type="checkbox" id="mod-duas"><span class="tgs"></span></label>
-          </div>
-          <div class="tgg">
-            <span class="tgl">🌟 وحدة الحِكَم والمواعظ <span class="badge-new">v0.10</span><br><small style="color:var(--t3)">32 قولاً للسلف بإسناد لقائله</small></span>
-            <label class="tg"><input type="checkbox" id="mod-hikam"><span class="tgs"></span></label>
-          </div>
-          <div class="note" style="margin-top:8px">✍️ <strong>محرّر النصّ الحرّ</strong> متاح دائماً — يظهر تلقائياً عند إلغاء وحدة القرآن.</div>
-        </details>
 
         <!-- 5) الحفظ التلقائي -->
         <details class="sec">
@@ -2029,11 +2036,11 @@ body.offline .offline-badge{display:block}
         <div class="about-logo">
           <img src="GT-SIRM-icons/icon-256.png" class="al-icon" alt="GT-SIRM" style="width:80px;height:80px;">
           <h2>GT-SIRM</h2>
-          <p>GnuTux Short Islamic Reels Maker v1.2.8</p>
+          <p>GnuTux Short Islamic Reels Maker v1.2.9</p>
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.8</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.9</span></div>
           <div style="margin:7px 0"><button class="btn btn-g bsm bfw" id="check-update-btn">🔄 تَحَقَّق مِن وُجودِ تَحديث</button></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>

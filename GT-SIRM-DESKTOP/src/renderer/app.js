@@ -2874,6 +2874,8 @@ function initEventListeners() {
     { id: "vig-str", outId: "vig-str-v", unit: "%" },
     { id: "ov-op", outId: "ov-op-v", unit: "%" },
     { id: "export-vbr", outId: "export-vbr-v", unit: " Mbps" },
+    { id: "bgm-amount", outId: "bgm-amount-v", unit: "%" },
+    { id: "bgm-period", outId: "bgm-period-v", unit: "s" },
     { id: "export-crf", outId: "export-crf-v", unit: "" },
     { id: "pixel-size", outId: "pixel-size-v", unit: "" },
     { id: "mosaic-size", outId: "mosaic-size-v", unit: "" },
@@ -3448,11 +3450,49 @@ function drawGradient(ctx, W, H) {
   ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
 }
 
+// ══════════════════════════════════════════════════════
+//  v1.2.9 — حَرَكةُ الخَلفيّة: ذَهابٌ وإيابٌ سَلِسٌ لا قَفزة
+//  ───────────────────────────────────────────────────
+//  كانَ «التَكبير» و«الزَحف» يَستَعمِلانِ باقيَ القِسمة (`% `)، وهذا مِنشارٌ
+//  (sawtooth): يَصعَدُ تَدريجيّاً ثُمَّ **يَقفِزُ** إلى الصِفرِ دَفعةً واحِدة —
+//  وهُوَ ما رآهُ المُستَخدِمُ «يَعودُ بِالخَطف».
+//  البَديل: مَوجةُ جَيبِ التَمام. `(1 - cos(2πx)) / 2` تُعطي 0 → 1 → 0 في
+//  دَورةٍ كامِلة، ومُشتَقُّها صِفرٌ عِندَ الطَرَفَين — أَي تَباطُؤٌ طَبيعيٌّ عِندَ
+//  أَقصى تَكبيرٍ وعِندَ العَودةِ لِلحَجمِ الأَصليّ، بِلا أَيِّ قَفزة.
+// ══════════════════════════════════════════════════════
+function bgMotionCycle(t, periodSec) {
+  const p = Math.max(0.5, periodSec || 8);
+  return (1 - Math.cos((2 * Math.PI * t) / p)) / 2;   // 0 → 1 → 0 بِسَلاسة
+}
+
 function applyBgMotion(ctx, W, H, bgm, ts) {
   const t = S.bgMotionT;
-  if (bgm === "drift") { const d = t * 12 % 80; ctx.translate(d * .5, d * .3); ctx.scale(1.15, 1.15); ctx.translate(-W * .075, -H * .06); }
-  if (bgm === "zoom") { const sc = 1 + ((t * .04) % 0.15); ctx.translate(W / 2, H / 2); ctx.scale(sc, sc); ctx.translate(-W / 2, -H / 2); }
-  if (bgm === "pan") { const p = (Math.sin(t * .25) + 1) / 2; ctx.translate(-p * 60, 0); ctx.scale(1.12, 1); }
+  const amount = (parseFloat(gv("bgm-amount")) || 15) / 100;   // شِدّةُ الحَرَكة
+  const period = parseFloat(gv("bgm-period")) || 8;            // ثَواني الدَورةِ الكامِلة
+
+  if (bgm === "drift") {
+    const k = bgMotionCycle(t, period);
+    const over = 1 + amount;                     // تَكبيرٌ ثابِتٌ يُخفي الحَوافَّ أثناءَ الإزاحة
+    const maxX = W * amount * 0.5, maxY = H * amount * 0.35;
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(over, over);
+    ctx.translate(-W / 2, -H / 2);
+    ctx.translate((k - 0.5) * maxX, (k - 0.5) * maxY);
+  }
+  if (bgm === "zoom") {
+    const sc = 1 + amount * bgMotionCycle(t, period);
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(sc, sc);
+    ctx.translate(-W / 2, -H / 2);
+  }
+  if (bgm === "pan") {
+    const k = bgMotionCycle(t, period);
+    const over = 1 + amount;
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(over, over);
+    ctx.translate(-W / 2, -H / 2);
+    ctx.translate((k - 0.5) * W * amount, 0);
+  }
 }
 
 
