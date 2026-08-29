@@ -7162,7 +7162,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.11";
+const APP_VERSION = "1.2.12";
 let _updateInfo = null;
 
 function _appVersion() {
@@ -7681,7 +7681,13 @@ async function runDirectDownload(key) {
       handleFreeAudioFile(file);
     }
 
-    say(`✅ أُضيفَ: ${file.name} (${(file.size / 1048576).toFixed(1)} م.ب)`, "var(--ok,#4caf50)");
+    // v1.2.12 — بَيِّن إن كانَ المَقطَعُ مُنَزَّلاً سابِقاً فَأُعيدَ استِعمالُه،
+    //   وأَينَ يَقبَعُ فِعلاً: التَنزيلاتُ تَقَعُ في مُجَلَّدِ البَرنامَجِ الخاصِّ لا في
+    //   «التَنزيلات» العامّة — وكانَ المُستَخدِمُ يَبحَثُ عَنها هُناكَ فَلا يَجِدُها.
+    const reusedNote = file._reused ? " · ♻️ كانَ مُنَزَّلاً سابِقاً فَأُعيدَ استِعمالُه" : "";
+    const dirNote = file._dir ? `\n📁 ${file._dir}` : "";
+    if (status) status.style.whiteSpace = "pre-line";
+    say(`✅ أُضيفَ: ${file.name} (${(file.size / 1048576).toFixed(1)} م.ب)${reusedNote}${dirNote}`, "var(--ok,#4caf50)");
     if (urlEl) urlEl.value = "";
     if (typeof markProjectDirty === "function") markProjectDirty();
   } catch (e) {

@@ -594,8 +594,12 @@
       const r = await fetch(src);
       if (!r.ok) throw new Error("تَعَذَّرَت قِراءةُ المَلَفِّ المُنَزَّل (HTTP " + r.status + ")");
       const blob = await r.blob();
-      return new File([blob], res.name || "download",
-                      { type: res.mime || blob.type || "application/octet-stream" });
+      const f = new File([blob], res.name || "download",
+                         { type: res.mime || blob.type || "application/octet-stream" });
+      // v1.2.12 — أَخبِرِ الواجِهةَ أنَّ المَقطَعَ كانَ مُنَزَّلاً سابِقاً ومَوضِعَه
+      f._reused = !!res.reused;
+      f._dir = res.dir || null;
+      return f;
     } finally {
       if (handle && handle.remove) { try { await handle.remove(); } catch (_) {} }
     }

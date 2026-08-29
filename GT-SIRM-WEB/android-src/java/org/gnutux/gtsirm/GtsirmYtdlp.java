@@ -206,20 +206,49 @@ public class GtsirmYtdlp extends Plugin {
                             }
                         });
 
-                // اعثُر عَلى المَلَفِّ الجَديد: أَحدَثُ مَلَفٍّ لَم يَكُن مَوجوداً قَبلَ التَنزيل
+                // ⚠️ v1.2.12 — كانَ الاستِدلالُ «أَحدَثُ مَلَفٍّ لَم يَكُن مَوجوداً قَبلاً».
+                //   وهذا يَنهارُ في الحالةِ الأَكثَرِ شُيوعاً: مَقطَعٌ نُزِّلَ سابِقاً.
+                //   يَراهُ yt-dlp مَوجوداً فَيَتَخَطّاهُ ويَخرُجُ بِنَجاح (exit 0)، ولا
+                //   يَظهَرُ مَلَفٌّ «جَديد» — فَنُعلِنُ فَشَلاً كاذِباً.
+                //   الصَوابُ: نَقرَأُ المَسارَ مِن مُخرَجاتِ yt-dlp نَفسِها.
+                String stdout = (res != null && res.getOut() != null) ? res.getOut() : "";
+                String stderr = (res != null && res.getErr() != null) ? res.getErr() : "";
+                // yt-dlp يَكتُبُ أَسطُرَ التَقَدُّمِ بِـ\r لا \n، فَتَلتَصِقُ الأَسطُرُ
+                // ويَفشَلُ مُطابِقُ بِدايةِ السَطر. نُطَبِّعُها أَوَّلاً.
+                String all = (stdout + "\n" + stderr).replace('\r', '\n');
+
                 File out = null;
-                File[] post = dir.listFiles();
-                if (post != null) {
-                    for (File f : post) {
-                        if (!f.isFile() || before.contains(f.getName())) continue;
-                        if (f.getName().endsWith(".part") || f.getName().endsWith(".ytdl")) continue;
-                        if (out == null || f.lastModified() > out.lastModified()) out = f;
-                    }
+                boolean reused = false;
+
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                        "(?m)^\\[download\\]\\s+(.+?)\\s+has already been downloaded").matcher(all);
+                if (m.find()) { out = new File(m.group(1).trim()); reused = true; }
+
+                if (out == null || !out.exists()) {
+                    // آخِرُ وِجهةٍ مُعلَنة (الدَمجُ إن وَقَعَ يَأتي أَخيراً)
+                    java.util.regex.Matcher d = java.util.regex.Pattern.compile(
+                            "(?m)^\\[(?:download|ExtractAudio|Merger)\\][^\\n]*?(?:Destination:|Merging formats into)\\s+\"?(.+?)\"?\\s*$").matcher(all);
+                    String last = null;
+                    while (d.find()) last = d.group(1).trim();
+                    if (last != null) { out = new File(last); reused = false; }
                 }
-                if (out == null) {
-                    String tail = (res != null && res.getOut() != null)
-                            ? res.getOut().substring(Math.max(0, res.getOut().length() - 300)) : "";
-                    throw new Exception("لَم يُعثَر عَلى المَلَفِّ المُنَزَّل. " + tail);
+
+                // احتِياطٌ أَخير: أَحدَثُ مَلَفِّ وَسائِطَ في المُجَلَّد (مَوجوداً كانَ أَو جَديداً)
+                if (out == null || !out.exists()) {
+                    File[] post = dir.listFiles();
+                    if (post != null) {
+                        for (File f : post) {
+                            String fn = f.getName().toLowerCase();
+                            if (!f.isFile() || fn.endsWith(".part") || fn.endsWith(".ytdl")) continue;
+                            if (out == null || f.lastModified() > out.lastModified()) out = f;
+                        }
+                    }
+                    if (out != null) reused = before.contains(out.getName());
+                }
+
+                if (out == null || !out.exists() || out.length() <= 0) {
+                    String tail = all.length() > 900 ? all.substring(all.length() - 900) : all;
+                    throw new Exception("لَم يُعثَر عَلى المَلَفِّ المُنَزَّل.\n" + tail.trim());
                 }
 
                 String n = out.getName().toLowerCase();
@@ -236,6 +265,8 @@ public class GtsirmYtdlp extends Plugin {
                 ret.put("name", out.getName());
                 ret.put("mime", mime);
                 ret.put("bytes", out.length());
+                ret.put("reused", reused);     // v1.2.12 — كانَ مُنَزَّلاً سابِقاً
+                ret.put("dir", dir.getAbsolutePath());
                 call.resolve(ret);
             } catch (YoutubeDL.CanceledException ce) {
                 call.reject("cancelled");
