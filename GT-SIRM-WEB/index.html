@@ -496,7 +496,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small>GnuTux Short Islamic Reels Maker v1.2.7</small>
+      <small>GnuTux Short Islamic Reels Maker v1.2.8</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -612,6 +612,16 @@ body.offline .offline-badge{display:block}
             <label class="tg"><input type="checkbox" id="basmala-on" checked><span class="tgs"></span></label>
           </div>
           <button class="btn btn-p bsm bfw" id="load-verses-btn">🔄 تحميل الآيات</button>
+
+          <!-- v1.2.8 — نَقلُ الآياتِ المُحَمَّلةِ إلى مُحَرِّرِ النَصِّ الحُرِّ لِتَخصيصِها -->
+          <div style="background:var(--bg2);border:1px dashed var(--b1);border-radius:var(--r);padding:6px 8px;margin-top:6px">
+            <div class="note" style="color:var(--t3);margin:0 0 5px">تُنسَخُ الآياتُ المُحَمَّلةُ إلى مُحَرِّرِ النَصِّ الحُرِّ لِتُعَدِّلَها كَما تَشاء: دَمجُ آيَتَينِ في شَريحة، أو تَقسيمُ آيةٍ طَويلة، أو حَذفُ جُزء. كُلُّ فَقرةٍ يَفصِلُها سَطرٌ فارِغٌ = شَريحةٌ واحِدة.</div>
+            <label class="tgg" style="padding:0;background:none;border:none;margin-bottom:5px">
+              <span class="tgl" style="font-size:10px">مَعَ رَقمِ الآية</span>
+              <label class="tg"><input type="checkbox" id="verses-to-free-nums"><span class="tgs"></span></label>
+            </label>
+            <button class="btn btn-g bsm bfw" id="verses-to-free-btn">✍️ انقُلِ الآياتِ إلى النَصِّ الحُرّ</button>
+          </div>
         </details>
 
         <details class="sec" data-module="quran">
@@ -2019,11 +2029,11 @@ body.offline .offline-badge{display:block}
         <div class="about-logo">
           <img src="GT-SIRM-icons/icon-256.png" class="al-icon" alt="GT-SIRM" style="width:80px;height:80px;">
           <h2>GT-SIRM</h2>
-          <p>GnuTux Short Islamic Reels Maker v1.2.7</p>
+          <p>GnuTux Short Islamic Reels Maker v1.2.8</p>
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.7</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.8</span></div>
           <div style="margin:7px 0"><button class="btn btn-g bsm bfw" id="check-update-btn">🔄 تَحَقَّق مِن وُجودِ تَحديث</button></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>

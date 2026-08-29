@@ -385,6 +385,65 @@ function enforceSingleModuleActive(state) {
 //  حيث كلّ سطر فارغ يبدأ شريحة جديدة.
 //  يملأ S.verses ببنية مكافئة للآيات: {text, audio:null, surahName, ayahNum, manualDuration}
 // ══════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════
+//  v1.2.8 — نَقلُ الآياتِ المُحَمَّلةِ إلى مُحَرِّرِ النَصِّ الحُرّ
+//  ───────────────────────────────────────────────────
+//  الغَرَض: أن يُخَصِّصَ المُستَخدِمُ ما جُلِبَ — يَدمِجُ آيَتَينِ في شَريحةٍ واحِدة،
+//  أو يُقَسِّمُ آيةً طَويلةً إلى شَريحَتَين، أو يَحذِفُ جُزءاً — بَدَلَ أن يُعيدَ
+//  كِتابةَ النَصِّ يَدَويّاً.
+//  صيغةُ المُحَرِّر: كُلُّ فَقرةٍ يَفصِلُها **سَطرٌ فارِغ** = شَريحة
+//  (اُنظُر parseFreeText: تُقسَمُ عَلى /\n\s*\n+/).
+//  ولا نُطَبِّقُ النَصَّ تِلقائيّاً: نَترُكُ المُستَخدِمَ يُعَدِّلُ ثُمَّ يَضغَطُ «تَطبيق».
+// ══════════════════════════════════════════════════════
+function versesToFreeText() {
+  const verses = Array.isArray(S.verses) ? S.verses : [];
+  if (!verses.length) {
+    toast?.("⚠️ لا آياتٍ مُحَمَّلة — اضغَط «تحميل الآيات» أَوَّلاً", "warn", 2800);
+    return;
+  }
+  const ta = document.getElementById("free-text-area");
+  if (!ta) return;
+
+  const withNums = ge("verses-to-free-nums");
+  const lines = verses.map(v => {
+    const t = String(v.text || "").trim();
+    if (!t) return "";
+    // البَسمَلةُ شَريحةٌ بِلا رَقَم، وكَذلِكَ شَرائِحُ النَصِّ الحُرّ
+    const n = (withNums && !v.basmala && !v.free && v.numberInSurah) ? ` ﴿${v.numberInSurah}﴾` : "";
+    return t + n;
+  }).filter(Boolean);
+
+  if (!lines.length) { toast?.("⚠️ لا نَصَّ في الآياتِ المُحَمَّلة", "warn", 2500); return; }
+  const text = lines.join("\n\n");
+
+  const had = ta.value.trim();
+  if (had) {
+    // لا نُتلِفُ عَمَلَ المُستَخدِم: نَسأَلُهُ صَراحةً
+    const replace = confirm(
+      `حَقلُ النَصِّ الحُرِّ لَيسَ فارِغاً.\n\n` +
+      `مُوافَقة = استِبدالُ مُحتَواهُ بِـ${lines.length} شَريحة\n` +
+      `إلغاء = إضافةُ الآياتِ في نِهايَتِه`
+    );
+    ta.value = replace ? text : (had + "\n\n" + text);
+  } else {
+    ta.value = text;
+  }
+
+  // أَظهِرِ المُحَرِّرَ حَتّى يَرى المُستَخدِمُ ما نُقِل
+  const cb = document.getElementById("free-text-on");
+  if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event("change")); }
+  const sec = ta.closest("details.sec");
+  if (sec && !sec.open) sec.open = true;
+
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+  if (typeof updateFreeTextStats === "function") updateFreeTextStats();
+  if (typeof markProjectDirty === "function") markProjectDirty();
+  try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (_) {}
+
+  toast?.(`✍️ نُقِلَت ${lines.length} شَريحة — عَدِّلها ثُمَّ اضغَط «تَطبيقُ النَصّ»`, "success", 4000);
+}
+
 function parseFreeText(raw) {
   if (!raw || !raw.trim()) return [];
   // تقسيم على سطر فارغ واحد أو أكثر
@@ -2464,6 +2523,9 @@ function initEventListeners() {
   // v1.2.3 — إعادةٌ شامِلةٌ لِلإعدادات
   const resetAllBtn = $("reset-all-settings-btn");
   if (resetAllBtn) resetAllBtn.addEventListener("click", resetAllSettings);
+
+  // v1.2.8 — نَقلُ الآياتِ إلى النَصِّ الحُرّ
+  $("verses-to-free-btn")?.addEventListener("click", versesToFreeText);
 
   const toggleAddReciterBtn = $("toggle-add-reciter-btn");
   if (toggleAddReciterBtn) toggleAddReciterBtn.addEventListener("click", toggleAddReciter);
