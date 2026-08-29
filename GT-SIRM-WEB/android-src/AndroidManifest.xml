@@ -46,6 +46,13 @@
                 <data android:pathPattern=".*\\..*\\.gtsirm" />
                 <data android:pathPattern=".*\\..*\\..*\\.gtsirm" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\.gtsirm" />
+                <!-- v1.2.13 — الاسمُ عَلى القُرصِ صارَ `‎.gtsirm.json` (MediaStore
+                     يَرفُضُ لاحِقةً لا تُطابِقُ نَوعَ المُحتَوى)، وأَنماطُ `.gtsirm`
+                     وَحدَها لا تُطابِقُه — فَاختَفى البَرنامَجُ مِن «الفَتحُ بِاستِخدام». -->
+                <data android:pathPattern=".*\\.gtsirm\\.json" />
+                <data android:pathPattern=".*\\..*\\.gtsirm\\.json" />
+                <data android:pathPattern=".*\\..*\\..*\\.gtsirm\\.json" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.gtsirm\\.json" />
             </intent-filter>
             <intent-filter android:label="@string/app_name" android:priority="100">
                 <action android:name="android.intent.action.VIEW" />
@@ -55,6 +62,8 @@
                 <data android:scheme="content" />
                 <data android:mimeType="application/json" />
                 <data android:pathPattern=".*\\.gtsirm" />
+                <data android:pathPattern=".*\\.gtsirm\\.json" />
+                <data android:pathPattern=".*\\..*\\.gtsirm\\.json" />
             </intent-filter>
 
         </activity>

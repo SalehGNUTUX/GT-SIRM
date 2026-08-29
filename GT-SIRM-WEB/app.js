@@ -7162,7 +7162,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.12";
+const APP_VERSION = "1.2.13";
 let _updateInfo = null;
 
 function _appVersion() {
@@ -7493,14 +7493,57 @@ function resetAllSettings() {
 // ══════════════════════════════════════════════════════
 
 // يَقتَرِحُ اسماً مِن عُنوانِ المَقطَعِ أو السورةِ — نَفسُ مَصدَرِ اسمِ التَصدير
+// ══════════════════════════════════════════════════════
+//  v1.2.13 — تَطبيعُ اسمِ المَشروع
+//  ───────────────────────────────────────────────────
+//  كانَ الاسمُ يَتَضَخَّمُ دَورةً بَعدَ دَورة:
+//    gt-sirm-project-1787266075780.gtsirm(الرعد).gtsirm.json
+//  السَبَبُ حَلقةٌ مُغلَقة: MediaStore يُضيفُ `.json` (لأنَّ لاحِقةَ `.gtsirm`
+//  لا تُطابِقُ نَوعَ المُحتَوى)، وفَتحُ المَشروعِ يَحفَظُ اسمَ المَلَفِّ كَما هُوَ
+//  في `S.projectFileName`، ثُمَّ يُجَرَّدُ `.gtsirm` مِن آخِرِهِ فَقَط — ولا يُطابِقُ
+//  لأنَّ النِهايةَ `.json` — فَيُضافُ `.gtsirm` مِن جَديدٍ فَوقَ الاسمِ كامِلاً.
+//  الحَلّ: تَجريدٌ مُتَكَرِّرٌ لِكُلِّ اللَواحِقِ المَعروفةِ ولِعَلاماتِ التَكرارِ (1)،
+//  وإسقاطُ الاسمِ التِلقائيِّ العامِّ لِيَحُلَّ مَحَلَّهُ اسمٌ ذو مَعنى.
+// ══════════════════════════════════════════════════════
+function normalizeProjectBaseName(name) {
+  let s = String(name || "").trim();
+  // لاحِقاتٌ مُتَراكِمةٌ في **أَيِّ** مَوضِع: الأَسماءُ المُشَوَّهةُ سابِقاً تَحمِلُها
+  // في وَسَطِها أيضاً (مِثل «…‎.gtsirm(الرعد).gtsirm.json»).
+  s = s.replace(/\.(gtsirm|json)(?![A-Za-z0-9])/gi, "");
+  let prev = null;
+  while (prev !== s) {
+    prev = s;
+    s = s.replace(/\.(gtsirm|json)$/i, "");
+    s = s.replace(/\s*\(\d+\)$/, "");          // «(1)» التي يُضيفُها MediaStore
+    s = s.replace(/^[\s._-]+|[\s._-]+$/g, "");
+    s = s.trim();
+  }
+  // اسمٌ تِلقائيٌّ عامٌّ لا مَعنى لَه ⇒ دَع الاقتِراحَ يَبني اسماً أَفضَل
+  if (/^gt-?sirm-?project-?\d*$/i.test(s)) return "";
+  return s;
+}
+
 function suggestedProjectName() {
-  if (S.projectFileName) return String(S.projectFileName).replace(/\.gtsirm$/i, "");
+  const stored = normalizeProjectBaseName(S.projectFileName);
+  if (stored) return stored;
   const vt = document.getElementById("vtitle-text");
   if (vt && vt.value.trim()) {
-    return vt.value.trim().replace(/[\\/:*?"<>|]/g, "").slice(0, 60);
+    return normalizeProjectBaseName(vt.value.trim().replace(/[\\/:*?"<>|]/g, "").slice(0, 60));
   }
   if (typeof buildExportFileBase === "function") return buildExportFileBase();
   return "GT-SIRM-Project";
+}
+
+// اللاحِقةُ المُعتَمَدة: في أندرويد نُضيفُ `.json` عَمداً لِأنَّ MediaStore يَرفُضُ
+// (أَو يُعيدُ تَسميةَ) ما لا تُطابِقُ لاحِقَتُهُ نَوعَه — فَيَنزِلُ المَلَفُّ في
+// «التَنزيلات» سَليمَ الاسمِ بَدَلَ أن يُحشَرَ في مُجَلَّدٍ خَفيٍّ أَو يُشَوَّهَ اسمُه.
+function projectFileExt() {
+  return (window.PIO && window.PIO.isNativeAndroid()) ? ".gtsirm.json" : ".gtsirm";
+}
+
+function buildProjectFileName(base) {
+  const b = normalizeProjectBaseName(base) || "GT-SIRM-Project";
+  return b + projectFileExt();
 }
 
 // نافِذةُ تَسميةٍ تُعيدُ الاسمَ أو null إن أُلغيَت
@@ -7938,7 +7981,13 @@ async function shareLastExport() {
   if (!ok && le.blob && window.PIO) {
     ok = await window.PIO.shareBlob(le.blob, le.filename, le.mime);
   }
-  if (!ok) toast("تَعَذَّرَتِ المُشارَكةُ عَلى هذا الجِهاز — استَعمِل «حِفظٌ باسم…» لِاختيارِ مَوضِعٍ بِنَفسِك", "warn", 4000);
+  if (!ok) {
+    // v1.2.13 — بَيِّن أَينَ فَشِلَت بِالضَبطِ بَدَلَ رِسالةٍ عامّة
+    const why = !le.saved?.uri ? "لا عُنوانَ لِلمَلَفِّ المَحفوظ"
+              : !window.PIO?.hasNativeBridge?.() ? "الجِسرُ الأَصليُّ غَيرُ مُتاح"
+              : "رَفَضَ النِظامُ فَتحَ قائِمةِ المُشارَكة";
+    toast(`تَعَذَّرَتِ المُشارَكة (${why}) — استَعمِل «حِفظٌ باسم…» لِاختيارِ مَوضِعٍ بِنَفسِك`, "warn", 5000);
+  }
 }
 
 // v1.2.2 — «حِفظٌ باسم…»: مُنتَقي النِظام (SAF) يَختارُ فيهِ المُستَخدِمُ المُجَلَّدَ والاسم
@@ -9890,7 +9939,8 @@ async function saveProjectToPath(_filePath) {
     }
   }
   const blob = new Blob([json], { type: "application/json" });
-  const fname = (S.projectFileName || `gt-sirm-project-${Date.now()}.gtsirm`).replace(/\.json$/, ".gtsirm");
+  // v1.2.13 — اسمٌ مُعَتمَدٌ واحِدٌ في كُلِّ مَرّة (بِلا تَراكُمِ لَواحِق)
+  const fname = buildProjectFileName(S.projectFileName || suggestedProjectName());
 
   // ⚠️ v1.2.1 — كانَ الحَفظُ هُنا بِـ`<a download>` وَحدَه. داخِلَ WebView
   //   (نُسخةُ الهاتِف) لا يُنَفَّذُ ولا يُبَلِّغُ بِخَطَأ، فَكانَ المُستَخدِمُ يَضغَطُ
@@ -9908,7 +9958,18 @@ async function saveProjectToPath(_filePath) {
     // v1.2.11 — مُشارَكةٌ فَوريّةٌ إن طَلَبَها المُستَخدِمُ في نافِذةِ التَسمية
     if (_shareAfterProjectSave && !_silentProjectSave) {
       _shareAfterProjectSave = false;
-      setTimeout(() => { try { shareLastExport(); } catch (_) {} }, 350);
+      // v1.2.13 — لا تَبتَلِعِ الفَشَل: الرَفضُ غَيرُ المُعالَجِ كانَ يَجعَلُ
+      //   ورَقةَ المُشارَكةِ «لا تَظهَرُ» بِلا سَبَبٍ ظاهِرٍ لِلمُستَخدِم.
+      setTimeout(() => {
+        Promise.resolve()
+          .then(() => shareLastExport())
+          .catch(e => {
+            console.warn("share after save failed:", e);
+            toast?.("⚠️ تَعَذَّرَ فَتحُ قائِمةِ المُشارَكة: " +
+                    String(e?.message || e).slice(0, 80) +
+                    " — استَعمِل زِرَّ «📤 مُشارَكة» في النافِذة", "warn", 5000);
+          });
+      }, 400);
     }
     return true;
   }
@@ -9938,7 +9999,7 @@ async function saveProjectInteractiveSafe(forcePrompt = false) {
     //   أو السورةِ — نَفسُ ما يَحمِلُهُ المَلَفُّ المُصَدَّر.
     const chosen = await askProjectName();
     if (chosen === null) return;            // أَلغى المُستَخدِم
-    S.projectFileName = String(chosen.name).replace(/\.gtsirm$/i, "") + ".gtsirm";
+    S.projectFileName = buildProjectFileName(chosen.name);
     _shareAfterProjectSave = !!chosen.share;
 
     if (btn) { btn.disabled = true; btn.innerHTML = "⏳ <span>جارٍ الحَفظ…</span>"; }
@@ -10038,7 +10099,9 @@ async function openProjectFromBlob(file, handle = null) {
   try {
     const proj = JSON.parse(text);
     const result = await deserializeProject(proj);
-    S.projectFileName = file.name;
+    // v1.2.13 — خَزِّنِ الاسمَ مُطَبَّعاً لا كَما جاءَ مِنَ القُرص، وإلّا تَراكَمَت
+    //   اللَواحِقُ عِندَ الحَفظِ التالي.
+    S.projectFileName = buildProjectFileName(file.name);
     // v1.1.0 — احفَظ الـFSA handle إن تَوفَّر (لِلحَفظ التلقائيّ الصامِت)
     if (handle) S.projectFileHandle = handle;
     updateProjectTitle();
