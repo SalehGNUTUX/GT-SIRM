@@ -35,6 +35,11 @@ contextBridge.exposeInMainWorld("SIRM", {
   ytdlpDownload:    (opts)  => ipcRenderer.invoke("ytdlp-download", opts),
   ytdlpCancel:      ()      => ipcRenderer.send("ytdlp-cancel"),
   onYtdlpProgress:  (cb)    => ipcRenderer.on("ytdlp-progress", (_e, d) => cb(d)),
+  // v1.2.5 — تَحديثُ yt-dlp
+  ytdlpUpdate:      (opts)  => ipcRenderer.invoke("ytdlp-update", opts || {}),
+  ytdlpVersion:     ()      => ipcRenderer.invoke("ytdlp-version"),
+  onYtdlpUpdateProgress: (cb) => ipcRenderer.on("ytdlp-update-progress", (_e, d) => cb(d)),
+  offYtdlpUpdateProgress: () => ipcRenderer.removeAllListeners("ytdlp-update-progress"),
   offYtdlpProgress: ()      => ipcRenderer.removeAllListeners("ytdlp-progress"),
 
   // ── حوارات الملفات ────────────────────────────────

@@ -325,7 +325,12 @@ body.offline .offline-badge{display:block}
   #exbar{padding:0 6px;gap:3px}
   .hdr-r .btn span{display:none}
   .logo-icon{width:42px;height:42px}
+  /* v1.2.4 — التَرويسةُ ضاقَت بَعدَ زِرِّ «جَديد»: يُخفى الاسمُ النَصّيُّ ويَبقى
+     الشِعارُ وَحدَه. الاسمُ مَوجودٌ في تَبويبِ «حَول» ولا يُفقَدُ شَيء. */
+  .logo-text{display:none}
   .logo-text h1{font-size:13px}
+  .hdr-r{gap:3px}
+  .hdr-r .btn{padding:4px 7px}
   .btn-a,.btn-p{padding:5px 8px;font-size:9px}
   .btn-a span,.btn-p span{display:none}
   .tabs .tab-btn span:not(.ti){display:none}
@@ -491,7 +496,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small>GnuTux Short Islamic Reels Maker v1.2.4</small>
+      <small>GnuTux Short Islamic Reels Maker v1.2.5</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -1967,11 +1972,11 @@ body.offline .offline-badge{display:block}
         <div class="about-logo">
           <img src="GT-SIRM-icons/icon-256.png" class="al-icon" alt="GT-SIRM" style="width:80px;height:80px;">
           <h2>GT-SIRM</h2>
-          <p>GnuTux Short Islamic Reels Maker v1.2.4</p>
+          <p>GnuTux Short Islamic Reels Maker v1.2.5</p>
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.4</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.5</span></div>
           <div style="margin:7px 0"><button class="btn btn-g bsm bfw" id="check-update-btn">🔄 تَحَقَّق مِن وُجودِ تَحديث</button></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>

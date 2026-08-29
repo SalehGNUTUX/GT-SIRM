@@ -121,7 +121,23 @@ async function findBinary(name) {
 /**
  * الحصول على مسار الملف التنفيذي (مع تخزين مؤقت)
  */
+// v1.2.5 — مُجَلَّدٌ قابِلٌ لِلكِتابةِ لِلأَدواتِ المُحَدَّثة.
+//   حُزمةُ AppImage نِظامُ مِلَفّاتٍ لِلقِراءةِ فَقَط، فَلا يُمكِنُ تَحديثُ yt-dlp
+//   في مَكانِهِ داخِلَ الحُزمة. نَضَعُ النُسخةَ الجَديدةَ في userData ونُفَضِّلُها.
+function updatedBinDir() {
+  return path.join(app.getPath("userData"), "bin");
+}
+function updatedBinPath(name) {
+  return path.join(updatedBinDir(), name);
+}
+
 async function getBinPath(name) {
+  // النُسخةُ المُحَدَّثةُ (إن وُجِدَت) لَها الأَولَويّةُ دائِماً
+  try {
+    const up = updatedBinPath(name);
+    if (fs.existsSync(up)) return up;
+  } catch (_) {}
+
   if (isDev) {
     // في وضع التطوير، نفضل البحث في PATH أولاً ثم الإضافية
     return await findBinary(name);
@@ -1225,6 +1241,155 @@ ipcMain.handle("ffmpeg-encode", async (event, opts) => {
       reject(new Error("cancelled"));
     });
   });
+});
+
+// ══════════════════════════════════════════════════════════════
+//  v1.2.5 — تَحديثُ yt-dlp تِلقائيّاً
+//  ────────────────────────────────────────────────────────────
+//  yt-dlp يَتَعَطَّلُ سَريعاً: مَواقِعُ الفيديو تُغَيِّرُ صيَغَها كُلَّ أُسبوعٍ تَقريباً،
+//  والنُسخةُ المُحزَّمةُ مَعَ البَرنامَجِ تُصبِحُ عاجِزةً بَعدَ أَسابيع. لِذا نُنَزِّلُ
+//  آخِرَ إصدارٍ إلى مُجَلَّدٍ قابِلٍ لِلكِتابة (userData/bin) ونُفَضِّلُهُ عَلى
+//  المُحزَّم — فَيَعمَلُ هذا حَتّى داخِلَ AppImage المَقروءةِ فَقَط.
+//  لا نَستَعمِلُ `yt-dlp -U` لأنَّهُ يَكتُبُ فَوقَ نَفسِهِ في مَكانِهِ.
+// ══════════════════════════════════════════════════════════════
+const YTDLP_RELEASE_API = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest";
+const YTDLP_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;   // أُسبوع
+
+function ytdlpStampPath() {
+  return path.join(app.getPath("userData"), "ytdlp-update.json");
+}
+
+function readYtdlpStamp() {
+  try { return JSON.parse(fs.readFileSync(ytdlpStampPath(), "utf8")); } catch (_) { return {}; }
+}
+function writeYtdlpStamp(obj) {
+  try { fs.writeFileSync(ytdlpStampPath(), JSON.stringify(obj, null, 2)); } catch (_) {}
+}
+
+function httpsGetJson(url) {
+  return new Promise((resolve, reject) => {
+    const https = require("https");
+    https.get(url, { headers: { "User-Agent": "GT-SIRM", "Accept": "application/vnd.github+json" } }, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return httpsGetJson(res.headers.location).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error("HTTP " + res.statusCode)); }
+      let buf = "";
+      res.setEncoding("utf8");
+      res.on("data", d => buf += d);
+      res.on("end", () => { try { resolve(JSON.parse(buf)); } catch (e) { reject(e); } });
+    }).on("error", reject);
+  });
+}
+
+function httpsDownload(url, destPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    const https = require("https");
+    https.get(url, { headers: { "User-Agent": "GT-SIRM" } }, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return httpsDownload(res.headers.location, destPath, onProgress).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error("HTTP " + res.statusCode)); }
+      const total = parseInt(res.headers["content-length"] || "0", 10);
+      let got = 0;
+      const tmp = destPath + ".part";
+      const out = fs.createWriteStream(tmp);
+      res.on("data", d => {
+        got += d.length;
+        if (onProgress) onProgress(got, total);
+      });
+      res.pipe(out);
+      out.on("finish", () => {
+        out.close(() => {
+          try {
+            fs.renameSync(tmp, destPath);
+            fs.chmodSync(destPath, 0o755);
+            resolve({ path: destPath, bytes: got });
+          } catch (e) { reject(e); }
+        });
+      });
+      out.on("error", e => { try { fs.unlinkSync(tmp); } catch (_) {} reject(e); });
+    }).on("error", reject);
+  });
+}
+
+// اسمُ الأَصلِ المُناسِبِ لِهذه المِنَصّة
+function ytdlpAssetName() {
+  if (process.platform === "win32") return "yt-dlp.exe";
+  if (process.platform === "darwin") return "yt-dlp_macos";
+  return "yt-dlp";     // Linux: البِناءُ المُستَقِلُّ الرَسميّ
+}
+
+async function currentYtdlpVersion() {
+  try {
+    const p = await getBinPath("yt-dlp");
+    if (!p) return null;
+    const { stdout } = await execPromise(`"${p}" --version`, { timeout: 15000 });
+    return (stdout || "").trim() || null;
+  } catch (_) { return null; }
+}
+
+/**
+ * يَفحَصُ آخِرَ إصدارٍ ويُنَزِّلُهُ إن كانَ أَحدَثَ مِنَ الحاليّ.
+ * force=true يَتَجاوَزُ مُهلةَ الأُسبوع.
+ */
+async function updateYtdlp({ force = false, sender = null } = {}) {
+  const stamp = readYtdlpStamp();
+  if (!force && stamp.lastCheck && (Date.now() - stamp.lastCheck) < YTDLP_CHECK_INTERVAL_MS) {
+    return { skipped: true, reason: "checked-recently", current: stamp.version || null };
+  }
+  const current = await currentYtdlpVersion();
+  const rel = await httpsGetJson(YTDLP_RELEASE_API);
+  const latest = String(rel.tag_name || "").trim();
+  stamp.lastCheck = Date.now();
+
+  if (!latest) { writeYtdlpStamp(stamp); throw new Error("لا وَسمَ لِلإصدار"); }
+  if (current && current === latest) {
+    stamp.version = current;
+    writeYtdlpStamp(stamp);
+    return { updated: false, current, latest };
+  }
+
+  const wanted = ytdlpAssetName();
+  const asset = (rel.assets || []).find(a => a.name === wanted);
+  if (!asset) { writeYtdlpStamp(stamp); throw new Error("لا يوجَدُ أَصلٌ مُناسِبٌ لِهذه المِنَصّة: " + wanted); }
+
+  fs.mkdirSync(updatedBinDir(), { recursive: true });
+  const dest = updatedBinPath("yt-dlp");
+  const send = (line) => { try { sender && sender.send("ytdlp-update-progress", { line }); } catch (_) {} };
+  send(`⬇️ تَنزيلُ yt-dlp ${latest} …`);
+  let lastPct = -1;
+  await httpsDownload(asset.browser_download_url, dest, (got, total) => {
+    if (!total) return;
+    const pct = Math.floor(got * 100 / total);
+    if (pct !== lastPct && pct % 10 === 0) { lastPct = pct; send(`… ${pct}%`); }
+  });
+
+  // تَحَقَّق أنَّ المُنَزَّلَ يَعمَلُ فِعلاً قَبلَ اعتِمادِه
+  let verified = null;
+  try {
+    const { stdout } = await execPromise(`"${dest}" --version`, { timeout: 20000 });
+    verified = (stdout || "").trim();
+  } catch (e) {
+    try { fs.unlinkSync(dest); } catch (_) {}
+    writeYtdlpStamp(stamp);
+    throw new Error("المَلَفُّ المُنَزَّلُ لا يَعمَل — أُلغيَ التَحديث");
+  }
+
+  stamp.version = verified || latest;
+  writeYtdlpStamp(stamp);
+  send(`✅ حُدِّثَ yt-dlp إلى ${stamp.version}`);
+  return { updated: true, current, latest: stamp.version, path: dest };
+}
+
+ipcMain.handle("ytdlp-update", async (event, opts) => {
+  return await updateYtdlp({ force: !!(opts && opts.force), sender: event.sender });
+});
+
+ipcMain.handle("ytdlp-version", async () => {
+  return { version: await currentYtdlpVersion() };
 });
 
 ipcMain.handle("ytdlp-download", async (event, opts) => {

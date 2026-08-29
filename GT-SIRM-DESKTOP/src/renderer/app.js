@@ -2687,6 +2687,11 @@ function initEventListeners() {
         if (res && res[0]) document.getElementById("recvid-dl-path").value = res[0];
       } catch (e) { console.warn("dialogOpen:", e); }
     });
+    // v1.2.5 — تَحديثُ yt-dlp: زِرٌّ يَدَويّ + فَحصٌ هادِئٌ أُسبوعيٌّ عِندَ الإقلاع
+    document.getElementById("ytdlp-update-btn")?.addEventListener("click", () => runYtdlpUpdate(true));
+    refreshYtdlpVersionLabel();
+    setTimeout(() => { try { runYtdlpUpdate(false); } catch (_) {} }, 8000);
+
     document.getElementById("recvid-dl-btn")?.addEventListener("click", runRecvidYtdlpDownload);
     document.getElementById("recvid-dl-cancel")?.addEventListener("click", () => {
       try { window.SIRM.ytdlpCancel?.(); } catch (_) {}
@@ -10078,6 +10083,54 @@ async function runFreeAudioYtdlpDownload() {
     try { window.SIRM.offYtdlpProgress?.(); } catch (_) {}
     if (btn) { btn.disabled = false; btn.textContent = "⬇️ تنزيل و اعتماد كصوت"; }
     if (cancelBtn) cancelBtn.style.display = "none";
+  }
+}
+
+
+// ══════════════════════════════════════════════════════
+//  v1.2.5 — تَحديثُ yt-dlp تِلقائيّاً (سَطحُ المَكتَب)
+//  ───────────────────────────────────────────────────
+//  مَواقِعُ الفيديو تُغَيِّرُ صيَغَها كُلَّ أُسبوعٍ تَقريباً، فَتَعجَزُ النُسخةُ
+//  المُحزَّمةُ بَعدَ أَسابيع ويَظُنُّ المُستَخدِمُ أنَّ البَرنامَجَ هُوَ العاطِل.
+//  فَحصٌ هادِئٌ أُسبوعيٌّ عِندَ الإقلاعِ + زِرُّ تَحديثٍ يَدَويّ.
+// ══════════════════════════════════════════════════════
+async function refreshYtdlpVersionLabel() {
+  const el = document.getElementById("ytdlp-version");
+  if (!el || !window.SIRM?.ytdlpVersion) return;
+  try {
+    const { version } = await window.SIRM.ytdlpVersion();
+    el.textContent = version ? `الإصدار الحاليّ: ${version}` : "غَير مُثَبَّت";
+  } catch (_) { el.textContent = ""; }
+}
+
+async function runYtdlpUpdate(force) {
+  if (!IS_DESKTOP || !window.SIRM?.ytdlpUpdate) return;
+  const btn = document.getElementById("ytdlp-update-btn");
+  const log = document.getElementById("ytdlp-update-log");
+  if (force && btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ التَحديث…"; }
+  if (force && log) { log.style.display = "block"; log.textContent = ""; }
+  try {
+    window.SIRM.onYtdlpUpdateProgress?.(({ line }) => {
+      if (log) log.textContent += line + "\n";
+    });
+    const r = await window.SIRM.ytdlpUpdate({ force: !!force });
+    window.SIRM.offYtdlpUpdateProgress?.();
+    if (r.skipped) {
+      if (force) toast("✅ فُحِصَ قَريباً — لا حاجةَ لِلإعادة", "info", 2500);
+    } else if (r.updated) {
+      toast(`⬆️ حُدِّثَ yt-dlp إلى ${r.latest}`, "success", 4000);
+    } else if (force) {
+      toast(`✅ yt-dlp مُحَدَّثٌ أَصلاً (${r.current || r.latest})`, "success", 3000);
+    }
+    refreshYtdlpVersionLabel();
+  } catch (e) {
+    window.SIRM.offYtdlpUpdateProgress?.();
+    const msg = String(e?.message || e).slice(0, 120);
+    if (force) toast("❌ تَعَذَّرَ تَحديثُ yt-dlp: " + msg, "error", 5000);
+    else console.warn("[SIRM] فَحصُ تَحديثِ yt-dlp فَشِل:", msg);
+    if (log && force) log.textContent += "❌ " + msg + "\n";
+  } finally {
+    if (force && btn) { btn.disabled = false; btn.textContent = "⬆️ حَدِّث yt-dlp الآن"; }
   }
 }
 

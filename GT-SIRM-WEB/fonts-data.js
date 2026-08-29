@@ -1,6 +1,41 @@
 // مولَّد تلقائياً من fonts/fonts.json — للعمل تحت file:// بدون fetch
 window.FONTS_DATA = [
   {
+    "name": "Noto Naskh Arabic",
+    "file": "NotoNaskhArabic-Regular.ttf",
+    "sample": "بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ"
+  },
+  {
+    "name": "Amiri",
+    "file": "Amiri-Regular.ttf",
+    "sample": "بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ"
+  },
+  {
+    "name": "Alkalami",
+    "file": "Alkalami-Regular.ttf",
+    "sample": "بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ"
+  },
+  {
+    "name": "Markazi Text",
+    "file": "MarkaziText-Regular.ttf",
+    "sample": "بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ"
+  },
+  {
+    "name": "Aref Ruqaa",
+    "file": "ArefRuqaa-Regular.ttf",
+    "sample": "بِسْمِ اللَّهِ"
+  },
+  {
+    "name": "Cairo",
+    "file": "Cairo-Regular.ttf",
+    "sample": "بِسْمِ اللَّهِ"
+  },
+  {
+    "name": "Noto Nastaliq Urdu",
+    "file": "NotoNastaliqUrdu-Regular.ttf",
+    "sample": "بِسْمِ اللَّهِ"
+  },
+  {
     "name": "Amiri Quran",
     "file": "amiri-quran.ttf",
     "sample": "بِسْمِ اللَّهِ"

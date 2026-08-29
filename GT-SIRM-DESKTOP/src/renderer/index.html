@@ -396,7 +396,12 @@ body.offline .offline-badge{display:block}
   #exbar{padding:0 6px;gap:3px}
   .hdr-r .btn span{display:none}
   .logo-icon{width:42px;height:42px}
+  /* v1.2.4 — التَرويسةُ ضاقَت بَعدَ زِرِّ «جَديد»: يُخفى الاسمُ النَصّيُّ ويَبقى
+     الشِعارُ وَحدَه. الاسمُ مَوجودٌ في تَبويبِ «حَول» ولا يُفقَدُ شَيء. */
+  .logo-text{display:none}
   .logo-text h1{font-size:13px}
+  .hdr-r{gap:3px}
+  .hdr-r .btn{padding:4px 7px}
   .btn-a,.btn-p{padding:5px 8px;font-size:9px}
   .btn-a span,.btn-p span{display:none}
   .tabs .tab-btn span:not(.ti){display:none}
@@ -529,7 +534,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.2.4</small>
+      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.2.5</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -1460,6 +1465,16 @@ body.offline .offline-badge{display:block}
           </div>
           <div class="note" id="dl-tool-hint">yt-dlp: يوتيوب ومئات المواقع · wget/aria2c: روابط مباشرة (mp4، jpg…)</div>
 
+          <!-- v1.2.5 — تَحديثُ yt-dlp: المَواقِعُ تُغَيِّرُ صيَغَها بِاستِمرار -->
+          <div style="background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-top:6px">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-size:10px;color:var(--t2);flex:1">⬆️ تَحديثُ yt-dlp <span id="ytdlp-version" style="color:var(--t3)"></span></span>
+              <button class="btn btn-g bsm" id="ytdlp-update-btn" style="padding:3px 10px">⬆️ حَدِّث yt-dlp الآن</button>
+            </div>
+            <div class="note" style="color:var(--t3);margin-top:3px">يُفحَصُ تِلقائيّاً مَرّةً كُلَّ أُسبوعٍ عِندَ الإقلاع. مَواقِعُ الفيديو تُغَيِّرُ صيَغَها بِاستِمرار، فَالنُسخةُ القَديمةُ تَعجَزُ عَنِ التَنزيل.</div>
+            <pre id="ytdlp-update-log" style="display:none;font-size:9px;color:var(--t3);max-height:110px;overflow:auto;margin-top:4px;white-space:pre-wrap"></pre>
+          </div>
+
           <!-- الرابط + لصق -->
           <div class="fg" style="display:flex;gap:5px;align-items:center;margin-top:5px">
             <input type="text" class="fc" id="ytdlp-url" placeholder="https://youtube.com/watch?v=..." style="flex:1">
@@ -2337,7 +2352,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.4</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.5</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
