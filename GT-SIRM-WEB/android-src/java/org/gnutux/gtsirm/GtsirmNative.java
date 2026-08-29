@@ -361,8 +361,17 @@ public class GtsirmNative extends Plugin {
 
             Intent chooser = Intent.createChooser(send, title);
             chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(chooser);
+
+            // v1.2.13 — أَطلِقها مِنَ الـActivity لا مِن سياقِ التَطبيق: الإطلاقُ
+            //   مِن سياقٍ غَيرِ Activity يَحتاجُ NEW_TASK وقَد يُتَجاهَلُ صامِتاً
+            //   في بَعضِ الأَجهِزة — فَلا تَظهَرُ ورَقةُ المُشارَكةِ ولا خَطَأ.
+            android.app.Activity act = getActivity();
+            if (act != null && !act.isFinishing()) {
+                act.startActivity(chooser);
+            } else {
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(chooser);
+            }
             call.resolve();
         } catch (Exception e) {
             call.reject("تَعَذَّرَتِ المُشارَكة: " + e.getMessage(), e);
