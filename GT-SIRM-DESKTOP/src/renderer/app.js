@@ -3296,7 +3296,9 @@ function drawFrame(ts) {
   //   المُستَخدِمُ الآياتِ إلى المُحَرِّرِ ويُفَعِّلُ «الصَوتَ فَقَط» لِيَأخُذَ تِلاوةَ
   //   القارئ، فَلا يَظهَرُ نَصُّهُ البَتّة. الشَريحةُ الحُرّةُ تُرسَمُ دائِماً.
   const _cur = S.verses[S.currentAya];
-  const audioOnly = ge("quran-audio-only") && !!_cur && !_cur.free;
+  // v1.2.14 — يُكتَمُ نَصُّ القُرآنِ وَحدَه؛ أمّا الشَريحةُ الحُرّةُ أو التي
+  //   استُبدِلَ نَصُّها بِنَصِّ المُحَرِّرِ فَتُرسَمُ دائِماً.
+  const audioOnly = ge("quran-audio-only") && !!_cur && !_cur.free && !_cur.textFromFree;
   if (!audioOnly && S.verses.length && (!recvidActive || recvidShowText) && !(S.verses.length === 1 && S.verses[0]?.recvid)) drawVerse(ctx, W, H, ts);
   drawSurahName(ctx, W, H);
   drawVideoTitle(ctx, W, H);
@@ -6371,7 +6373,11 @@ async function shareApp() {
 📁 المُستودع: https://github.com/SalehGNUTUX/GT-SIRM
 📦 الإصدارات: https://github.com/SalehGNUTUX/GT-SIRM/releases
 
-#GT_SIRM #GNUTUX #ريلز_إسلامية #إسلام #برمجيات_مفتوحة`;
+#GT_SIRM #GNUTUX #gnutux #Quran #quran #القرآن #القرآن_الكريم #ريلز_إسلامية
+#إسلام #Islam #islamic #IslamicReels #Reels #Shorts #تلاوة #تلاوات_خاشعة
+#دعوة #محتوى_إسلامي #IslamicContent #OpenSource #برمجيات_مفتوحة #FOSS #GPLv3
+#Linux #Android #PWA #أذكار #Adhkar #Dua #أدعية #الحديث_الشريف #Hadith
+#أسماء_الله_الحسنى #AsmaUlHusna #MuslimDeveloper #مطور_مسلم`;
 
   const shareData = {
     title: "GT-SIRM — صانع ريلز إسلاميّة",
@@ -6461,7 +6467,7 @@ function _addPasteClearButtons(elementId) {
     pasteBtn.innerHTML = "📋 لصق";
     pasteBtn.addEventListener("click", async () => {
       try {
-        const txt = await navigator.clipboard.readText();
+        const txt = await (window.PIO?.readClipboard ? window.PIO.readClipboard() : navigator.clipboard.readText());
         el.value = txt;
         el.dispatchEvent(new Event("input", { bubbles: true }));
         el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -8952,6 +8958,36 @@ async function loadVerses() {
     S.useFreeAsSource = false;
   }
 
+  // ══════════════════════════════════════════════════════
+  //  v1.2.14 — «صَوتُ القارئ» مَعَ «نَصِّكَ أنت»
+  //  ───────────────────────────────────────────────────
+  //  كانَ الوَضعانِ يَتَنازَعانِ `S.verses`: تَطبيقُ النَصِّ الحُرِّ يَمحو صَوتَ
+  //  القارئ (شَرائِحُ حُرّةٌ بِلا صَوت)، وتَحميلُ الآياتِ يَمحو النَصَّ الحُرّ.
+  //  فَتَعَذَّرَ ما يُريدُهُ المُستَخدِمُ فِعلاً: تِلاوةُ القارئِ فَوقَ نَصٍّ خَصَّصَهُ.
+  //  الحَلّ: مَصفوفةٌ واحِدةٌ تَجمَعُ الاثنَين — الصَوتُ والتَوقيتُ مِنَ الآية،
+  //  والنَصُّ المَرسومُ مِن شَريحةِ المُحَرِّرِ المُقابِلةِ لَها بِالتَرتيب.
+  // ══════════════════════════════════════════════════════
+  if (!textOnly && ge("quran-audio-only")) {
+    const ta = document.getElementById("free-text-area");
+    const slices = (typeof parseFreeText === "function") ? parseFreeText(ta?.value || "") : [];
+    if (slices.length) {
+      verses = verses.map((v, i) => (i < slices.length)
+        ? { ...v, text: slices[i], textFromFree: true }
+        : v);
+      // شَرائِحُ زائِدةٌ عَنِ الآيات: تُعرَضُ بِلا صَوتِ قارئٍ (مُدّةٌ يَدَويّة)
+      if (slices.length > verses.length) {
+        const extraDur = parseFloat(gv("free-slice-dur")) || 4;
+        for (let i = verses.length; i < slices.length; i++) {
+          verses.push({
+            text: slices[i], numberInSurah: i + 1, number: i + 1,
+            audio: null, audioSecondary: [], manualDuration: extraDur,
+            free: true, textFromFree: true,
+          });
+        }
+      }
+    }
+  }
+
   S.verses = verses; S.currentAya = 0; S.elapsed = 0; S.ayaDurations = [];
   const suffix = textOnly ? " · 🔇 نصّ فقط" : (ge("quran-audio-only") ? " · 🔊 صوت فقط" : "");
   $("aya-info").textContent = `✅ ${verses.length} آية من سورة ${stripSurahPrefix(surah?.name) || ""} ${source}${suffix}`;
@@ -9963,7 +9999,7 @@ function initYtdlpPasteFix() {
     if (e.key === "v" && (e.ctrlKey || e.metaKey)) {
       e.stopPropagation();
       try {
-        const t = await navigator.clipboard.readText();
+        const t = await (window.PIO?.readClipboard ? window.PIO.readClipboard() : navigator.clipboard.readText());
         if (t) { const s = inp.selectionStart, en = inp.selectionEnd;
           inp.value = inp.value.slice(0,s) + t.trim() + inp.value.slice(en); }
       } catch (_) {}
@@ -9972,7 +10008,7 @@ function initYtdlpPasteFix() {
   const pb = $("ytdlp-paste-btn");
   if (pb) pb.addEventListener("click", async () => {
     try {
-      const t = await navigator.clipboard.readText();
+      const t = await (window.PIO?.readClipboard ? window.PIO.readClipboard() : navigator.clipboard.readText());
       if (t) { inp.value = t.trim(); toast("📋 تم اللصق", "info", 1500); }
     } catch (_) { toast("⚠️ فعّل الوصول للحافظة", "warn"); }
   });
@@ -10038,7 +10074,7 @@ async function pasteToInput(inputId) {
   const inp = document.getElementById(inputId);
   if (!inp) return;
   try {
-    const text = await navigator.clipboard.readText();
+    const text = await (window.PIO?.readClipboard ? window.PIO.readClipboard() : navigator.clipboard.readText());
     if (text) {
       inp.value = text.trim();
       inp.dispatchEvent(new Event("input", { bubbles: true }));

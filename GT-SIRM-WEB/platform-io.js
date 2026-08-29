@@ -617,9 +617,41 @@
     if (P) { try { await P.cancel(); } catch (_) {} }
   }
 
+  /**
+   * قِراءةُ الحافِظة. الجِسرُ الأَصليُّ أَوَّلاً: `navigator.clipboard` داخِلَ
+   * WebView يَفشَلُ كَثيراً بِـNotAllowedError رَغمَ وُجودِ نَصٍّ في الحافِظة.
+   * يُعيدُ النَصَّ أو null (فَيَتَوَلّى المُنادي إخبارَ المُستَخدِم).
+   */
+  async function readClipboard() {
+    const P = nativePlugin();
+    if (P && P.readClipboard) {
+      try {
+        const r = await P.readClipboard();
+        if (r && typeof r.text === "string") return r.text;
+      } catch (e) { console.warn("[PIO] الحافِظةُ الأَصليّةُ فَشِلَت:", e); }
+    }
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        return await navigator.clipboard.readText();
+      }
+    } catch (e) { console.warn("[PIO] حافِظةُ المُتَصَفِّحِ فَشِلَت:", e); }
+    return null;
+  }
+
+  /** يُشارِكُ حُزمةَ التَطبيقِ المُثَبَّتِ نَفسَها (نَشرٌ يَداً بِيَدٍ بِلا إنترنت). */
+  async function shareApk() {
+    const P = nativePlugin();
+    if (!P || !P.shareApk) throw new Error("مُشارَكةُ الحُزمةِ مُتاحةٌ في تَطبيقِ الهاتِفِ فَقَط");
+    return await P.shareApk();
+  }
+  function canShareApk() { return !!(nativePlugin() && nativePlugin().shareApk); }
+
   // ── التَصدير ────────────────────────────────────────────────
   window.PIO = {
     downloadDirect,
+    readClipboard,
+    shareApk,
+    canShareApk,
     hasYtdlp,
     ytdlpVersion,
     ytdlpUpdate,

@@ -667,6 +667,91 @@ public class GtsirmNative extends Plugin {
         call.resolve();
     }
 
+    // ── 8) قِراءةُ الحافِظة ──────────────────────────────────────
+    //
+    //  `navigator.clipboard.readText()` داخِلَ WebView يَتَطَلَّبُ إذناً وتَركيزاً
+    //  ويَفشَلُ كَثيراً بِـNotAllowedError، فَتَظهَرُ «تَعَذَّرَ الوُصولُ لِلحافِظة»
+    //  رَغمَ وُجودِ نَصٍّ فيها. ClipboardManager الأَصليُّ لا يَشتَرِطُ شَيئاً مِن ذلِك.
+    @PluginMethod
+    public void readClipboard(PluginCall call) {
+        try {
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager) getContext()
+                            .getSystemService(Context.CLIPBOARD_SERVICE);
+            String text = "";
+            if (cm != null && cm.hasPrimaryClip()) {
+                android.content.ClipData clip = cm.getPrimaryClip();
+                if (clip != null && clip.getItemCount() > 0) {
+                    CharSequence cs = clip.getItemAt(0).coerceToText(getContext());
+                    if (cs != null) text = cs.toString();
+                }
+            }
+            JSObject ret = new JSObject();
+            ret.put("text", text);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("تَعَذَّرَت قِراءةُ الحافِظة: " + e.getMessage(), e);
+        }
+    }
+
+    // ── 9) مُشارَكةُ حُزمةِ التَطبيقِ نَفسِها (APK) ────────────────
+    //
+    //  تُتيحُ نَشرَ البَرنامَجِ يَداً بِيَدٍ بِلا إنترنت. حُزمةُ التَطبيقِ المُثَبَّتِ
+    //  مَقروءةٌ مِن مَسارِها (`sourceDir`)، لَكِنَّها في مُجَلَّدِ النِظامِ فَلا
+    //  يَصِلُها FileProvider — فَنَنسَخُها إلى مُجَلَّدِ البَرنامَجِ ثُمَّ نُشارِكُها.
+    @PluginMethod
+    public void shareApk(PluginCall call) {
+        new Thread(() -> {
+            InputStream in = null;
+            OutputStream out = null;
+            try {
+                android.content.pm.PackageManager pm = getContext().getPackageManager();
+                android.content.pm.PackageInfo pi = pm.getPackageInfo(getContext().getPackageName(), 0);
+                String srcPath = pi.applicationInfo.sourceDir;
+                String ver = pi.versionName != null ? pi.versionName : "app";
+
+                File dir = new File(getContext().getExternalFilesDir(null), "share");
+                if (!dir.exists() && !dir.mkdirs()) throw new Exception("تَعَذَّرَ إنشاءُ مُجَلَّدِ المُشارَكة");
+                File apk = new File(dir, "GT-SIRM-v" + ver + ".apk");
+
+                if (!apk.exists() || apk.length() != new File(srcPath).length()) {
+                    in = new java.io.FileInputStream(srcPath);
+                    out = new FileOutputStream(apk);
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                    out.flush();
+                }
+
+                Uri uri = FileProvider.getUriForFile(
+                        getActivity(), getContext().getPackageName() + ".fileprovider", apk);
+                Intent send = new Intent(Intent.ACTION_SEND);
+                send.setType("application/vnd.android.package-archive");
+                send.putExtra(Intent.EXTRA_STREAM, uri);
+                send.putExtra(Intent.EXTRA_SUBJECT, "GT-SIRM v" + ver);
+                send.setClipData(ClipData.newRawUri("", uri));
+                send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                Intent chooser = Intent.createChooser(send, "مُشارَكةُ حُزمةِ GT-SIRM");
+                chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                android.app.Activity act = getActivity();
+                if (act != null && !act.isFinishing()) act.startActivity(chooser);
+                else { chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); getContext().startActivity(chooser); }
+
+                JSObject ret = new JSObject();
+                ret.put("path", apk.getAbsolutePath());
+                ret.put("bytes", apk.length());
+                ret.put("version", ver);
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("تَعَذَّرَت مُشارَكةُ الحُزمة: " + e.getMessage(), e);
+            } finally {
+                try { if (in != null) in.close(); } catch (Exception ignored) {}
+                try { if (out != null) out.close(); } catch (Exception ignored) {}
+            }
+        }).start();
+    }
+
     /** لِلـJS: هَل الجِسرُ الأَصليُّ حاضِرٌ فِعلاً؟ */
     @PluginMethod
     public void ping(PluginCall call) {
