@@ -538,9 +538,71 @@
                     { type: blob.type || "application/octet-stream" });
   }
 
+  // ══════════════════════════════════════════════════════════
+  //  v1.2.7 — yt-dlp داخِلَ تَطبيقِ أندرويد
+  //  ───────────────────────────────────────────────────────
+  //  عَبرَ io.github.junkfood02.youtubedl-android (أَساسُ YTDLnis): تُضَمَّنُ
+  //  Python مَعَ yt-dlp وتُهَيَّأُ عِندَ أَوَّلِ استِعمال (فَكُّ ضَغطٍ يَستَغرِقُ
+  //  ثَوانِيَ — لِذا نُهَيِّئُ عِندَ الطَلَبِ لا عِندَ الإقلاع).
+  //  بِلا ffmpeg: نَطلُبُ صيَغاً مَدموجةً مُسبَقاً (اُنظُر GtsirmYtdlp.java).
+  // ══════════════════════════════════════════════════════════
+  function ytdlpPlugin() {
+    try { return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.GtsirmYtdlp) || null; }
+    catch (_) { return null; }
+  }
+
+  function hasYtdlp() { return !!ytdlpPlugin(); }
+
+  async function ytdlpVersion() {
+    const P = ytdlpPlugin();
+    if (!P) return null;
+    try { return (await P.version()).version || null; } catch (_) { return null; }
+  }
+
+  async function ytdlpUpdate() {
+    const P = ytdlpPlugin();
+    if (!P) throw new Error("yt-dlp غَيرُ مُضَمَّنٍ في هذه الحُزمة");
+    return await P.update();
+  }
+
+  /** يُنَزِّلُ عَبرَ yt-dlp ويُعيدُ File جاهِزاً لِمُعالِجِ القِسم. */
+  async function ytdlpDownload(url, kind, onProgress) {
+    const P = ytdlpPlugin();
+    if (!P) throw new Error("yt-dlp غَيرُ مُضَمَّنٍ في هذه الحُزمة");
+    let handle = null;
+    try {
+      if (onProgress) {
+        try {
+          handle = await P.addListener("ytdlpProgress",
+            (ev) => onProgress(ev.percent, ev.line || "", ev.eta));
+        } catch (_) {}
+      }
+      const res = await P.download({ url, kind: kind || "video" });
+      const src = (window.Capacitor && window.Capacitor.convertFileSrc)
+        ? window.Capacitor.convertFileSrc(res.path) : res.path;
+      const r = await fetch(src);
+      if (!r.ok) throw new Error("تَعَذَّرَت قِراءةُ المَلَفِّ المُنَزَّل (HTTP " + r.status + ")");
+      const blob = await r.blob();
+      return new File([blob], res.name || "download",
+                      { type: res.mime || blob.type || "application/octet-stream" });
+    } finally {
+      if (handle && handle.remove) { try { await handle.remove(); } catch (_) {} }
+    }
+  }
+
+  async function ytdlpCancel() {
+    const P = ytdlpPlugin();
+    if (P) { try { await P.cancel(); } catch (_) {} }
+  }
+
   // ── التَصدير ────────────────────────────────────────────────
   window.PIO = {
     downloadDirect,
+    hasYtdlp,
+    ytdlpVersion,
+    ytdlpUpdate,
+    ytdlpDownload,
+    ytdlpCancel,
     checkForUpdate,
     downloadAndInstall,
     compareVersions,

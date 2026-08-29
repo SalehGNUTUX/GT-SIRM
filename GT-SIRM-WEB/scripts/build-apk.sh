@@ -90,6 +90,9 @@ npx cap sync android
 if [ -d android-src ]; then
     echo "🧩 تَطبيق المَصادِر الأَصليّة مِن android-src/ ..."
     cp -f  android-src/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+    mkdir -p android/app/src/main/res/xml
+    [ -f android-src/res/xml/file_paths.xml ] && cp -f android-src/res/xml/file_paths.xml android/app/src/main/res/xml/file_paths.xml
+    [ -x android-src/patch-gradle.sh ] && bash android-src/patch-gradle.sh
     mkdir -p android/app/src/main/java/org/gnutux/gtsirm
     cp -f  android-src/java/org/gnutux/gtsirm/*.java android/app/src/main/java/org/gnutux/gtsirm/
     echo "   ✅ Manifest + MainActivity + GtsirmNative + ExportService"

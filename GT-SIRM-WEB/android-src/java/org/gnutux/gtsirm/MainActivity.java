@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(android.os.Bundle savedInstanceState) {
         // v1.2.1 — إضافاتٌ مَحَلّيّةٌ يَجِبُ تَسجيلُها قَبلَ إنشاءِ الجِسر
         registerPlugin(GtsirmNative.class);
+        registerPlugin(GtsirmYtdlp.class);   // v1.2.7 — yt-dlp لِأندرويد
         super.onCreate(savedInstanceState);
     }
 }

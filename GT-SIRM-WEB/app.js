@@ -2178,6 +2178,9 @@ function initEventListeners() {
   if (resEl) resEl.addEventListener("change", onExportResChange);
 
   initDirectDownloadUI();   // v1.2.6 — حُقولُ التَنزيلِ مِن رابِطٍ مُباشِر
+  // v1.2.7 — تَحديثُ yt-dlp المُضَمَّن
+  $("ytdlp-mobile-update")?.addEventListener("click", () => runYtdlpMobileUpdate(true));
+  setTimeout(() => { try { runYtdlpMobileUpdate(false); } catch (_) {} }, 12000);
 
   // v1.2.4 — مَشروعٌ جَديد + تَسميةُ الحَفظ
   $("proj-new-btn")?.addEventListener("click", newProjectPrompt);
@@ -3651,19 +3654,31 @@ function onLogoUpload(input) {
   S.logoImg = null;
 
   if (isVideo) {
+    // v1.2.7 — شِعارُ الفيديو يُحفَظُ مَعَ المَشروع.
+    //   كانَ يُحذَفُ صَراحةً مِنَ التَخزينِ («الفيديو لا يُحفظ») فَيَعودُ المَشروعُ
+    //   بِكُلِّ شَيءٍ إلّا الشِعار. الآنَ يُضَمَّنُ كَأَيِّ أَصلٍ آخَرَ (ضِمنَ حَدِّ
+    //   التَضمين)، ولا يُخَزَّنُ في localStorage لأنَّ سَعَتَهُ لا تَحتَمِلُ فيديو.
+    S.logoVidFile = file;
     const vid = document.createElement("video");
     vid.src = url;
     vid.loop = true; vid.muted = true; vid.playsInline = true; vid.autoplay = true;
     vid.onloadeddata = () => {
       S.logoVid = vid;
+      S.logoVidUrl = url;
       vid.play().catch(() => {});
+      ensureLogoLoopMate(url);      // v1.2.7 — رَفيقُ اللَفِّ السَلِس
       $("logo-preview").style.display = "block";
       $("logo-img-preview").src = "";
       $("logo-vid-preview").src = url;
       $("logo-vid-preview").style.display = "block";
       $("logo-img-preview").style.display = "none";
-      toast("✅ شعار فيديو تم تحميله (الفيديو لا يُحفظ — حجمه كبير)", "info", 5000);
+      const mb = (file.size / 1048576).toFixed(1);
+      toast(file.size <= ASSET_EMBED_MAX
+        ? `✅ شِعارُ فيديو (${mb} م.ب) — يُحفَظُ مَعَ المَشروع`
+        : `⚠️ شِعارُ فيديو (${mb} م.ب) أَكبَرُ مِن ${ASSET_EMBED_MAX_LABEL} — يَعمَلُ الآنَ ولا يُحفَظُ مَعَ المَشروع`,
+        file.size <= ASSET_EMBED_MAX ? "success" : "warn", 5000);
       try { localStorage.removeItem(LOGO_PERSIST_KEY); } catch (_) {}
+      if (typeof markProjectDirty === "function") markProjectDirty();
     };
     vid.onerror = () => toast("❌ فشل تحميل الفيديو", "error");
     vid.load();
@@ -3695,6 +3710,8 @@ function onLogoUpload(input) {
 
 function removeLogo() {
   if (S.logoVid) { try { S.logoVid.pause(); } catch (_) {} S.logoVid = null; }
+  if (S.logoVidMate) { try { S.logoVidMate.pause(); } catch (_) {} S.logoVidMate = null; }
+  S.logoVidFile = null; S.logoVidUrl = null;
   S.logoImg = null;
   $("logo-preview").style.display = "none";
   $("logo-upload").value = "";
@@ -3720,8 +3737,57 @@ function restoreLogo() {
   img.src = dataUrl;
 }
 
+
+// ══════════════════════════════════════════════════════
+//  v1.2.7 — لَفٌّ سَلِسٌ لِشِعارِ الفيديو
+//  ───────────────────────────────────────────────────
+//  `video.loop = true` يَقطَعُ قَطعاً حادّاً مِن آخِرِ إطارٍ إلى أَوَّلِه، فَتُرى
+//  «وَمضةُ» الإعادةِ كُلَّ دَورة. الحَلُّ نَفسُ حَلِّ مَقاطِعِ الخَلفيّة: عُنصُرٌ
+//  ثانٍ بِنَفسِ المَصدَرِ يُشَغَّلُ مِنَ البِدايةِ خِلالَ آخِرِ LOGO_LOOP_FADE ثانِية،
+//  فَيَتَلاشى الأَوَّلُ ويَظهَرُ الثاني — دَورةٌ بِلا انقِطاعٍ مَرئيّ.
+// ══════════════════════════════════════════════════════
+const LOGO_LOOP_FADE = 0.45;   // ثانِية
+
+function ensureLogoLoopMate(url) {
+  if (!url) return;
+  if (S.logoVidMate && S.logoVidMate.dataset.src === url) return;
+  if (S.logoVidMate) { try { S.logoVidMate.pause(); } catch (_) {} }
+  const m = document.createElement("video");
+  m.src = url;
+  m.dataset.src = url;
+  m.loop = true; m.muted = true; m.playsInline = true;
+  m.load();
+  S.logoVidMate = m;
+}
+
+/**
+ * يُعيدُ { src, alpha, src2, alpha2 } لِرَسمِ الشِعارِ بِلَفٍّ سَلِس.
+ * حينَ لا يَكونُ فيديو أو تَكونُ مُدَّتُهُ مَجهولةً يَرجِعُ المَصدَرَ وَحدَه.
+ */
+function logoLoopSources() {
+  const v = S.logoVid;
+  if (!v) return { src: S.logoImg, alpha: 1 };
+  const dur = v.duration;
+  if (!isFinite(dur) || dur < LOGO_LOOP_FADE * 3) return { src: v, alpha: 1 };
+
+  const remain = dur - v.currentTime;
+  const mate = S.logoVidMate;
+  if (remain > LOGO_LOOP_FADE || !mate || mate.readyState < 2) {
+    // خارِجَ نافِذةِ التَلاشي: أَعِدِ الرَفيقَ لِلبِدايةِ استِعداداً لِلدَورةِ القادِمة
+    if (mate && !mate.paused) { try { mate.pause(); mate.currentTime = 0; } catch (_) {} }
+    return { src: v, alpha: 1 };
+  }
+
+  // داخِلَ النافِذة: شَغِّلِ الرَفيقَ مِنَ البِدايةِ وامزِج
+  if (mate.paused) { try { mate.currentTime = 0; mate.play().catch(() => {}); } catch (_) {} }
+  const t = 1 - (remain / LOGO_LOOP_FADE);          // 0 → 1
+  const k = t < 0 ? 0 : t > 1 ? 1 : t;
+  return { src: v, alpha: 1 - k, src2: mate, alpha2: k };
+}
+
 function drawLogo(ctx, W, H) {
-  const src = S.logoVid || S.logoImg;
+  const loop = logoLoopSources();          // v1.2.7 — لَفٌّ سَلِس
+  const src = loop.src || S.logoVid || S.logoImg;
   if (!src) return;
 
   const pos = $("logo-pos").value;
@@ -3766,9 +3832,14 @@ function drawLogo(ctx, W, H) {
     ctx.restore();
   } else {
     ctx.save();
-    ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = "source-over";
+    // v1.2.7 — في نافِذةِ اللَفِّ نَرسُمُ المَصدَرَينِ مُتَمازِجَين فَلا يُرى القَطع
+    ctx.globalAlpha = opacity * (loop.alpha != null ? loop.alpha : 1);
     ctx.drawImage(src, x, y, drawW, drawH);
+    if (loop.src2 && loop.alpha2 > 0) {
+      ctx.globalAlpha = opacity * loop.alpha2;
+      ctx.drawImage(loop.src2, x, y, drawW, drawH);
+    }
     ctx.restore();
   }
 }
@@ -6969,7 +7040,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.6";
+const APP_VERSION = "1.2.7";
 let _updateInfo = null;
 
 function _appVersion() {
@@ -7444,11 +7515,26 @@ async function runDirectDownload(key) {
   if (btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ التَنزيل…"; }
   say("⏳ يَبدَأُ التَنزيل…");
   try {
-    const file = await window.PIO.downloadDirect(url, (pct, got, total) => {
-      say(total > 0
-        ? `⏳ ${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} م.ب · ${pct}%`
-        : `⏳ ${(got / 1048576).toFixed(1)} م.ب`);
-    });
+    // v1.2.7 — إن كانَ الرابِطُ صَفحةً (لا مَلَفّاً مُباشِراً) ووُجِدَ yt-dlp
+    //   في الحُزمة، مَرِّرهُ إلَيه. وإلّا فَالتَنزيلُ المُباشِرُ كَما كان.
+    const looksDirect = /\.(mp4|webm|mkv|mov|m4v|mp3|m4a|aac|ogg|opus|wav|flac)(\?|#|$)/i.test(url);
+    const useYtdlp = !looksDirect && window.PIO.hasYtdlp && window.PIO.hasYtdlp();
+
+    let file;
+    if (useYtdlp) {
+      const kind = (key === "dlurl-audio") ? "audio" : "video";
+      say("⏳ تَهيئةُ yt-dlp ثُمَّ التَنزيل… (قَد تَطولُ أَوَّلَ مَرّة)");
+      file = await window.PIO.ytdlpDownload(url, kind, (pct, line) => {
+        say(pct >= 0 ? `⏳ ${pct}% · ${String(line || "").slice(0, 60)}`
+                     : `⏳ ${String(line || "جارٍ التَنزيل…").slice(0, 70)}`);
+      });
+    } else {
+      file = await window.PIO.downloadDirect(url, (pct, got, total) => {
+        say(total > 0
+          ? `⏳ ${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} م.ب · ${pct}%`
+          : `⏳ ${(got / 1048576).toFixed(1)} م.ب`);
+      });
+    }
 
     // تَحَقَّق أنَّ النَوعَ يُناسِبُ القِسمَ قَبلَ تَسليمِه
     const t = (file.type || "").toLowerCase();
@@ -7477,6 +7563,7 @@ async function runDirectDownload(key) {
     if (typeof markProjectDirty === "function") markProjectDirty();
   } catch (e) {
     const msg = String(e?.message || e);
+    if (/cancelled/i.test(msg)) { say("🚫 أُلغيَ التَنزيل"); return; }
     const cors = /Failed to fetch|NetworkError|CORS/i.test(msg);
     say(cors
       ? "❌ رَفَضَ الخادِمُ الطَلَبَ مِنَ المُتَصَفِّح (CORS). جَرِّب رابِطاً آخَرَ أو نَزِّلهُ ثُمَّ ارفَعهُ يَدَويّاً."
@@ -7486,7 +7573,63 @@ async function runDirectDownload(key) {
   }
 }
 
+
+// ── v1.2.7 — إصدارُ yt-dlp المُضَمَّنِ وتَحديثُه (الهاتِف) ──
+async function refreshYtdlpMobileVersion() {
+  const el = document.getElementById("ytdlp-mobile-version");
+  if (!el || !window.PIO?.ytdlpVersion) return;
+  el.textContent = "⏳ يُقرَأُ الإصدار…";
+  try {
+    const v = await window.PIO.ytdlpVersion();
+    el.textContent = v ? `الإصدارُ الحاليّ: ${v}` : "غَيرُ مُهَيَّإٍ بَعد";
+  } catch (_) { el.textContent = "غَيرُ مُهَيَّإٍ بَعد"; }
+}
+
+async function runYtdlpMobileUpdate(force) {
+  if (!window.PIO?.hasYtdlp || !window.PIO.hasYtdlp()) return;
+  // خَنقٌ أُسبوعيٌّ لِلفَحصِ التِلقائيّ
+  if (!force) {
+    try {
+      const last = parseInt(localStorage.getItem("gt_sirm_ytdlp_lastcheck") || "0", 10);
+      if (last && Date.now() - last < 7 * 86400000) return;
+      localStorage.setItem("gt_sirm_ytdlp_lastcheck", String(Date.now()));
+    } catch (_) {}
+  }
+  const btn = document.getElementById("ytdlp-mobile-update");
+  if (force && btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ…"; }
+  try {
+    const r = await window.PIO.ytdlpUpdate();
+    if (force) {
+      toast(r.updated ? `⬆️ حُدِّثَ yt-dlp إلى ${r.version || ""}`
+                      : `✅ yt-dlp مُحَدَّثٌ أَصلاً (${r.version || ""})`,
+            "success", 3500);
+    }
+    refreshYtdlpMobileVersion();
+  } catch (e) {
+    const msg = String(e?.message || e).slice(0, 110);
+    if (force) toast("❌ تَعَذَّرَ التَحديث: " + msg, "error", 5000);
+    else console.warn("[SIRM] فَحصُ yt-dlp فَشِل:", msg);
+  } finally {
+    if (force && btn) { btn.disabled = false; btn.textContent = "⬆️ حَدِّث الآن"; }
+  }
+}
+
 function initDirectDownloadUI() {
+  // v1.2.7 — إن كانَ yt-dlp مُضَمَّناً فَالحَقلُ يَقبَلُ صَفَحاتِ يوتيوب وأَمثالِها
+  const withYtdlp = !!(window.PIO?.hasYtdlp && window.PIO.hasYtdlp());
+  if (withYtdlp) {
+    document.querySelectorAll('[id$="-url"]').forEach(el => {
+      if (!/^dlurl-/.test(el.id)) return;
+      el.placeholder = "رابِطُ صَفحةٍ (يوتيوب…) أو رابِطٌ مُباشِر";
+      const note = el.closest("details")?.querySelector(".note");
+      if (note) note.textContent =
+        "الصِق رابِطَ صَفحةٍ (يوتيوب ومِئاتُ المَواقِع) أو رابِطاً مُباشِراً لِلمَلَفّ. yt-dlp مُضَمَّنٌ في هذه الحُزمة.";
+    });
+    // أَظهِر إصدارَ yt-dlp وزِرَّ تَحديثِهِ في الإعدادات
+    const box = document.getElementById("ytdlp-mobile-box");
+    if (box) box.style.display = "";
+    refreshYtdlpMobileVersion();
+  }
   for (const key of Object.keys(DIRECT_DL_TARGETS)) {
     $(key + "-btn")?.addEventListener("click", () => runDirectDownload(key));
     $(key + "-paste")?.addEventListener("click", async () => {
@@ -9332,6 +9475,23 @@ async function serializeProject() {
     }
     assets.push(a);
   }
+  // v1.2.7 — شِعارُ الفيديو: أَصلٌ كامِلٌ كَغَيرِه (كانَ لا يُحفَظُ البَتّة)
+  if (S.logoVidFile) {
+    const a = {
+      key: "logoVideo",
+      name: S.logoVidFile.name || "logo.mp4",
+      size: S.logoVidFile.size || 0,
+      mime: S.logoVidFile.type || "video/mp4",
+    };
+    if (S.logoVidFile.size <= ASSET_EMBED_MAX) {
+      a.mode = "embedded";
+      a.dataURL = await fileToDataURL(S.logoVidFile);
+    } else {
+      a.mode = "missing";
+      a.reason = `حجم أكبر من ${ASSET_EMBED_MAX_LABEL}`;
+    }
+    assets.push(a);
+  }
   const logoDataURL = localStorage.getItem("gt_sirm_logo_v1");
   if (logoDataURL) {
     assets.push({ key: "logo", name: "logo.png", mode: "embedded", dataURL: logoDataURL });
@@ -9459,7 +9619,11 @@ async function restoreAssetFromDataURL(asset) {
   const file = new File([blob], asset.name, { type: asset.mime || blob.type });
   const fakeInput = { files: [file], value: "" };
 
-  if (asset.key === "logo") {
+  if (asset.key === "logoVideo") {
+    // أَعِدهُ عَبرَ نَفسِ مُعالِجِ الرَفع: يُنشِئُ العُنصُرَ ويُظهِرُ المُعاينةَ
+    // ويُهَيِّئُ رَفيقَ اللَفِّ السَلِس — لا مَسارَ مُوازِيَ لَه.
+    if (typeof onLogoUpload === "function") onLogoUpload({ files: [file] });
+  } else if (asset.key === "logo") {
     try { localStorage.setItem("gt_sirm_logo_v1", asset.dataURL); } catch (_) {}
     if (typeof restoreLogo === "function") restoreLogo();
   } else if (asset.key === "bgImage") {
