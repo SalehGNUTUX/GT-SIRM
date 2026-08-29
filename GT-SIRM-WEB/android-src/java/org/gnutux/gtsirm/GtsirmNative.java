@@ -58,9 +58,10 @@ public class GtsirmNative extends Plugin {
     private static class PendingWrite {
         OutputStream stream;
         Uri uri;              // غَيرُ فارِغٍ في مَسارِ MediaStore
-        File file;            // غَيرُ فارِغٍ في المَسارِ الاحتِياطيّ (API < 29)
+        File file;            // غَيرُ فارِغٍ في المَسارِ الاحتِياطيّ
         String displayPath;   // مَسارٌ يُعرَضُ لِلمُستَخدِم
         long bytes;
+        boolean usedFallback; // v1.2.10 — رَفَضَ MediaStore فَنَزَلنا لِمُجَلَّدِ البَرنامَج
     }
 
     private final Map<String, PendingWrite> pending = new HashMap<>();
@@ -93,22 +94,47 @@ public class GtsirmNative extends Plugin {
         try {
             Context ctx = getContext();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ContentResolver resolver = ctx.getContentResolver();
-                ContentValues cv = new ContentValues();
-                cv.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-                cv.put(MediaStore.MediaColumns.MIME_TYPE, mime);
-                cv.put(MediaStore.MediaColumns.RELATIVE_PATH, subDir);
-                cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                // ⚠️ v1.2.10 — MediaProvider يَرفُضُ (أو يُعيدُ تَسميةَ) المِلَفّاتِ التي
+                //   لا تُطابِقُ لاحِقَتُها نَوعَ المُحتَوى — و`.gtsirm` لاحِقةٌ مَجهولةٌ
+                //   لَه. فَإن فَشِلَ الإدراجُ نَنزِلُ إلى مُجَلَّدِ البَرنامَجِ الخارِجيِّ
+                //   بَدَلَ أن نَفشَلَ — المُهِمُّ ألّا يَضيعَ عَمَلُ المُستَخدِم.
+                Uri item = null;
+                try {
+                    ContentResolver resolver = ctx.getContentResolver();
+                    ContentValues cv = new ContentValues();
+                    cv.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                    cv.put(MediaStore.MediaColumns.MIME_TYPE,
+                           isVideo ? mime : "application/octet-stream");
+                    cv.put(MediaStore.MediaColumns.RELATIVE_PATH, subDir);
+                    cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
 
-                Uri collection = isVideo
-                        ? MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                        : MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+                    Uri collection = isVideo
+                            ? MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                            : MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
 
-                Uri item = resolver.insert(collection, cv);
-                if (item == null) throw new Exception("تَعَذَّرَ إنشاءُ سِجِلِّ MediaStore");
-                pw.uri = item;
-                pw.stream = resolver.openOutputStream(item);
-                pw.displayPath = subDir + "/" + name;
+                    item = resolver.insert(collection, cv);
+                    if (item != null) {
+                        pw.uri = item;
+                        pw.stream = resolver.openOutputStream(item);
+                        pw.displayPath = subDir + "/" + name;
+                    }
+                } catch (Exception mediaEx) {
+                    android.util.Log.w("GT-SIRM", "MediaStore رَفَضَ المَلَفّ: " + mediaEx.getMessage());
+                    item = null;
+                    pw.uri = null;
+                    pw.stream = null;
+                }
+
+                if (pw.stream == null) {
+                    // احتِياطٌ مَضمون: مُجَلَّدُ البَرنامَجِ الخارِجيّ
+                    File dir = new File(ctx.getExternalFilesDir(null), isVideo ? "videos" : "projects");
+                    if (!dir.exists() && !dir.mkdirs()) throw new Exception("تَعَذَّرَ إنشاءُ مُجَلَّدِ الحِفظ");
+                    File out = new File(dir, name);
+                    pw.file = out;
+                    pw.stream = new FileOutputStream(out);
+                    pw.displayPath = out.getAbsolutePath();
+                    pw.usedFallback = true;
+                }
             } else {
                 // API < 29 — كِتابةٌ مُباشِرةٌ بِإذنِ WRITE_EXTERNAL_STORAGE
                 File base = Environment.getExternalStoragePublicDirectory(
@@ -179,10 +205,17 @@ public class GtsirmNative extends Plugin {
                 getContext().sendBroadcast(scan);
             }
 
+            // v1.2.10 — لا تُعلِنِ النَجاحَ إلّا بَعدَ التَحَقُّقِ مِن وُجودِ بايتاتٍ
+            if (pw.bytes <= 0) throw new Exception("لَم تُكتَب أَيُّ بايتات");
+            if (pw.file != null && (!pw.file.exists() || pw.file.length() <= 0)) {
+                throw new Exception("المَلَفُّ غَيرُ مَوجودٍ بَعدَ الكِتابة");
+            }
+
             JSObject ret = new JSObject();
             ret.put("uri", pw.uri != null ? pw.uri.toString() : Uri.fromFile(pw.file).toString());
             ret.put("displayPath", pw.displayPath);
             ret.put("bytes", pw.bytes);
+            ret.put("usedFallback", pw.usedFallback);
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("فَشِلَ إغلاقُ المَلَفّ: " + e.getMessage(), e);

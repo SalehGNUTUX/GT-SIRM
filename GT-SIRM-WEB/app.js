@@ -3055,7 +3055,12 @@ function drawFrame(ts) {
   // اِرسِم النَصّ إن لَم يَكُن الفيديو فَعّالاً، أَو كان فَعّالاً مع تَوگل "إظهار النَصّ فَوق الفيديو"
   // v1.2.3 — «استيرادُ الصَوتِ فَقَط»: تُتلى الآياتُ ولا يُرسَمُ نَصُّها
   //   (ولا تَرجَمَتُها ولا رَقَمُها — كُلُّها داخِلَ drawVerse).
-  const audioOnly = ge("quran-audio-only");
+  // v1.2.10 — «استيرادُ الصَوتِ فَقَط» يَكتُمُ **نَصَّ القُرآن** لا كُلَّ نَصّ.
+  //   كانَ الشَرطُ عامّاً فَيَبتَلِعُ شَرائِحَ النَصِّ الحُرِّ أيضاً: يَستَورِدُ
+  //   المُستَخدِمُ الآياتِ إلى المُحَرِّرِ ويُفَعِّلُ «الصَوتَ فَقَط» لِيَأخُذَ تِلاوةَ
+  //   القارئ، فَلا يَظهَرُ نَصُّهُ البَتّة. الشَريحةُ الحُرّةُ تُرسَمُ دائِماً.
+  const _cur = S.verses[S.currentAya];
+  const audioOnly = ge("quran-audio-only") && !!_cur && !_cur.free;
   if (!audioOnly && S.verses.length && (!recvidActive || recvidShowText) && !(S.verses.length === 1 && S.verses[0]?.recvid)) drawVerse(ctx, W, H, ts);
   drawSurahName(ctx, W, H);
   drawVideoTitle(ctx, W, H);
@@ -6410,7 +6415,16 @@ function addBgVidItem(file, opts = {}) {
     const url = URL.createObjectURL(file);
     const vid = document.createElement("video");
     vid.src = url; vid.muted = true; vid.playsInline = true; vid.preload = "auto";
-    vid.addEventListener("ended", () => switchToNextBgVid());
+    // v1.2.10 — حَدَثُ ended كانَ يُبَدِّلُ المَقطَعَ **بِالإضافةِ** إلى تَبديلِ
+    //   updateBgVidCrossfade عِندَ remaining<=0، فَيَقَعُ تَبديلانِ مُتَتالِيان:
+    //   يَظهَرُ المَقطَعُ التالي ثانِيةً ثُمَّ يَرتَدُّ الأَوَّل. نَتَجاهَلُ الحَدَثَ
+    //   مِن مَقطَعٍ لَم يَعُد نَشِطاً، ومِن كُلِّ مَقطَعٍ أثناءَ التَصدير (المُصَدِّرُ
+    //   يُديرُ التَسَلسُلَ بِنَفسِه).
+    vid.addEventListener("ended", () => {
+      if (S.exporting || S._exportingV2) return;
+      if (S.bgVid !== vid) return;
+      switchToNextBgVid();
+    });
     vid.onloadeddata = () => {
       const item = {
         file, vid, name: file.name,
@@ -6452,6 +6466,12 @@ function addBgVidItem(file, opts = {}) {
 }
 
 function switchToNextBgVid() {
+  // v1.2.10 — حارِسٌ زَمَنيّ: يَمنَعُ تَبديلَينِ مُتَلاحِقَين مِن مَصدَرَينِ
+  //   مُختَلِفَين (ended + بُلوغُ النِهايةِ في حَلقةِ الرَسم) فَيَنضَبِطُ التَلاحُق.
+  const _now = (typeof performance !== "undefined") ? performance.now() : Date.now();
+  if (S._lastBgSwitchAt && (_now - S._lastBgSwitchAt) < 350) return;
+  S._lastBgSwitchAt = _now;
+
   const visibleCount = S.bgVidItems.filter(it => !it.hidden).length;
   if (visibleCount < 2) {
     if (S.bgVid) {
@@ -7142,7 +7162,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.9";
+const APP_VERSION = "1.2.10";
 let _updateInfo = null;
 
 function _appVersion() {

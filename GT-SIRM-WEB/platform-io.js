@@ -144,6 +144,15 @@
 
   // ── 4) آخِرُ المَطاف: تَنزيلُ المُتَصَفِّح ──────────────────────
   function saveViaDownload(blob, filename) {
+    // ⚠️ v1.2.10 — لا تَدَّعِ النَجاحَ في الهاتِف أَبَداً.
+    //   `<a download>` لا يَفعَلُ شَيئاً داخِلَ WebView (بِلا خَطَإٍ)، وكانَت هذه
+    //   الدالّةُ تُعيدُ كائِنَ نَجاحٍ عَلى أَيِّ حال — فَإن فَشِلَ الحَفظُ الأَصليُّ
+    //   ظَهَرَت رِسالةُ «حُفِظَ في تَنزيلاتِ المُتَصَفِّح» ولا مَلَفَّ في الواقِع.
+    //   هذا هُوَ «الحَفظُ الوَهميُّ» الذي أَضاعَ مَشاريعَ المُستَخدِم.
+    if (isNativeAndroid()) {
+      console.warn("[PIO] تَخَطّي تَنزيلِ المُتَصَفِّح: لا يَعمَلُ داخِلَ WebView");
+      return null;
+    }
     try {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -224,6 +233,8 @@
       if (r1) return r1;
       const r2 = await saveViaCapacitorFS(blob, filename, opts.onProgress);
       if (r2) return r2;
+      // كِلاهُما فَشِل: أَبلِغ بِالفَشَلِ صَراحةً بَدَلَ ادِّعاءِ نَجاحٍ كاذِب
+      return null;
     }
 
     return saveViaDownload(blob, filename);
