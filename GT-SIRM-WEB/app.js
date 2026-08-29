@@ -2177,6 +2177,8 @@ function initEventListeners() {
   const resEl = $("export-res");
   if (resEl) resEl.addEventListener("change", onExportResChange);
 
+  initDirectDownloadUI();   // v1.2.6 — حُقولُ التَنزيلِ مِن رابِطٍ مُباشِر
+
   // v1.2.4 — مَشروعٌ جَديد + تَسميةُ الحَفظ
   $("proj-new-btn")?.addEventListener("click", newProjectPrompt);
   $("proj-new-cancel-btn")?.addEventListener("click", closeNewProjectModal);
@@ -6967,7 +6969,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.5";
+const APP_VERSION = "1.2.6";
 let _updateInfo = null;
 
 function _appVersion() {
@@ -7408,6 +7410,96 @@ function startNewProject() {
   if (typeof updateAyaUI === "function") updateAyaUI();
 
   toast?.("✨ مَشروعٌ جَديد — شِعارُكَ وقَوالِبُكَ باقِية", "success", 3000);
+}
+
+
+// ══════════════════════════════════════════════════════
+//  v1.2.6 — تَنزيلٌ مِن رابِطٍ مُباشِر (الهاتِف والويب)
+//  ───────────────────────────────────────────────────
+//  yt-dlp بَرنامَجُ Python ولا يَعمَلُ داخِلَ WebView، لَكِنَّ الرَوابِطَ المُباشِرةَ
+//  لا تَحتاجُهُ أَصلاً. المَلَفُّ المُنَزَّلُ يُسَلَّمُ إلى **نَفسِ مُعالِجِ القِسم**
+//  الذي يَستَقبِلُ المَلَفَّ المَرفوعَ يَدَويّاً، فَيَظهَرُ في القائِمةِ ويُحفَظُ
+//  مَعَ المَشروعِ ويُحذَفُ كَغَيرِه — لا مَسارَ مُوازِيَ لَه.
+// ══════════════════════════════════════════════════════
+const DIRECT_DL_TARGETS = {
+  "dlurl-bgvid":  { label: "فيديو الخَلفيّة",   kinds: ["video"] },
+  "dlurl-recvid": { label: "فيديو التِلاوة",    kinds: ["video"] },
+  "dlurl-audio":  { label: "صَوتُ التِلاوة",     kinds: ["audio", "video"] },
+};
+
+async function runDirectDownload(key) {
+  const cfg = DIRECT_DL_TARGETS[key];
+  if (!cfg) return;
+  const urlEl = $(key + "-url");
+  const btn = $(key + "-btn");
+  const status = $(key + "-status");
+  const url = (urlEl?.value || "").trim();
+
+  const say = (t, color) => { if (status) { status.textContent = t; status.style.color = color || "var(--t3)"; } };
+
+  if (!url) { say("⚠️ الصِقِ الرابِطَ أَوَّلاً", "var(--warn,#e9b949)"); return; }
+  if (!/^https?:\/\//i.test(url)) { say("⚠️ الرابِطُ يَجِبُ أن يَبدَأَ بِـhttp أو https", "var(--danger,#e05)"); return; }
+  if (!window.PIO?.downloadDirect) { say("⚠️ التَنزيلُ غَيرُ مُتاحٍ في هذه النُسخة", "var(--danger,#e05)"); return; }
+
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ التَنزيل…"; }
+  say("⏳ يَبدَأُ التَنزيل…");
+  try {
+    const file = await window.PIO.downloadDirect(url, (pct, got, total) => {
+      say(total > 0
+        ? `⏳ ${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} م.ب · ${pct}%`
+        : `⏳ ${(got / 1048576).toFixed(1)} م.ب`);
+    });
+
+    // تَحَقَّق أنَّ النَوعَ يُناسِبُ القِسمَ قَبلَ تَسليمِه
+    const t = (file.type || "").toLowerCase();
+    const okKind = cfg.kinds.some(k => t.startsWith(k + "/"));
+    if (t && !okKind) {
+      say(`⚠️ المَلَفُّ نَوعُهُ ${t} ولا يُناسِبُ ${cfg.label}`, "var(--danger,#e05)");
+      return;
+    }
+
+    if (key === "dlurl-bgvid") {
+      const vBtn = document.querySelector('input[name="bgt"][value="video"]');
+      if (vBtn && !vBtn.checked) { vBtn.checked = true; if (typeof onBgTypeChange === "function") onBgTypeChange(); }
+      await addBgVidItem(file);
+    } else if (key === "dlurl-recvid") {
+      const cb = $("recvid-on");
+      if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event("change")); }
+      onRecVidFile({ files: [file] });
+    } else {
+      const cb = $("free-audio-on");
+      if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event("change")); }
+      handleFreeAudioFile(file);
+    }
+
+    say(`✅ أُضيفَ: ${file.name} (${(file.size / 1048576).toFixed(1)} م.ب)`, "var(--ok,#4caf50)");
+    if (urlEl) urlEl.value = "";
+    if (typeof markProjectDirty === "function") markProjectDirty();
+  } catch (e) {
+    const msg = String(e?.message || e);
+    const cors = /Failed to fetch|NetworkError|CORS/i.test(msg);
+    say(cors
+      ? "❌ رَفَضَ الخادِمُ الطَلَبَ مِنَ المُتَصَفِّح (CORS). جَرِّب رابِطاً آخَرَ أو نَزِّلهُ ثُمَّ ارفَعهُ يَدَويّاً."
+      : "❌ " + msg.slice(0, 110), "var(--danger,#e05)");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "⬇️ نَزِّل وأَضِف"; }
+  }
+}
+
+function initDirectDownloadUI() {
+  for (const key of Object.keys(DIRECT_DL_TARGETS)) {
+    $(key + "-btn")?.addEventListener("click", () => runDirectDownload(key));
+    $(key + "-paste")?.addEventListener("click", async () => {
+      try {
+        const t = await navigator.clipboard.readText();
+        const el = $(key + "-url");
+        if (el && t) { el.value = t.trim(); el.dispatchEvent(new Event("input", { bubbles: true })); }
+      } catch (_) { toast?.("تَعَذَّرَ الوُصولُ لِلحافِظة — الصِق يَدَويّاً", "warn", 2200); }
+    });
+    $(key + "-url")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); runDirectDownload(key); }
+    });
+  }
 }
 
 function buildExportFileBase() {

@@ -496,7 +496,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small>GnuTux Short Islamic Reels Maker v1.2.5</small>
+      <small>GnuTux Short Islamic Reels Maker v1.2.6</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -830,6 +830,19 @@ body.offline .offline-badge{display:block}
               <button class="btn btn-g bsm" id="free-audio-restart-btn" style="display:none;padding:3px 10px">↺ إعادة</button>
               <button class="btn btn-g bsm" id="free-audio-remove-btn" style="display:none;padding:3px 10px;color:var(--danger)">🗑️ إزالة</button>
             </div>
+
+
+          <!-- v1.2.6 — تَنزيلٌ مِن رابِطٍ مُباشِر -->
+          <details class="sec" style="margin-top:6px;border:1px dashed var(--b1)">
+            <summary class="sec-t" style="font-size:9px">🔗 تَنزيلٌ مِن رابِطٍ مُباشِر</summary>
+            <div class="note" style="color:var(--t3)">الصِق رابِطاً مُباشِراً لِـصَوت (mp3 · m4a · ogg · wav) (يَنتَهي بِلاحِقةِ المَلَفّ). صَفَحاتُ يوتيوب وأَمثالُها لا تَعمَلُ هُنا — تَحتاجُ yt-dlp، وهُوَ في نُسخةِ سَطحِ المَكتَب.</div>
+            <div class="fg" style="display:flex;gap:5px;align-items:center;margin-top:5px">
+              <input type="text" class="fc" id="dlurl-audio-url" data-no-reset placeholder="https://example.com/file" style="flex:1">
+              <button class="btn btn-g bsm" id="dlurl-audio-paste" title="لَصق" style="padding:3px 9px">📋</button>
+            </div>
+            <button class="btn btn-p bsm bfw" id="dlurl-audio-btn">⬇️ نَزِّل وأَضِف</button>
+            <div id="dlurl-audio-status" style="font-size:9px;color:var(--t3);margin-top:4px"></div>
+          </details>
 
             <div class="tgg" style="margin-top:6px">
               <span class="tgl">✂️ تحديد مدّة مخصّصة من الصوت</span>
@@ -1165,6 +1178,17 @@ body.offline .offline-badge{display:block}
               <div class="fu-txt">رفع فيديو التلاوة<br><small>MP4 · WebM · MOV</small></div>
             </div>
             <div id="recvid-info" style="font-size:10px;color:var(--t3);margin-bottom:6px;min-height:14px"></div>
+          <!-- v1.2.6 — تَنزيلٌ مِن رابِطٍ مُباشِر -->
+          <details class="sec" style="margin-top:6px;border:1px dashed var(--b1)">
+            <summary class="sec-t" style="font-size:9px">🔗 تَنزيلٌ مِن رابِطٍ مُباشِر</summary>
+            <div class="note" style="color:var(--t3)">الصِق رابِطاً مُباشِراً لِـفيديو (mp4 · webm) يَنتَهي بِلاحِقةِ المَلَفّ. صَفَحاتُ يوتيوب وأَمثالُها تَحتاجُ yt-dlp وهُوَ في نُسخةِ سَطحِ المَكتَب.</div>
+            <div class="fg" style="display:flex;gap:5px;align-items:center;margin-top:5px">
+              <input type="text" class="fc" id="dlurl-recvid-url" data-no-reset placeholder="https://example.com/file" style="flex:1">
+              <button class="btn btn-g bsm" id="dlurl-recvid-paste" title="لَصق" style="padding:3px 9px">📋</button>
+            </div>
+            <button class="btn btn-p bsm bfw" id="dlurl-recvid-btn">⬇️ نَزِّل وأَضِف</button>
+            <div id="dlurl-recvid-status" style="font-size:9px;color:var(--t3);margin-top:4px"></div>
+          </details>
 
             <div style="font-size:11px;color:var(--al);font-weight:700;margin:8px 0 4px 0">📐 المقاس والموضع</div>
             <div class="fg"><label class="fl">نمط الملاءمة</label>
@@ -1287,6 +1311,17 @@ body.offline .offline-badge{display:block}
               <button type="button" id="bgv-restore-deleted-btn" title="استعادة آخر مَقطع مَحذوف" style="padding:3px 8px;background:var(--bg4);border:1px solid var(--b1);color:var(--t1);border-radius:4px;cursor:pointer;font-size:11px" disabled>♻️ استعادة مَحذوف</button>
             </div>
             <div id="bg-vid-list" style="margin-top:6px"></div>
+          <!-- v1.2.6 — تَنزيلٌ مِن رابِطٍ مُباشِر -->
+          <details class="sec" style="margin-top:6px;border:1px dashed var(--b1)">
+            <summary class="sec-t" style="font-size:9px">🔗 تَنزيلٌ مِن رابِطٍ مُباشِر</summary>
+            <div class="note" style="color:var(--t3)">الصِق رابِطاً مُباشِراً لِـفيديو (mp4 · webm) يَنتَهي بِلاحِقةِ المَلَفّ. صَفَحاتُ يوتيوب وأَمثالُها تَحتاجُ yt-dlp وهُوَ في نُسخةِ سَطحِ المَكتَب.</div>
+            <div class="fg" style="display:flex;gap:5px;align-items:center;margin-top:5px">
+              <input type="text" class="fc" id="dlurl-bgvid-url" data-no-reset placeholder="https://example.com/file" style="flex:1">
+              <button class="btn btn-g bsm" id="dlurl-bgvid-paste" title="لَصق" style="padding:3px 9px">📋</button>
+            </div>
+            <button class="btn btn-p bsm bfw" id="dlurl-bgvid-btn">⬇️ نَزِّل وأَضِف</button>
+            <div id="dlurl-bgvid-status" style="font-size:9px;color:var(--t3);margin-top:4px"></div>
+          </details>
             <div class="fg" style="margin-top:5px"><label class="fl">مدة الانتقال السلس بين المقاطع</label>
               <div class="sg"><input type="range" min="0" max="2000" step="50" value="1000" id="bg-crossfade-ms"><span class="sv" id="bg-crossfade-ms-v">1000ms</span></div>
             </div>
@@ -1972,11 +2007,11 @@ body.offline .offline-badge{display:block}
         <div class="about-logo">
           <img src="GT-SIRM-icons/icon-256.png" class="al-icon" alt="GT-SIRM" style="width:80px;height:80px;">
           <h2>GT-SIRM</h2>
-          <p>GnuTux Short Islamic Reels Maker v1.2.5</p>
+          <p>GnuTux Short Islamic Reels Maker v1.2.6</p>
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.5</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.6</span></div>
           <div style="margin:7px 0"><button class="btn btn-g bsm bfw" id="check-update-btn">🔄 تَحَقَّق مِن وُجودِ تَحديث</button></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>

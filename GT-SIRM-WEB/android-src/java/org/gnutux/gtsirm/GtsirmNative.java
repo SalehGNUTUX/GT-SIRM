@@ -504,6 +504,122 @@ public class GtsirmNative extends Plugin {
         }
     }
 
+    // ── 7) تَنزيلُ رابِطٍ مُباشِر ─────────────────────────────────
+    //
+    //  لِمَ أَصليّاً لا بِـfetch مِنَ الصَفحة؟ لأنَّ الـWebView يَعمَلُ عَلى أَصلِ
+    //  https://localhost، فَأَيُّ طَلَبٍ إلى نِطاقٍ آخَرَ يَخضَعُ لِـCORS، وأَكثَرُ
+    //  خَوادِمِ الوَسائِطِ لا تُرسِلُ Access-Control-Allow-Origin — فَيُحجَبُ الطَلَبُ
+    //  وإن كانَ الرابِطُ سَليماً. الطَبَقةُ الأَصليّةُ لا تَعرِفُ CORS أَصلاً.
+    //  يُحفَظُ المَلَفُّ في مُجَلَّدِ البَرنامَجِ ثُمَّ تَقرَؤُهُ الصَفحةُ عَبرَ
+    //  Capacitor.convertFileSrc (أَصلٌ واحِدٌ ⇒ بِلا CORS ولا base64).
+    @PluginMethod
+    public void downloadFile(final PluginCall call) {
+        final String url = call.getString("url");
+        final String suggested = call.getString("name");
+        if (url == null || !(url.startsWith("http://") || url.startsWith("https://"))) {
+            call.reject("رابِطٌ غَيرُ صالِح — يَجِبُ أن يَبدَأَ بِـhttp أو https");
+            return;
+        }
+        new Thread(() -> {
+            HttpURLConnection conn = null;
+            InputStream in = null;
+            OutputStream out = null;
+            File dest = null;
+            try {
+                File dir = new File(getContext().getExternalFilesDir(null), "downloads");
+                if (!dir.exists() && !dir.mkdirs()) throw new Exception("تَعَذَّرَ إنشاءُ مُجَلَّدِ التَنزيلات");
+
+                conn = (HttpURLConnection) new URL(url).openConnection();
+                conn.setInstanceFollowRedirects(true);
+                conn.setConnectTimeout(30000);
+                conn.setReadTimeout(60000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) GT-SIRM");
+                conn.connect();
+                int code = conn.getResponseCode();
+                if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
+
+                String mime = conn.getContentType();
+                if (mime != null && mime.contains(";")) mime = mime.split(";")[0].trim();
+
+                String name = suggested;
+                if (name == null || name.trim().isEmpty()) {
+                    // Content-Disposition أَوَّلاً ثُمَّ آخِرُ جُزءٍ مِنَ المَسار
+                    String cd = conn.getHeaderField("Content-Disposition");
+                    if (cd != null && cd.contains("filename=")) {
+                        name = cd.substring(cd.indexOf("filename=") + 9).replace("\"", "").trim();
+                        if (name.contains(";")) name = name.split(";")[0].trim();
+                    } else {
+                        String p2 = Uri.parse(url).getLastPathSegment();
+                        name = (p2 == null || p2.isEmpty()) ? "download" : p2;
+                    }
+                }
+                name = sanitize(name);
+                if (!name.contains(".")) name += guessExt(mime);
+
+                dest = new File(dir, name);
+                final long total = conn.getContentLength();
+                in = conn.getInputStream();
+                out = new FileOutputStream(dest);
+                byte[] buf = new byte[65536];
+                int n; long got = 0; long lastEmit = 0;
+                while ((n = in.read(buf)) > 0) {
+                    out.write(buf, 0, n);
+                    got += n;
+                    long now = System.currentTimeMillis();
+                    if (now - lastEmit > 300) {
+                        lastEmit = now;
+                        JSObject ev = new JSObject();
+                        ev.put("received", got);
+                        ev.put("total", total);
+                        ev.put("percent", total > 0 ? (int) (got * 100 / total) : -1);
+                        notifyListeners("downloadProgress", ev);
+                    }
+                }
+                out.flush();
+
+                JSObject ret = new JSObject();
+                ret.put("path", dest.getAbsolutePath());
+                ret.put("name", name);
+                ret.put("mime", mime != null ? mime : "application/octet-stream");
+                ret.put("bytes", got);
+                call.resolve(ret);
+            } catch (Exception e) {
+                if (dest != null && dest.exists()) { try { dest.delete(); } catch (Exception ignored) {} }
+                call.reject("فَشِلَ التَنزيل: " + e.getMessage(), e);
+            } finally {
+                try { if (in != null) in.close(); } catch (Exception ignored) {}
+                try { if (out != null) out.close(); } catch (Exception ignored) {}
+                if (conn != null) conn.disconnect();
+            }
+        }).start();
+    }
+
+    private String guessExt(String mime) {
+        if (mime == null) return "";
+        if (mime.startsWith("video/mp4")) return ".mp4";
+        if (mime.startsWith("video/webm")) return ".webm";
+        if (mime.startsWith("video/")) return ".mp4";
+        if (mime.startsWith("audio/mpeg")) return ".mp3";
+        if (mime.startsWith("audio/mp4")) return ".m4a";
+        if (mime.startsWith("audio/ogg")) return ".ogg";
+        if (mime.startsWith("audio/wav") || mime.startsWith("audio/x-wav")) return ".wav";
+        if (mime.startsWith("audio/")) return ".mp3";
+        if (mime.startsWith("image/jpeg")) return ".jpg";
+        if (mime.startsWith("image/png")) return ".png";
+        return "";
+    }
+
+    /** يَحذِفُ مُجَلَّدَ التَنزيلاتِ المُؤَقَّتة (تَنظيفٌ بَعدَ الاستيراد). */
+    @PluginMethod
+    public void clearDownloads(PluginCall call) {
+        try {
+            File dir = new File(getContext().getExternalFilesDir(null), "downloads");
+            File[] fs = dir.listFiles();
+            if (fs != null) for (File f : fs) { if (f.isFile()) f.delete(); }
+        } catch (Exception ignored) {}
+        call.resolve();
+    }
+
     /** لِلـJS: هَل الجِسرُ الأَصليُّ حاضِرٌ فِعلاً؟ */
     @PluginMethod
     public void ping(PluginCall call) {

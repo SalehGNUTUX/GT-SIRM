@@ -471,8 +471,76 @@
     }
   }
 
+  // ══════════════════════════════════════════════════════════
+  //  v1.2.6 — تَنزيلُ رابِطٍ مُباشِرٍ إلى مَلَفٍّ داخِلَ البَرنامَج
+  //  ───────────────────────────────────────────────────────
+  //  في الهاتِف يَجري التَنزيلُ أَصليّاً: الـWebView عَلى أَصلِ https://localhost
+  //  فَأَيُّ `fetch` إلى نِطاقٍ آخَرَ يَخضَعُ لِـCORS، وأَكثَرُ خَوادِمِ الوَسائِطِ
+  //  لا تُرسِلُ الرَأسَ المَطلوب. الطَبَقةُ الأَصليّةُ لا تَعرِفُ CORS.
+  //  ثُمَّ نَقرَأُ المَلَفَّ عَبرَ `Capacitor.convertFileSrc` — فَيَصيرُ عَلى نَفسِ
+  //  الأَصلِ ويُقرَأُ بِـfetch عادِيّةٍ بِلا base64 ولا نَقلٍ عَبرَ الجِسر.
+  //  في المُتَصَفِّحِ نَستَعمِلُ fetch مُباشَرةً (يَنجَحُ إن سَمَحَ الخادِمُ بِـCORS).
+  // ══════════════════════════════════════════════════════════
+  function guessNameFromUrl(url) {
+    try {
+      const u = new URL(url);
+      const last = (u.pathname.split("/").pop() || "").trim();
+      return last || "download";
+    } catch (_) { return "download"; }
+  }
+
+  async function downloadDirect(url, onProgress) {
+    if (!/^https?:\/\//i.test(url)) throw new Error("رابِطٌ غَيرُ صالِح — يَجِبُ أن يَبدَأَ بِـhttp أو https");
+
+    const P = nativePlugin();
+    if (P && P.downloadFile) {
+      let handle = null;
+      try {
+        if (onProgress) {
+          try {
+            handle = await P.addListener("downloadProgress",
+              (ev) => onProgress(ev.percent, ev.received, ev.total));
+          } catch (_) {}
+        }
+        const res = await P.downloadFile({ url });
+        // اقرَأِ المَلَفَّ عَبرَ أَصلِ التَطبيقِ نَفسِه
+        const src = (window.Capacitor && window.Capacitor.convertFileSrc)
+          ? window.Capacitor.convertFileSrc(res.path) : res.path;
+        const r = await fetch(src);
+        if (!r.ok) throw new Error("تَعَذَّرَت قِراءةُ المَلَفِّ المُنَزَّل (HTTP " + r.status + ")");
+        const blob = await r.blob();
+        return new File([blob], res.name || guessNameFromUrl(url),
+                        { type: res.mime || blob.type || "application/octet-stream" });
+      } finally {
+        if (handle && handle.remove) { try { await handle.remove(); } catch (_) {} }
+      }
+    }
+
+    // المُتَصَفِّح: fetch مَعَ تَقَدُّمٍ إن أَمكَن
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const total = parseInt(r.headers.get("content-length") || "0", 10);
+    let blob;
+    if (r.body && total > 0 && onProgress) {
+      const reader = r.body.getReader();
+      const chunks = []; let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value); got += value.length;
+        onProgress(Math.floor(got * 100 / total), got, total);
+      }
+      blob = new Blob(chunks, { type: r.headers.get("content-type") || "" });
+    } else {
+      blob = await r.blob();
+    }
+    return new File([blob], guessNameFromUrl(url),
+                    { type: blob.type || "application/octet-stream" });
+  }
+
   // ── التَصدير ────────────────────────────────────────────────
   window.PIO = {
+    downloadDirect,
     checkForUpdate,
     downloadAndInstall,
     compareVersions,
