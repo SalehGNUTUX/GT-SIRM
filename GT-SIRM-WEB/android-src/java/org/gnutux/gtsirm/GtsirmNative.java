@@ -103,8 +103,13 @@ public class GtsirmNative extends Plugin {
                     ContentResolver resolver = ctx.getContentResolver();
                     ContentValues cv = new ContentValues();
                     cv.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-                    cv.put(MediaStore.MediaColumns.MIME_TYPE,
-                           isVideo ? mime : "application/octet-stream");
+                    // ⚠️ v1.2.13 — كانَ يُفرَضُ octet-stream لِغَيرِ الفيديو، فَصَنَّفَ
+                    //   MediaStore مَلَفَّ المَشروعِ **BIN** فَخَفَتَ في مُتَصَفِّحِ
+                    //   المِلَفّاتِ ولَم يَفتَحهُ شَيء. الآنَ اسمُ المَلَفِّ يَنتَهي
+                    //   بِـ.gtsirm.json فَنُمَرِّرُ نَوعَهُ الحَقيقيَّ application/json:
+                    //   تُطابِقُ اللاحِقةُ النَوعَ فَيَقبَلُهُ MediaStore بِلا تَشويهٍ
+                    //   ويُصَنِّفُهُ JSON كَما كانَ يَعمَلُ سابِقاً.
+                    cv.put(MediaStore.MediaColumns.MIME_TYPE, mime);
                     cv.put(MediaStore.MediaColumns.RELATIVE_PATH, subDir);
                     cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
 
