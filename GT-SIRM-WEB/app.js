@@ -7162,7 +7162,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.10";
+const APP_VERSION = "1.2.11";
 let _updateInfo = null;
 
 function _appVersion() {
@@ -7510,7 +7510,7 @@ function askProjectName() {
     const inp = document.getElementById("proj-name-inp");
     const okBtn = document.getElementById("proj-name-ok-btn");
     const cancelBtn = document.getElementById("proj-name-cancel-btn");
-    if (!modal || !inp || !okBtn || !cancelBtn) return resolve(suggestedProjectName());
+    if (!modal || !inp || !okBtn || !cancelBtn) return resolve({ name: suggestedProjectName(), share: false });
     inp.value = suggestedProjectName();
     modal.style.display = "flex";
     setTimeout(() => { try { inp.focus(); inp.select(); } catch (_) {} }, 60);
@@ -7524,7 +7524,8 @@ function askProjectName() {
     };
     const onOk = () => {
       const v = inp.value.trim().replace(/[\\/:*?"<>|]/g, "");
-      done(v || suggestedProjectName());
+      // v1.2.11 — نُعيدُ رَغبةَ المُشارَكةِ مَعَ الاسمِ في كائِنٍ واحِد
+      done({ name: v || suggestedProjectName(), share: !!ge("proj-name-share") });
     };
     const onCancel = () => done(null);
     const onKey = (e) => {
@@ -7918,14 +7919,20 @@ async function resaveLastExport() {
 async function shareLastExport() {
   const le = S.lastExport;
   if (!le) { toast("لا يوجَدُ ناتِجٌ لِلمُشارَكة", "warn", 2500); return; }
+  // v1.2.11 — نَوعُ المُحتَوى عِندَ المُشارَكة:
+  //   مَلَفُّ المَشروعِ لاحِقَتُهُ `.gtsirm` وهي مَجهولةٌ لِتَطبيقاتِ المُراسَلة،
+  //   وكَثيرٌ مِنها يُصَفّي القائِمةَ بِحَسَبِ النَوع. `*/*` يُبقي كُلَّ تَطبيقٍ
+  //   يَقبَلُ مَلَفّاً ظاهِراً في القائِمة — وهُوَ المَقصودُ هُنا: أن يَصِلَ المَلَفُّ
+  //   إلى مِساحةِ التَخزينِ أو المُراسَلةِ أو البَريدِ بِلا حَجب.
+  const shareMime = le.isProject ? "*/*" : (le.mime || "*/*");
   let ok = false;
   if (le.saved && le.saved.uri && window.PIO) {
-    ok = await window.PIO.shareSavedFile(le.saved.uri, le.filename, le.mime);
+    ok = await window.PIO.shareSavedFile(le.saved.uri, le.filename, shareMime);
   }
   if (!ok && le.blob && window.PIO) {
     ok = await window.PIO.shareBlob(le.blob, le.filename, le.mime);
   }
-  if (!ok) toast("تَعَذَّرَتِ المُشارَكةُ عَلى هذا الجِهاز — استَعمِل «حِفظٌ باسم…»", "warn", 3500);
+  if (!ok) toast("تَعَذَّرَتِ المُشارَكةُ عَلى هذا الجِهاز — استَعمِل «حِفظٌ باسم…» لِاختيارِ مَوضِعٍ بِنَفسِك", "warn", 4000);
 }
 
 // v1.2.2 — «حِفظٌ باسم…»: مُنتَقي النِظام (SAF) يَختارُ فيهِ المُستَخدِمُ المُجَلَّدَ والاسم
@@ -9851,6 +9858,8 @@ function showMissingAssetsModal(missing) {
 
 // v1.2.2 — يَرفَعُهُ الحَفظُ التِلقائيُّ فَلا تَظهَرُ نافِذةُ النَتيجة
 let _silentProjectSave = false;
+// v1.2.11 — طَلَبُ المُشارَكةِ بَعدَ الحَفظِ (مِن نافِذةِ التَسمية)
+let _shareAfterProjectSave = false;
 
 async function saveProjectToPath(_filePath) {
   const proj = await serializeProject();
@@ -9890,6 +9899,11 @@ async function saveProjectToPath(_filePath) {
     // v1.2.2 — الحِفظُ اليَدَويُّ يَعرِضُ نافِذةً فيها «مُشارَكة» و«حِفظٌ باسم…».
     //   الحِفظُ التِلقائيُّ صامِتٌ (لا نُقاطِعُ المُستَخدِمَ كُلَّ بِضعِ دَقائِق).
     if (!_silentProjectSave) showProjectSavedResult(saved, blob, fname, proj);
+    // v1.2.11 — مُشارَكةٌ فَوريّةٌ إن طَلَبَها المُستَخدِمُ في نافِذةِ التَسمية
+    if (_shareAfterProjectSave && !_silentProjectSave) {
+      _shareAfterProjectSave = false;
+      setTimeout(() => { try { shareLastExport(); } catch (_) {} }, 350);
+    }
     return true;
   }
 
@@ -9918,7 +9932,8 @@ async function saveProjectInteractiveSafe(forcePrompt = false) {
     //   أو السورةِ — نَفسُ ما يَحمِلُهُ المَلَفُّ المُصَدَّر.
     const chosen = await askProjectName();
     if (chosen === null) return;            // أَلغى المُستَخدِم
-    S.projectFileName = chosen.replace(/\.gtsirm$/i, "") + ".gtsirm";
+    S.projectFileName = String(chosen.name).replace(/\.gtsirm$/i, "") + ".gtsirm";
+    _shareAfterProjectSave = !!chosen.share;
 
     if (btn) { btn.disabled = true; btn.innerHTML = "⏳ <span>جارٍ الحَفظ…</span>"; }
     toast?.("⏳ جارٍ تَجهيزُ المَشروعِ لِلحَفظ…", "info", 1600);
