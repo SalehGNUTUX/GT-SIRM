@@ -2177,6 +2177,16 @@ function initEventListeners() {
   const resEl = $("export-res");
   if (resEl) resEl.addEventListener("change", onExportResChange);
 
+  // v1.2.4 — مَشروعٌ جَديد + تَسميةُ الحَفظ
+  $("proj-new-btn")?.addEventListener("click", newProjectPrompt);
+  $("proj-new-cancel-btn")?.addEventListener("click", closeNewProjectModal);
+  $("proj-new-discard-btn")?.addEventListener("click", startNewProject);
+  $("proj-new-save-btn")?.addEventListener("click", async () => {
+    closeNewProjectModal();
+    await saveProjectInteractiveSafe();
+    if (!S.projectDirty) startNewProject();   // حُفِظَ بِنَجاحٍ ⇒ أَنشِئ
+  });
+
   // v1.2.3 — إعادةٌ شامِلةٌ لِلإعدادات
   const resetAllBtn = $("reset-all-settings-btn");
   if (resetAllBtn) resetAllBtn.addEventListener("click", resetAllSettings);
@@ -3928,6 +3938,37 @@ function removeRecVid() {
   const info = $("recvid-info"); if (info) info.textContent = "";
 }
 
+// v1.2.4 — تَأثيرُ نَصِّ العَناوين، مُشتَرَكٌ بَينَ «عُنوانِ المَقطَع» و«اسمِ السورة».
+//   كانَ مَحصوراً في drawVideoTitle، فَلَم يَجِدهُ المُستَخدِمُ في اسمِ السورة.
+function drawTitleWithFx(ctx, text, x, y, fx, col, fsz) {
+  ctx.fillStyle = col;
+  if (fx === "glow") {
+    ctx.shadowColor = col;
+    ctx.shadowBlur = fsz * 0.45;
+    ctx.fillText(text, x, y);
+    ctx.shadowBlur = 0;
+    ctx.fillText(text, x, y);
+  } else if (fx === "outline") {
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.lineWidth = Math.max(2, fsz * 0.06);
+    ctx.strokeStyle = "rgba(0,0,0,.85)";
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+  } else if (fx === "none") {
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.fillText(text, x, y);
+  } else { // shadow
+    ctx.shadowColor = "rgba(0,0,0,.75)";
+    ctx.shadowBlur = fsz * 0.22;
+    ctx.shadowOffsetY = Math.max(1, fsz * 0.05);
+    ctx.fillText(text, x, y);
+  }
+}
+
 function drawVideoTitle(ctx, W, H) {
   if (!ge("vtitle-on")) return;
   const text = ($("vtitle-text")?.value || "").trim();
@@ -3946,27 +3987,7 @@ function drawVideoTitle(ctx, W, H) {
   ctx.textAlign = "center";
   ctx.direction = "rtl";
 
-  if (fx === "shadow") {
-    ctx.shadowColor = "rgba(0,0,0,.75)";
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetY = 3;
-    ctx.fillText(text, W / 2, y);
-  } else if (fx === "glow") {
-    ctx.shadowColor = col;
-    ctx.shadowBlur = 24;
-    ctx.fillText(text, W / 2, y);
-    ctx.shadowBlur = 0;
-    ctx.fillText(text, W / 2, y);
-  } else if (fx === "outline") {
-    ctx.lineJoin = "round";
-    ctx.miterLimit = 2;
-    ctx.lineWidth = Math.max(2, fsz * 0.06);
-    ctx.strokeStyle = "rgba(0,0,0,.85)";
-    ctx.strokeText(text, W / 2, y);
-    ctx.fillText(text, W / 2, y);
-  } else {
-    ctx.fillText(text, W / 2, y);
-  }
+  drawTitleWithFx(ctx, text, W / 2, y, fx, col, fsz);
   ctx.restore();
 }
 
@@ -3997,15 +4018,13 @@ function drawSurahName(ctx, W, H) {
   const yPct = parseFloat(gv("sname-y")) || 5;
   const y = (yPct / 100) * H + fsz;
   const col = $("sname-col")?.value || "#f0c842";
+  const fx = $("sname-fx")?.value || "shadow";   // v1.2.4 — نَفسُ تَأثيراتِ عُنوانِ المَقطَع
 
   ctx.save();
   ctx.font = `bold ${fsz}px ${font}`;
-  ctx.fillStyle = col;
   ctx.textAlign = "center";
   ctx.direction = "rtl";
-  ctx.shadowColor = "rgba(0,0,0,.7)";
-  ctx.shadowBlur = 10;
-  ctx.fillText(label, W / 2, y);
+  drawTitleWithFx(ctx, label, W / 2, y, fx, col, fsz);
   ctx.restore();
 }
 
@@ -6948,7 +6967,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.3";
+const APP_VERSION = "1.2.4";
 let _updateInfo = null;
 
 function _appVersion() {
@@ -7274,6 +7293,123 @@ function resetAllSettings() {
 // ══════════════════════════════════════════════════════
 
 // اسمٌ مَقروءٌ لِلمَلَفِّ بَدَلَ طابَعٍ زَمَنيٍّ مُجَرَّد
+// ══════════════════════════════════════════════════════
+//  v1.2.4 — اسمُ المَشروعِ عِندَ الحَفظ + مَشروعٌ جَديد
+// ══════════════════════════════════════════════════════
+
+// يَقتَرِحُ اسماً مِن عُنوانِ المَقطَعِ أو السورةِ — نَفسُ مَصدَرِ اسمِ التَصدير
+function suggestedProjectName() {
+  if (S.projectFileName) return String(S.projectFileName).replace(/\.gtsirm$/i, "");
+  const vt = document.getElementById("vtitle-text");
+  if (vt && vt.value.trim()) {
+    return vt.value.trim().replace(/[\\/:*?"<>|]/g, "").slice(0, 60);
+  }
+  if (typeof buildExportFileBase === "function") return buildExportFileBase();
+  return "GT-SIRM-Project";
+}
+
+// نافِذةُ تَسميةٍ تُعيدُ الاسمَ أو null إن أُلغيَت
+function askProjectName() {
+  return new Promise(resolve => {
+    const modal = document.getElementById("proj-name-modal");
+    const inp = document.getElementById("proj-name-inp");
+    const okBtn = document.getElementById("proj-name-ok-btn");
+    const cancelBtn = document.getElementById("proj-name-cancel-btn");
+    if (!modal || !inp || !okBtn || !cancelBtn) return resolve(suggestedProjectName());
+    inp.value = suggestedProjectName();
+    modal.style.display = "flex";
+    setTimeout(() => { try { inp.focus(); inp.select(); } catch (_) {} }, 60);
+
+    const done = (val) => {
+      modal.style.display = "none";
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      inp.removeEventListener("keydown", onKey);
+      resolve(val);
+    };
+    const onOk = () => {
+      const v = inp.value.trim().replace(/[\\/:*?"<>|]/g, "");
+      done(v || suggestedProjectName());
+    };
+    const onCancel = () => done(null);
+    const onKey = (e) => {
+      if (e.key === "Enter") { e.preventDefault(); onOk(); }
+      else if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+    };
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    inp.addEventListener("keydown", onKey);
+  });
+}
+
+// ── مَشروعٌ جَديد ──────────────────────────────────────
+function newProjectPrompt() {
+  const modal = document.getElementById("proj-new-modal");
+  const body = document.getElementById("proj-new-body");
+  const saveBtn = document.getElementById("proj-new-save-btn");
+  if (!modal) {
+    if (confirm("إنشاءُ مَشروعٍ جَديد؟ سَيُمسَحُ العَمَلُ الحاليّ.")) startNewProject();
+    return;
+  }
+  const dirty = !!S.projectDirty;
+  if (body) {
+    body.textContent = dirty
+      ? "في مَشروعِكَ الحاليِّ تَغييراتٌ لَم تُحفَظ. ماذا تُريدُ أن نَفعَلَ بِها؟"
+      : "سَيَبدَأُ مَشروعٌ جَديدٌ مِن صَفحةٍ بَيضاء.";
+  }
+  if (saveBtn) saveBtn.style.display = dirty ? "" : "none";
+  modal.style.display = "flex";
+}
+
+function closeNewProjectModal() {
+  const m = document.getElementById("proj-new-modal");
+  if (m) m.style.display = "none";
+}
+
+/**
+ * يُفرِغُ المُحتَوى والوَسائِطَ ويُعيدُ الإعداداتِ لِلافتِراضيّ.
+ * يُبقي الشِعارَ والقَوالِبَ المَحفوظة — هُوِيّةُ المُستَخدِمِ لا تُمحى مَعَ كُلِّ مَشروع.
+ */
+function startNewProject() {
+  closeNewProjectModal();
+
+  try { if (S.playing && typeof pausePlayer === "function") pausePlayer(); } catch (_) {}
+  try { if (typeof stopRecitationAudio === "function") stopRecitationAudio(); } catch (_) {}
+
+  // امسَحِ الوَسائِطَ عَبرَ مُعالِجاتِ أَقسامِها حَتّى تَتَحَدَّثَ واجِهةُ كُلِّ قِسم
+  try {
+    if (Array.isArray(S.bgVidItems)) {
+      for (let i = S.bgVidItems.length - 1; i >= 0; i--) {
+        if (typeof _removeBgVidItemCore === "function") _removeBgVidItemCore(i);
+      }
+      S.bgVidItems = [];
+      if (typeof renderBgVidList === "function") renderBgVidList();
+    }
+  } catch (e) { console.warn("clear bg videos:", e); }
+  try { if (typeof removeFreeAudio === "function") removeFreeAudio(); } catch (_) {}
+  try { if (typeof removeRecVid === "function") removeRecVid(); } catch (_) {}
+  S.bgImg = null; S.bgImgFile = null;
+  const bgThumb = document.getElementById("bg-img-thumb");
+  if (bgThumb) bgThumb.style.display = "none";
+
+  S.verses = []; S.translations = []; S.ayaDurations = [];
+  S.currentAya = 0; S.elapsed = 0; S.freePerSlice = null; S.useFreeAsSource = false;
+  const fta = document.getElementById("free-text-area");
+  if (fta) fta.value = "";
+
+  const panel = document.getElementById("panel") || document.body;
+  if (typeof resetScope === "function") resetScope(panel, "مَشروعٌ جَديد");
+
+  S.projectFileName = null;
+  S.projectFileHandle = null;
+  S.lastExport = null;
+  if (typeof clearProjectDirty === "function") clearProjectDirty();
+  if (typeof updateProjectTitle === "function") updateProjectTitle();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+
+  toast?.("✨ مَشروعٌ جَديد — شِعارُكَ وقَوالِبُكَ باقِية", "success", 3000);
+}
+
 function buildExportFileBase() {
   const d = new Date();
   const p2 = (n) => String(n).padStart(2, "0");
@@ -7359,6 +7495,8 @@ function showExportResult(res) {
         (pf.seekTimeouts ? ` · <b style="color:var(--danger,#e05)">انقَضَت مُهلَتُها: ${pf.seekTimeouts}</b>` : "") + `</div>` +
         `<div style="color:var(--t3)">إطاراتُ الخَلفيّةِ المُتَمَيِّزة: <b>${pf.bgFrames || 0}</b> مِن ${n}` +
         (pf.bgFrames ? ` (≈${(pf.bgFrames / (n / 30)).toFixed(1)} إطار/ث)` : "") + `</div>` +
+        `<div style="color:var(--t3)">مُزامَنةُ الخَلفيّة: <b>${pf.bgMode || "—"}</b>` +
+        (pf.bgResyncs ? ` · إعاداتُ مُزامَنة: ${pf.bgResyncs}` : "") + `</div>` +
         `<div style="color:var(--t3)">وَضعُ اللَوحة: <b>${(typeof needsPixelReadback === "function" && needsPixelReadback()) ? "قِراءةٌ بِالبِكسِل (بَرمَجيّ)" : "مُعَجَّلٌ بِالعَتاد"}</b></div>`;
       perfEl.style.display = "";
     } else {
@@ -8541,19 +8679,89 @@ function confirmSaveTemplate() {
   toast(`✅ تم حفظ: ${name}`, "success");
 }
 
+// ══════════════════════════════════════════════════════
+//  v1.2.4 — القوالِبُ تَحفَظُ تَخصيصَ المُستَخدِمِ كامِلاً
+//  ───────────────────────────────────────────────────
+//  كانَ القالِبُ يَحفَظُ ثَلاثةَ عَشَرَ حَقلاً مُنتَقاةً بِاليَد، فَيَضيعُ كُلُّ ما
+//  عَداها: الشِعارُ والعَلامةُ المائيّةُ وضَبطُ الأَصواتِ والمُؤَثِّراتُ وأَحجامُ
+//  النُصوصِ ومَواضِعُها. الآنَ يُلتَقَطُ كُلُّ إعدادٍ في اللَوحةِ (بِنَفسِ آليّةِ
+//  حِفظِ المَشروع) مَعَ الشِعار.
+//  ما لا يُلتَقَط: الوَسائِطُ الثَقيلة (فيديو/صَوتُ الخَلفيّة) — تِلكَ شَأنُ
+//  المَشروعِ لا القالِب — ولا اختيارُ السورةِ والآيات، فَالقالِبُ هَيئةٌ لا مُحتَوى.
+// ══════════════════════════════════════════════════════
+const TEMPLATE_SKIP_IDS = ["surah-sel", "from-aya", "to-aya", "free-text-area",
+                           "surah-search", "verse-search-inp", "tpl-name-inp"];
+
 function captureState() {
+  const byId = {}, byName = {};
+  document.querySelectorAll("input, select, textarea").forEach(el => {
+    const t = (el.type || "").toLowerCase();
+    if (t === "file" || t === "button" || t === "submit" || t === "search") return;
+    if (el.id && TEMPLATE_SKIP_IDS.includes(el.id)) return;
+    if (el.closest("#bg-vid-list, #free-per-slice-list, #add-reciter-form, #verse-search-results")) return;
+    if (t === "checkbox" || t === "radio") {
+      if (el.id) byId[el.id] = el.checked;
+      if (el.name && (t !== "radio" || el.checked)) byName[el.name] = el.value;
+    } else if (el.id) {
+      byId[el.id] = el.value;
+    }
+  });
+  let logo = null;
+  try { logo = localStorage.getItem("gt_sirm_logo_v1"); } catch (_) {}
   return {
-    surah: $("surah-sel").value, from: $("from-aya").value, to: $("to-aya").value,
-    reciter: radioVal("reciter"), fmt: radioVal("fmt"),
-    gc1: $("gc1").value, gc2: $("gc2").value,
-    font: radioVal("font"), txtCol: $("txt-col").value,
-    wm: $("wm-text").value, orn: radioVal("orn"),
-    fxVig: ge("fx-vig"), fxGold: ge("fx-gold"), fxStars: ge("fx-stars"),
+    v: 2,
+    byId, byName, logo,
     theme: document.querySelector(".tc-chip.on")?.dataset?.t || "emerald",
   };
 }
 
+
+function applyStateV2(st) {
+  const touched = [];
+  for (const [id, val] of Object.entries(st.byId || {})) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const t = (el.type || "").toLowerCase();
+    if (t === "checkbox" || t === "radio") {
+      if (el.checked !== !!val) { el.checked = !!val; touched.push(el); }
+    } else if (el.value !== String(val)) {
+      el.value = val;
+      touched.push(el);
+    }
+  }
+  for (const [name, val] of Object.entries(st.byName || {})) {
+    const r = document.querySelector(`input[name="${name}"][value="${val}"]`);
+    if (r && !r.checked) { r.checked = true; touched.push(r); }
+  }
+  // الشِعارُ جُزءٌ مِنَ الهُوِيّةِ البَصَريّةِ فَيُستَعادُ مَعَ القالِب
+  if (st.logo) {
+    try { localStorage.setItem("gt_sirm_logo_v1", st.logo); } catch (_) {}
+    if (typeof restoreLogo === "function") restoreLogo();
+  }
+  if (st.theme) {
+    document.querySelectorAll(".tc-chip").forEach(c => c.classList.toggle("on", c.dataset.t === st.theme));
+  }
+  // أَطلِقِ الأَحداثَ حَتّى تَستَجيبَ الواجِهةُ (تَسمياتٌ، إظهارُ لَوحات، أَبعادٌ…)
+  const radiosDone = new Set();
+  for (const el of touched) {
+    if (el.type === "radio") {
+      if (radiosDone.has(el.name)) continue;
+      radiosDone.add(el.name);
+      const on = document.querySelector(`input[name="${el.name}"]:checked`);
+      if (on) on.dispatchEvent(new Event("change", { bubbles: true }));
+      continue;
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  if (typeof applyCanvasSize === "function") applyCanvasSize();
+  if (typeof saveAllSettings === "function") { try { saveAllSettings(); } catch (_) {} }
+  if (typeof markProjectDirty === "function") markProjectDirty();
+}
+
 function applyState(st) {
+  // v1.2.4 — قالِبٌ حَديث: طَبِّق كُلَّ الإعداداتِ عُمومِيّاً
+  if (st && st.v >= 2) return applyStateV2(st);
   setV("surah-sel", st.surah); setV("from-aya", st.from); setV("to-aya", st.to);
   setR("reciter", st.reciter); setR("fmt", st.fmt); setR("orn", st.orn);
   setCol("gc1", st.gc1); setCol("gc2", st.gc2);
@@ -8999,6 +9207,12 @@ async function serializeProject() {
       name: S.bgAudioFile.name || "audio.mp3",
       size: S.bgAudioFile.size || 0,
       mime: S.bgAudioFile.type || "audio/mpeg",
+      // v1.2.4 — قِسمانِ يَتَشارَكانِ مَجرى الصَوتِ نَفسَه: «صَوتُ تِلاوةٍ مُخَصَّص»
+      //   يَمُرُّ بِـhandleFreeAudioFile ثُمَّ يُنادي onBgAudio، و«صَوتُ الخَلفيّة»
+      //   يُنادي onBgAudio مُباشَرةً. بِلا هذا العَلَمِ لا تَعرِفُ الاستعادةُ إلى
+      //   أَيِّ قِسمٍ تُعيدُ المَلَفَّ، فَكانَ صَوتُ التِلاوةِ يَعمَلُ ولا يَظهَرُ في
+      //   قِسمِهِ فَيَتَعَذَّرُ حَذفُه.
+      viaFreeAudio: !!S.freeAudioFile,
     };
     if (S.bgAudioFile.size <= ASSET_EMBED_MAX) {
       a.mode = "embedded";
@@ -9053,6 +9267,7 @@ async function deserializeProject(proj) {
 
   const byId = proj.settings?.byId || {};
   const byName = proj.settings?.byName || {};
+  _restoringSettings = byId;   // v1.2.4 — تَستَعمِلُها استعادةُ الأُصولِ لِلاستِدلال
   for (const [id, value] of Object.entries(byId)) {
     const el = document.getElementById(id);
     if (!el) continue;
@@ -9144,6 +9359,9 @@ async function deserializeProject(proj) {
   return { restored: (proj.assets || []).length - missing.length, missing: missing.length };
 }
 
+// v1.2.4 — إعداداتُ المَشروعِ الجاري استعادَتُهُ (لِاستِدلالِ الأُصولِ القَديمة)
+let _restoringSettings = null;
+
 async function restoreAssetFromDataURL(asset) {
   const blob = dataURLToBlob(asset.dataURL);
   const file = new File([blob], asset.name, { type: asset.mime || blob.type });
@@ -9155,7 +9373,16 @@ async function restoreAssetFromDataURL(asset) {
   } else if (asset.key === "bgImage") {
     if (typeof onBgMedia === "function") onBgMedia(fakeInput, "image");
   } else if (asset.key === "bgAudio") {
-    if (typeof onBgAudio === "function") onBgAudio(fakeInput);
+    // v1.2.4 — أَعِدهُ إلى القِسمِ الذي جاءَ مِنه. المَشاريعُ القَديمةُ بِلا
+    //   عَلَمٍ: نَستَدِلُّ بِتوگل «استخدام صوت تلاوة مخصّص» وَقتَ الحَفظ.
+    const viaFree = (asset.viaFreeAudio !== undefined)
+      ? !!asset.viaFreeAudio
+      : !!(_restoringSettings && _restoringSettings["free-audio-on"]);
+    if (viaFree && typeof handleFreeAudioFile === "function") {
+      handleFreeAudioFile(file);          // يَملأُ free-audio-info ويُظهِرُ أَزرارَ الإزالةِ والإعادة
+    } else if (typeof onBgAudio === "function") {
+      onBgAudio(fakeInput);
+    }
   } else if (asset.key === "recVideo") {
     if (typeof onRecVidFile === "function") onRecVidFile(fakeInput);
   } else if (asset.key && asset.key.startsWith("bgVideo[")) {
@@ -9295,6 +9522,12 @@ async function saveProjectInteractiveSafe(forcePrompt = false) {
   const btn = document.getElementById("proj-save-btn");
   const prevHTML = btn ? btn.innerHTML : null;
   try {
+    // v1.2.4 — سَمِّ المَلَفَّ قَبلَ الحَفظ. الاسمُ المُقتَرَحُ مِن عُنوانِ المَقطَعِ
+    //   أو السورةِ — نَفسُ ما يَحمِلُهُ المَلَفُّ المُصَدَّر.
+    const chosen = await askProjectName();
+    if (chosen === null) return;            // أَلغى المُستَخدِم
+    S.projectFileName = chosen.replace(/\.gtsirm$/i, "") + ".gtsirm";
+
     if (btn) { btn.disabled = true; btn.innerHTML = "⏳ <span>جارٍ الحَفظ…</span>"; }
     toast?.("⏳ جارٍ تَجهيزُ المَشروعِ لِلحَفظ…", "info", 1600);
     await saveProjectInteractive(forcePrompt);

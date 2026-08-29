@@ -33,13 +33,18 @@ const WEB_EXPORT_CODECS = {
   },
   "webm-vp9": {
     ext: "webm", muxer: "webm",
+    // ⚠️ v1.2.4 — `videoCodec` يُكتَبُ حَرفيّاً في حَقلِ CodecID داخِلَ Matroska
+    //   (اُنظُر webm-muxer.js: `{ id: 134, data: options.video.codec }`).
+    //   كانَ المَكتوبُ "vp9" و "opus" — وهُما لَيسا مُعَرِّفَي Matroska صَحيحَين،
+    //   فَخَرَجَ المَلَفُّ **بِلا مَسارٍ واحِدٍ يُتَعَرَّفُ عَلَيه**: 19 م.ب مِن
+    //   الحُزَمِ لا يَفتَحُها مُشَغِّل. المُعَرِّفاتُ الصَحيحةُ V_VP9 و A_OPUS.
+    //   (mp4-muxer عَلى العَكسِ يَنتَظِرُ "avc"/"aac" — ولِذا عَمِلَ MP4 وَحدَه.)
     videoTries: [
-      { videoCodec: "vp9", videoCodecStr: "vp09.02.10.10" },  // Profile 2، عُمقُ 10 بِت
-      { videoCodec: "vp9", videoCodecStr: "vp09.00.10.08" },
-      { videoCodec: "vp8", videoCodecStr: "vp8" },
+      { videoCodec: "V_VP9", videoCodecStr: "vp09.00.10.08" },
+      { videoCodec: "V_VP8", videoCodecStr: "vp8" },
     ],
     audioTries: [
-      { audioCodec: "opus", audioCodecStr: "opus" },
+      { audioCodec: "A_OPUS", audioCodecStr: "opus" },
     ],
   },
 };
@@ -499,6 +504,73 @@ function getBgClipAtTimeWeb(t, clipDurations, xf) {
   return { clipIndex: N - 1, localTime: clipDurations[N-1] || 0, inXfade: false, nextClipIndex: -1, nextLocalTime: 0, xfadeAlpha: 0 };
 }
 
+
+// ══════════════════════════════════════════════════════════════
+//  v1.2.4 — مُزامَنةُ خَلفيّةِ الفيديو بِالتَشغيلِ لا بِالنَقل
+//  ────────────────────────────────────────────────────────────
+//  قِياسٌ مِن جِهازِ المُستَخدِم: «إطاراتُ الخَلفيّةِ المُتَمَيِّزة: 5 مِن 689»
+//  أَي إطارٌ واحِدٌ كُلَّ خَمسِ ثَوانٍ تَقريباً — فَتَبدو الخَلفيّةُ مُتَقَطِّعةً في
+//  البِدايةِ ثُمَّ تَقِفُ. السَبَبُ أنَّ كُلَّ نَقلة (seek) تُعيدُ فَكَّ التَرميزِ مِن
+//  آخِرِ إطارٍ مِفتاحيّ، وهذا عَلى الهاتِفِ يُكَلِّفُ ثَوانِيَ لِلنَقلةِ الواحِدة.
+//
+//  الحَلُّ الجَذريّ: لا نَنقُلُ أَصلاً. نُشَغِّلُ الفيديو ونَضبِطُ **سُرعَتَه**
+//  لِتُطابِقَ سُرعَةَ تَقَدُّمِنا في التَصدير. فَكُّ التَرميزِ التَتابُعيُّ (التَشغيل)
+//  أَسرَعُ مِنَ النَقلِ بِمَراتِبَ، فَتَعودُ الخَلفيّةُ سَلِسةً بِمُعَدَّلِها الكامِل.
+//
+//  السُرعةُ المَطلوبة = (ثَواني الوَسيطِ المُنتَجة) ÷ (ثَواني الزَمَنِ الحَقيقيّ)،
+//  ويُضافُ إلَيها تَصحيحٌ تَناسُبيٌّ لِلانحِراف. وإن تَجاوَزَ الانحِرافُ الحَدَّ
+//  (لَفُّ القائِمةِ أو تَبديلُ مَقطَع) نَنقُلُ مَرّةً واحِدةً لِإعادةِ المُزامَنة.
+// ══════════════════════════════════════════════════════════════
+function createBgPlaybackSync() {
+  return {
+    clipIndex: -1,
+    lastWant: -1,
+    resyncs: 0,
+    rateChanges: 0,
+    playFailed: false,
+  };
+}
+
+async function syncBgByPlayback(st, vid, wantTime, clipIndex, mediaDone, wallSec) {
+  if (!vid || !isFinite(vid.duration)) return;
+
+  const RESYNC_EPS = 0.75;   // ثانِية — فَوقَها نَنقُلُ مَرّةً واحِدة
+  const RATE_MIN = 0.0625, RATE_MAX = 4;
+
+  // تَبديلُ مَقطَعٍ أو رُجوعٌ لِلوَراء (لَفُّ القائِمة) ⇒ إعادةُ مُزامَنةٍ صَريحة
+  const switched = (clipIndex !== st.clipIndex) || (wantTime + 0.05 < st.lastWant);
+  st.clipIndex = clipIndex;
+  st.lastWant = wantTime;
+
+  const drift = vid.currentTime - wantTime;
+
+  if (switched || Math.abs(drift) > RESYNC_EPS) {
+    st.resyncs++;
+    try { vid.pause(); } catch (_) {}
+    await seekVideoToTimeWeb(vid, wantTime, 0.03, 1200);
+  }
+
+  if (st.playFailed) return;   // لا تُشَغِّل: نَعتَمِدُ عَلى النَقلِ وَحدَه
+
+  // السُرعةُ الأَساسُ = نِسبةُ تَقَدُّمِنا الحَقيقيّ، مَعَ تَصحيحِ الانحِراف
+  const base = (wallSec > 0.4) ? (mediaDone / wallSec) : 0.5;
+  let rate = base - drift * 1.2;
+  if (!isFinite(rate)) rate = base;
+  rate = Math.max(RATE_MIN, Math.min(RATE_MAX, rate));
+  if (Math.abs(vid.playbackRate - rate) > 0.03) {
+    try { vid.playbackRate = rate; st.rateChanges++; } catch (_) {}
+  }
+  if (vid.paused) {
+    try {
+      vid.muted = true;             // الصَوتُ يُخلَطُ مُنفَصِلاً — والكَتمُ يُجيزُ التَشغيلَ بِلا إيماءة
+      await vid.play();
+    } catch (e) {
+      st.playFailed = true;         // مَنَعَ المُتَصَفِّحُ التَشغيل ⇒ عُد لِلنَقل
+      console.warn("[V2] تَعَذَّرَ تَشغيلُ خَلفيّةِ الفيديو — العَودةُ إلى النَقل:", e && e.message);
+    }
+  }
+}
+
 async function startWebExportV2(opts) {
   const {
     canvas, drawFrame, setStateForTime,
@@ -706,9 +778,11 @@ async function startWebExportV2(opts) {
   const bgClipTrimStarts = visibleBgClips.map(_tsV);
   const bgXf = (typeof getCrossfadeDur === "function") ? getCrossfadeDur() : 0;
 
-  // أَوقِف كُلّ فيديوهات الخَلفيّة — نُدير مَواقعها بالـseek
+  // هَيِّئ كُلَّ مَقاطِعِ الخَلفيّة: نُديرُ مَواقِعَها إمّا بِالتَشغيلِ وإمّا بِالنَقل.
+  //   الكَتمُ لازِمٌ في الحالَتَين: الصَوتُ يُخلَطُ مُنفَصِلاً في OfflineAudioContext،
+  //   وهُوَ كَذلِكَ ما يُجيزُ التَشغيلَ التِلقائيَّ بِلا إيماءةِ مُستَخدِم.
   for (const it of (S.bgVidItems || [])) {
-    try { it.vid.pause(); it.vid.playbackRate = 1; } catch (_) {}
+    try { it.vid.pause(); it.vid.playbackRate = 1; it.vid.muted = true; } catch (_) {}
   }
   // اِبدأ الفيديو الأَوّل المَرئيّ من trimStart
   if (visibleBgClips.length) {
@@ -740,6 +814,7 @@ async function startWebExportV2(opts) {
   //   عِندَ انقِضائِها تَكرارُ إطارٍ، لا ظُهورُ الخَلفيّةِ المُتَدَرِّجةِ كَما كان.
   const bgFastMode = (typeof ge === "function") ? ge("export-bg-fast") : false;
   const BG_SEEK_GUARD = 400;
+  const bgSync = createBgPlaybackSync();
   if (bgFastMode && visibleBgClips.length) {
     console.log("[V2] وَضعُ خَلفيّةٍ سَريع: لا انتِظارَ لِنَقلِ الفيديو");
   }
@@ -771,16 +846,27 @@ async function startWebExportV2(opts) {
       const cinfo = getBgClipAtTimeWeb(t, bgClipDurations, bgXf);
       if (cinfo) {
         S.bgVid = visibleBgClips[cinfo.clipIndex].vid;
-        // Feature#2 — seek إلى (trimStart + localTime)
-        const seekPos = bgClipTrimStarts[cinfo.clipIndex] + cinfo.localTime;
-        seekJobs.push(seekVideoToTimeWeb(S.bgVid, seekPos, bgSeekTol, BG_SEEK_GUARD, bgFastMode));
+        // Feature#2 — المَوضِعُ المَطلوب = trimStart + الزَمَنُ المَحَلّيّ
+        const wantPos = bgClipTrimStarts[cinfo.clipIndex] + cinfo.localTime;
+
+        if (bgFastMode) {
+          // v1.2.4 — مُزامَنةٌ بِالتَشغيل: سَلِسةٌ وسَريعة (لا نَقلَ لِكُلِّ إطار)
+          const wallSec = (performance.now() - tStartMs) / 1000;
+          await syncBgByPlayback(bgSync, S.bgVid, wantPos, cinfo.clipIndex, t, wallSec);
+        } else {
+          // الوَضعُ الدَقيق: نَقلةٌ لِكُلِّ إطار (مُطابَقةٌ تامّةٌ، أَبطَأُ بِكَثير)
+          seekJobs.push(seekVideoToTimeWeb(S.bgVid, wantPos, bgSeekTol, BG_SEEK_GUARD, false));
+        }
+
         if (cinfo.inXfade) {
           S.bgVidNext = visibleBgClips[cinfo.nextClipIndex].vid;
-          const nextSeekPos = bgClipTrimStarts[cinfo.nextClipIndex] + cinfo.nextLocalTime;
-          seekJobs.push(seekVideoToTimeWeb(S.bgVidNext, nextSeekPos, bgSeekTol, BG_SEEK_GUARD, bgFastMode));
+          const nextPos = bgClipTrimStarts[cinfo.nextClipIndex] + cinfo.nextLocalTime;
+          // المَقطَعُ التالي يُنقَلُ نَقلاً: ظُهورُهُ قَصيرٌ ولا يَستَحِقُّ تَشغيلاً مُوازِياً
+          seekJobs.push(seekVideoToTimeWeb(S.bgVidNext, nextPos, bgSeekTol, BG_SEEK_GUARD, false));
           const ease = (typeof easeInOutCubic === "function") ? easeInOutCubic : (x => x);
           S.bgVidFadeProgress = ease(cinfo.xfadeAlpha);
         } else {
+          if (S.bgVidNext) { try { S.bgVidNext.pause(); } catch (_) {} }
           S.bgVidNext = null;
           S.bgVidFadeProgress = 0;
         }
@@ -877,6 +963,7 @@ async function startWebExportV2(opts) {
   for (const it of (S.bgVidItems || [])) {
     try {
       it.vid.pause();
+      it.vid.playbackRate = 1;   // v1.2.4 — أَعِد السُرعةَ الطَبيعيّةَ لِلمُعاينة
       // v1.2.3 — أَسقِط أَعلامَ «نَقلةٌ جارية» حَتّى لا تَمنَعَ تَصديراً لاحِقاً
       it.vid._sirmSeeking = false;
       if (it.vid._sirmSeekGuard) { clearTimeout(it.vid._sirmSeekGuard); it.vid._sirmSeekGuard = null; }
@@ -927,6 +1014,9 @@ async function startWebExportV2(opts) {
   onProgress(100, "✅ اكتمل التصدير!");
   // نُعيدُ الـblob كَذلِك: يَحتَفِظُ بِهِ التَطبيقُ لِزِرِّ «احفَظ مَرّةً أُخرى»
   // فَلا يَضيعُ الناتِجُ إن فَشِلَت وَسيلةُ الحَفظِ المُختارة.
+  prof.bgResyncs = bgSync.resyncs;
+  prof.bgPlayFailed = bgSync.playFailed;
+  prof.bgMode = bgFastMode ? (bgSync.playFailed ? "نَقل (تَعَذَّرَ التَشغيل)" : "تَشغيل") : "نَقل دَقيق";
   return { ok: true, size: buffer.byteLength, blob, filename, mime, saved, profile: prof };
 }
 

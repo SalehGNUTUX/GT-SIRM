@@ -427,6 +427,35 @@ body.offline .offline-badge{display:block}
 </div>
 
 <!-- v1.2.2 — تَوَفُّرُ إصدارٍ جَديد: رِسالةٌ واضِحةٌ وزِرّان لا غَير -->
+<!-- v1.2.4 — اسمُ المَشروعِ قَبلَ الحَفظ -->
+<div class="modal-bg" id="proj-name-modal">
+  <div class="modal">
+    <h3>💾 حِفظُ المَشروع</h3>
+    <div class="fg"><label class="fl">اسمُ المَلَفّ</label>
+      <input type="text" class="fc" id="proj-name-inp" data-no-reset placeholder="GT-SIRM-Project">
+    </div>
+    <div class="note" style="color:var(--t3)">يُقتَرَحُ الاسمُ مِن عُنوانِ المَقطَعِ أو السورةِ المُختارة. اللاحِقةُ <code>.gtsirm</code> تُضافُ تِلقائيّاً.</div>
+    <div class="modal-btns">
+      <button class="btn btn-g" id="proj-name-cancel-btn">إلغاء</button>
+      <button class="btn btn-a" id="proj-name-ok-btn">💾 حِفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- v1.2.4 — مَشروعٌ جَديد -->
+<div class="modal-bg" id="proj-new-modal">
+  <div class="modal">
+    <h3>✨ مَشروعٌ جَديد</h3>
+    <div id="proj-new-body" style="font-size:11px;line-height:1.8;margin-bottom:8px"></div>
+    <div class="note" style="color:var(--t3)">يُمسَحُ المُحتَوى والوَسائِطُ وتَعودُ الإعداداتُ لِلافتِراضيّ. <b>يَبقى شِعارُك</b> وقَوالِبُك المَحفوظة.</div>
+    <div class="modal-btns" style="flex-wrap:wrap;gap:6px">
+      <button class="btn btn-g" id="proj-new-cancel-btn">إلغاء</button>
+      <button class="btn btn-d" id="proj-new-discard-btn">أَنشِئ بِلا حِفظ</button>
+      <button class="btn btn-a" id="proj-new-save-btn">💾 احفَظ ثُمَّ أَنشِئ</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="update-modal">
   <div class="modal">
     <h3 id="update-title">🎉 يَتَوَفَّرُ إصدارٌ جَديد</h3>
@@ -462,10 +491,11 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small>GnuTux Short Islamic Reels Maker v1.2.3</small>
+      <small>GnuTux Short Islamic Reels Maker v1.2.4</small>
     </div>
   </div>
   <div class="hdr-r">
+    <button class="btn btn-g bsm" id="proj-new-btn" title="مَشروعٌ جَديد — يَبدَأُ مِن صَفحةٍ بَيضاء">✨ <span>جَديد</span></button>
     <button class="btn btn-g bsm" id="proj-save-btn" title="حفظ المشروع كملفّ .gtsirm">💾 <span>المشروع</span></button>
     <button class="btn btn-g bsm" id="proj-open-btn" title="فتح ملفّ مشروع .gtsirm">📂 <span>فتح</span></button>
     <input type="file" id="proj-open-input" accept=".gtsirm,.json" style="display:none">
@@ -1386,6 +1416,14 @@ body.offline .offline-badge{display:block}
                 </select>
               </div>
             </div>
+            <div class="fg"><label class="fl">التأثير</label>
+              <select class="fc" id="sname-fx">
+                <option value="shadow" selected>ظلّ</option>
+                <option value="glow">توهّج</option>
+                <option value="outline">حدود</option>
+                <option value="none">بدون</option>
+              </select>
+            </div>
           </div>
         </details>
         <details class="sec">
@@ -1772,7 +1810,7 @@ body.offline .offline-badge{display:block}
             <div id="export-res-info" style="font-size:9px;color:var(--t3);margin-top:3px"></div>
           </div>
           <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px;margin-bottom:5px">
-            <span class="tgl">⚡ تَسريعُ خَلفيّةِ الفيديو<br><small style="color:var(--t3)">لا يَنتَظِرُ فَكَّ تَرميزِ الخَلفيّةِ عِندَ كُلِّ إطار: تَتَقَدَّمُ بِأَقصى ما يَسمَحُ بِهِ الجِهاز، وتُعيدُ الإطاراتُ البَينيّةُ آخِرَ إطارٍ مَفكوك. فَتَكونُ الخَلفيّةُ أَقَلَّ سَلاسةً لَكِنَّ التَصديرَ أَسرَعُ بِكَثير. أَطفِئهُ لِخَلفيّةٍ كامِلةِ السَلاسةِ مَعَ تَصديرٍ أَبطَأ. فيديو التِلاوةِ يَبقى مُتَزامِناً دائِماً.</small></span>
+            <span class="tgl">⚡ خَلفيّةٌ سَلِسةٌ وسَريعة<br><small style="color:var(--t3)">يُشَغِّلُ فيديو الخَلفيّةَ ويَضبِطُ سُرعَتَهُ لِتُطابِقَ تَقَدُّمَ التَصدير، بَدَلَ نَقلِهِ (seek) عِندَ كُلِّ إطار. فَكُّ التَرميزِ التَتابُعيُّ أَسرَعُ بِمَراتِبَ عَلى الهاتِف، فَتَخرُجُ الخَلفيّةُ سَلِسةً كامِلةَ المُعَدَّل. <b>أَبقِهِ مُفَعَّلاً.</b> أَطفِئهُ فَقَط إن أَرَدتَ مُطابَقةً إطاراً بِإطارٍ مَهما طالَ الزَمَن. فيديو التِلاوةِ يَبقى مُتَزامِناً دائِماً.</small></span>
             <label class="tg"><input type="checkbox" id="export-bg-fast" checked><span class="tgs"></span></label>
           </div>
           <div class="fg"><label class="fl">معدل الإطارات (FPS)</label>
@@ -1929,11 +1967,11 @@ body.offline .offline-badge{display:block}
         <div class="about-logo">
           <img src="GT-SIRM-icons/icon-256.png" class="al-icon" alt="GT-SIRM" style="width:80px;height:80px;">
           <h2>GT-SIRM</h2>
-          <p>GnuTux Short Islamic Reels Maker v1.2.3</p>
+          <p>GnuTux Short Islamic Reels Maker v1.2.4</p>
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.3</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.4</span></div>
           <div style="margin:7px 0"><button class="btn btn-g bsm bfw" id="check-update-btn">🔄 تَحَقَّق مِن وُجودِ تَحديث</button></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>

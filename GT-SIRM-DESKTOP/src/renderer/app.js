@@ -4242,6 +4242,37 @@ function removeRecVid() {
 }
 
 // v0.5.6 — عنوان مخصّص للمقطع (مستقلّ عن وحدة القرآن)
+// v1.2.4 — تَأثيرُ نَصِّ العَناوين، مُشتَرَكٌ بَينَ «عُنوانِ المَقطَع» و«اسمِ السورة».
+//   كانَ مَحصوراً في drawVideoTitle، فَلَم يَجِدهُ المُستَخدِمُ في اسمِ السورة.
+function drawTitleWithFx(ctx, text, x, y, fx, col, fsz) {
+  ctx.fillStyle = col;
+  if (fx === "glow") {
+    ctx.shadowColor = col;
+    ctx.shadowBlur = fsz * 0.45;
+    ctx.fillText(text, x, y);
+    ctx.shadowBlur = 0;
+    ctx.fillText(text, x, y);
+  } else if (fx === "outline") {
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.lineWidth = Math.max(2, fsz * 0.06);
+    ctx.strokeStyle = "rgba(0,0,0,.85)";
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+  } else if (fx === "none") {
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.fillText(text, x, y);
+  } else { // shadow
+    ctx.shadowColor = "rgba(0,0,0,.75)";
+    ctx.shadowBlur = fsz * 0.22;
+    ctx.shadowOffsetY = Math.max(1, fsz * 0.05);
+    ctx.fillText(text, x, y);
+  }
+}
+
 function drawVideoTitle(ctx, W, H) {
   if (!ge("vtitle-on")) return;
   const text = ($("vtitle-text")?.value || "").trim();
@@ -4260,27 +4291,7 @@ function drawVideoTitle(ctx, W, H) {
   ctx.textAlign = "center";
   ctx.direction = "rtl";
 
-  if (fx === "shadow") {
-    ctx.shadowColor = "rgba(0,0,0,.75)";
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetY = 3;
-    ctx.fillText(text, W / 2, y);
-  } else if (fx === "glow") {
-    ctx.shadowColor = col;
-    ctx.shadowBlur = 24;
-    ctx.fillText(text, W / 2, y);
-    ctx.shadowBlur = 0;
-    ctx.fillText(text, W / 2, y);
-  } else if (fx === "outline") {
-    ctx.lineJoin = "round";
-    ctx.miterLimit = 2;
-    ctx.lineWidth = Math.max(2, fsz * 0.06);
-    ctx.strokeStyle = "rgba(0,0,0,.85)";
-    ctx.strokeText(text, W / 2, y);
-    ctx.fillText(text, W / 2, y);
-  } else {
-    ctx.fillText(text, W / 2, y);
-  }
+  drawTitleWithFx(ctx, text, W / 2, y, fx, col, fsz);
   ctx.restore();
 }
 
@@ -4311,15 +4322,13 @@ function drawSurahName(ctx, W, H) {
   const yPct = parseFloat(gv("sname-y")) || 5;
   const y = (yPct / 100) * H + fsz;
   const col = $("sname-col")?.value || "#f0c842";
+  const fx = $("sname-fx")?.value || "shadow";   // v1.2.4 — نَفسُ تَأثيراتِ عُنوانِ المَقطَع
 
   ctx.save();
   ctx.font = `bold ${fsz}px ${font}`;
-  ctx.fillStyle = col;
   ctx.textAlign = "center";
   ctx.direction = "rtl";
-  ctx.shadowColor = "rgba(0,0,0,.7)";
-  ctx.shadowBlur = 10;
-  ctx.fillText(label, W / 2, y);
+  drawTitleWithFx(ctx, label, W / 2, y, fx, col, fsz);
   ctx.restore();
 }
 
@@ -9070,19 +9079,89 @@ function confirmSaveTemplate() {
   toast(`✅ تم حفظ: ${name}`, "success");
 }
 
+// ══════════════════════════════════════════════════════
+//  v1.2.4 — القوالِبُ تَحفَظُ تَخصيصَ المُستَخدِمِ كامِلاً
+//  ───────────────────────────────────────────────────
+//  كانَ القالِبُ يَحفَظُ ثَلاثةَ عَشَرَ حَقلاً مُنتَقاةً بِاليَد، فَيَضيعُ كُلُّ ما
+//  عَداها: الشِعارُ والعَلامةُ المائيّةُ وضَبطُ الأَصواتِ والمُؤَثِّراتُ وأَحجامُ
+//  النُصوصِ ومَواضِعُها. الآنَ يُلتَقَطُ كُلُّ إعدادٍ في اللَوحةِ (بِنَفسِ آليّةِ
+//  حِفظِ المَشروع) مَعَ الشِعار.
+//  ما لا يُلتَقَط: الوَسائِطُ الثَقيلة (فيديو/صَوتُ الخَلفيّة) — تِلكَ شَأنُ
+//  المَشروعِ لا القالِب — ولا اختيارُ السورةِ والآيات، فَالقالِبُ هَيئةٌ لا مُحتَوى.
+// ══════════════════════════════════════════════════════
+const TEMPLATE_SKIP_IDS = ["surah-sel", "from-aya", "to-aya", "free-text-area",
+                           "surah-search", "verse-search-inp", "tpl-name-inp"];
+
 function captureState() {
+  const byId = {}, byName = {};
+  document.querySelectorAll("input, select, textarea").forEach(el => {
+    const t = (el.type || "").toLowerCase();
+    if (t === "file" || t === "button" || t === "submit" || t === "search") return;
+    if (el.id && TEMPLATE_SKIP_IDS.includes(el.id)) return;
+    if (el.closest("#bg-vid-list, #free-per-slice-list, #add-reciter-form, #verse-search-results")) return;
+    if (t === "checkbox" || t === "radio") {
+      if (el.id) byId[el.id] = el.checked;
+      if (el.name && (t !== "radio" || el.checked)) byName[el.name] = el.value;
+    } else if (el.id) {
+      byId[el.id] = el.value;
+    }
+  });
+  let logo = null;
+  try { logo = localStorage.getItem("gt_sirm_logo_v1"); } catch (_) {}
   return {
-    surah: $("surah-sel").value, from: $("from-aya").value, to: $("to-aya").value,
-    reciter: radioVal("reciter"), fmt: radioVal("fmt"),
-    gc1: $("gc1").value, gc2: $("gc2").value,
-    font: radioVal("font"), txtCol: $("txt-col").value,
-    wm: $("wm-text").value, orn: radioVal("orn"),
-    fxVig: ge("fx-vig"), fxGold: ge("fx-gold"), fxStars: ge("fx-stars"),
+    v: 2,
+    byId, byName, logo,
     theme: document.querySelector(".tc-chip.on")?.dataset?.t || "emerald",
   };
 }
 
+
+function applyStateV2(st) {
+  const touched = [];
+  for (const [id, val] of Object.entries(st.byId || {})) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const t = (el.type || "").toLowerCase();
+    if (t === "checkbox" || t === "radio") {
+      if (el.checked !== !!val) { el.checked = !!val; touched.push(el); }
+    } else if (el.value !== String(val)) {
+      el.value = val;
+      touched.push(el);
+    }
+  }
+  for (const [name, val] of Object.entries(st.byName || {})) {
+    const r = document.querySelector(`input[name="${name}"][value="${val}"]`);
+    if (r && !r.checked) { r.checked = true; touched.push(r); }
+  }
+  // الشِعارُ جُزءٌ مِنَ الهُوِيّةِ البَصَريّةِ فَيُستَعادُ مَعَ القالِب
+  if (st.logo) {
+    try { localStorage.setItem("gt_sirm_logo_v1", st.logo); } catch (_) {}
+    if (typeof restoreLogo === "function") restoreLogo();
+  }
+  if (st.theme) {
+    document.querySelectorAll(".tc-chip").forEach(c => c.classList.toggle("on", c.dataset.t === st.theme));
+  }
+  // أَطلِقِ الأَحداثَ حَتّى تَستَجيبَ الواجِهةُ (تَسمياتٌ، إظهارُ لَوحات، أَبعادٌ…)
+  const radiosDone = new Set();
+  for (const el of touched) {
+    if (el.type === "radio") {
+      if (radiosDone.has(el.name)) continue;
+      radiosDone.add(el.name);
+      const on = document.querySelector(`input[name="${el.name}"]:checked`);
+      if (on) on.dispatchEvent(new Event("change", { bubbles: true }));
+      continue;
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  if (typeof applyCanvasSize === "function") applyCanvasSize();
+  if (typeof saveAllSettings === "function") { try { saveAllSettings(); } catch (_) {} }
+  if (typeof markProjectDirty === "function") markProjectDirty();
+}
+
 function applyState(st) {
+  // v1.2.4 — قالِبٌ حَديث: طَبِّق كُلَّ الإعداداتِ عُمومِيّاً
+  if (st && st.v >= 2) return applyStateV2(st);
   setV("surah-sel", st.surah); setV("from-aya", st.from); setV("to-aya", st.to);
   setR("reciter", st.reciter); setR("fmt", st.fmt); setR("orn", st.orn);
   setCol("gc1", st.gc1); setCol("gc2", st.gc2);

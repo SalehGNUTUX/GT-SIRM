@@ -529,7 +529,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.2.3</small>
+      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.2.4</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -1649,6 +1649,14 @@ body.offline .offline-badge{display:block}
                 </select>
               </div>
             </div>
+            <div class="fg"><label class="fl">التأثير</label>
+              <select class="fc" id="sname-fx">
+                <option value="shadow" selected>ظلّ</option>
+                <option value="glow">توهّج</option>
+                <option value="outline">حدود</option>
+                <option value="none">بدون</option>
+              </select>
+            </div>
           </div>
         </details>
         <details class="sec">
@@ -2074,7 +2082,7 @@ body.offline .offline-badge{display:block}
             <div id="export-res-info" style="font-size:9px;color:var(--t3);margin-top:3px"></div>
           </div>
           <div class="tgg" style="background:var(--bg2);border:1px solid var(--p);border-radius:var(--r);padding:5px 7px;margin-bottom:5px">
-            <span class="tgl">⚡ تَسريعُ خَلفيّةِ الفيديو<br><small style="color:var(--t3)">لا يَنتَظِرُ فَكَّ تَرميزِ الخَلفيّةِ عِندَ كُلِّ إطار: تَتَقَدَّمُ بِأَقصى ما يَسمَحُ بِهِ الجِهاز، وتُعيدُ الإطاراتُ البَينيّةُ آخِرَ إطارٍ مَفكوك. فَتَكونُ الخَلفيّةُ أَقَلَّ سَلاسةً لَكِنَّ التَصديرَ أَسرَعُ بِكَثير. أَطفِئهُ لِخَلفيّةٍ كامِلةِ السَلاسةِ مَعَ تَصديرٍ أَبطَأ. فيديو التِلاوةِ يَبقى مُتَزامِناً دائِماً.</small></span>
+            <span class="tgl">⚡ خَلفيّةٌ سَلِسةٌ وسَريعة<br><small style="color:var(--t3)">يُشَغِّلُ فيديو الخَلفيّةَ ويَضبِطُ سُرعَتَهُ لِتُطابِقَ تَقَدُّمَ التَصدير، بَدَلَ نَقلِهِ (seek) عِندَ كُلِّ إطار. فَكُّ التَرميزِ التَتابُعيُّ أَسرَعُ بِمَراتِبَ عَلى الهاتِف، فَتَخرُجُ الخَلفيّةُ سَلِسةً كامِلةَ المُعَدَّل. <b>أَبقِهِ مُفَعَّلاً.</b> أَطفِئهُ فَقَط إن أَرَدتَ مُطابَقةً إطاراً بِإطارٍ مَهما طالَ الزَمَن. فيديو التِلاوةِ يَبقى مُتَزامِناً دائِماً.</small></span>
             <label class="tg"><input type="checkbox" id="export-bg-fast" checked><span class="tgs"></span></label>
           </div>
           <div class="fg"><label class="fl">معدل الإطارات (FPS)</label>
@@ -2329,7 +2337,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.3</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.4</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
