@@ -7606,9 +7606,23 @@ async function runYtdlpMobileUpdate(force) {
     }
     refreshYtdlpMobileVersion();
   } catch (e) {
-    const msg = String(e?.message || e).slice(0, 110);
-    if (force) toast("❌ تَعَذَّرَ التَحديث: " + msg, "error", 5000);
+    const msg = String(e?.message || e).slice(0, 160);
+    if (force) toast("❌ تَعَذَّرَ التَحديث: " + msg, "error", 7000);
     else console.warn("[SIRM] فَحصُ yt-dlp فَشِل:", msg);
+    // v1.2.7 — اعرِضِ التَشخيصَ في الواجِهةِ بَدَلَ رِسالةٍ مُبهَمة
+    const el = document.getElementById("ytdlp-mobile-version");
+    if (el) {
+      el.textContent = "❌ " + msg;
+      try {
+        const d = await window.PIO?.ytdlpDiagnose?.();
+        if (d) {
+          el.textContent += `\n📁 ${d.nativeLibraryDir || "?"}` +
+            `\n🐍 libpython.zip.so: ${d.pythonZipPresent ? "مَوجود" : "مَفقود"}` +
+            (d.libs ? `\n📦 ${String(d.libs).slice(0, 200)}` : "");
+          el.style.whiteSpace = "pre-line";
+        }
+      } catch (_) {}
+    }
   } finally {
     if (force && btn) { btn.disabled = false; btn.textContent = "⬆️ حَدِّث الآن"; }
   }

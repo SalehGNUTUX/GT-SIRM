@@ -590,6 +590,13 @@
     }
   }
 
+  /** تَشخيصُ سَبَبِ فَشَلِ التَهيئة (مَسارُ المَكتَباتِ وهَل Python مَوجود). */
+  async function ytdlpDiagnose() {
+    const P = ytdlpPlugin();
+    if (!P || !P.diagnose) return null;
+    try { return await P.diagnose(); } catch (e) { return { error: String(e?.message || e) }; }
+  }
+
   async function ytdlpCancel() {
     const P = ytdlpPlugin();
     if (P) { try { await P.cancel(); } catch (_) {} }
@@ -603,6 +610,7 @@
     ytdlpUpdate,
     ytdlpDownload,
     ytdlpCancel,
+    ytdlpDiagnose,
     checkForUpdate,
     downloadAndInstall,
     compareVersions,

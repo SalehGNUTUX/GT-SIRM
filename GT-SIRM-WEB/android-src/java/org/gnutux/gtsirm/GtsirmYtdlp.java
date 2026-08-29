@@ -52,6 +52,49 @@ public class GtsirmYtdlp extends Plugin {
         }
     }
 
+    /**
+     * رِسالةُ خَطَإٍ مُفيدة: المَكتَبةُ تَرمي «failed to initialize» مُجَرَّدةً،
+     * والسَبَبُ الحَقيقيُّ يَقبَعُ في cause. بِلا هذا يَبقى العَطَبُ مُبهَماً.
+     */
+    private static String deepMessage(Throwable e) {
+        StringBuilder sb = new StringBuilder();
+        Throwable t = e;
+        int depth = 0;
+        while (t != null && depth < 4) {
+            if (sb.length() > 0) sb.append(" ← ");
+            sb.append(t.getClass().getSimpleName());
+            if (t.getMessage() != null) sb.append(": ").append(t.getMessage());
+            t = t.getCause();
+            depth++;
+        }
+        return sb.toString();
+    }
+
+    /** تَشخيصٌ: هَل مَكتَباتُ Python مَوجودةٌ فِعلاً عَلى القُرص؟ */
+    @PluginMethod
+    public void diagnose(PluginCall call) {
+        JSObject ret = new JSObject();
+        try {
+            String nativeDir = getContext().getApplicationInfo().nativeLibraryDir;
+            ret.put("nativeLibraryDir", nativeDir);
+            java.io.File d = new java.io.File(nativeDir);
+            StringBuilder names = new StringBuilder();
+            java.io.File[] fs = d.listFiles();
+            if (fs != null) {
+                for (java.io.File f : fs) {
+                    if (names.length() > 0) names.append(", ");
+                    names.append(f.getName()).append("(").append(f.length()).append(")");
+                }
+            }
+            ret.put("libs", names.toString());
+            ret.put("pythonZipPresent", new java.io.File(d, "libpython.zip.so").exists());
+            ret.put("initialized", initialized);
+        } catch (Exception e) {
+            ret.put("error", deepMessage(e));
+        }
+        call.resolve(ret);
+    }
+
     /** هَل الجِسرُ مَبنيٌّ في هذه الحُزمة؟ (يُميِّزُ الحُزمةَ الكامِلةَ مِنَ الخَفيفة) */
     @PluginMethod
     public void available(PluginCall call) {
@@ -72,7 +115,7 @@ public class GtsirmYtdlp extends Plugin {
                 ret.put("version", YoutubeDL.getInstance().version(getContext()));
                 call.resolve(ret);
             } catch (Exception e) {
-                call.reject("فَشِلَت تَهيئةُ yt-dlp: " + e.getMessage(), e);
+                call.reject("فَشِلَت تَهيئةُ yt-dlp: " + deepMessage(e), e);
             }
         }).start();
     }
@@ -86,7 +129,7 @@ public class GtsirmYtdlp extends Plugin {
                 ret.put("version", YoutubeDL.getInstance().version(getContext()));
                 call.resolve(ret);
             } catch (Exception e) {
-                call.reject("تَعَذَّرَت قِراءةُ الإصدار: " + e.getMessage(), e);
+                call.reject("تَعَذَّرَت قِراءةُ الإصدار: " + deepMessage(e), e);
             }
         }).start();
     }
@@ -105,7 +148,7 @@ public class GtsirmYtdlp extends Plugin {
                 ret.put("version", YoutubeDL.getInstance().version(getContext()));
                 call.resolve(ret);
             } catch (Exception e) {
-                call.reject("فَشِلَ تَحديثُ yt-dlp: " + e.getMessage(), e);
+                call.reject("فَشِلَ تَحديثُ yt-dlp: " + deepMessage(e), e);
             }
         }).start();
     }
@@ -197,7 +240,7 @@ public class GtsirmYtdlp extends Plugin {
             } catch (YoutubeDL.CanceledException ce) {
                 call.reject("cancelled");
             } catch (Exception e) {
-                call.reject("فَشِلَ التَنزيل: " + e.getMessage(), e);
+                call.reject("فَشِلَ التَنزيل: " + deepMessage(e), e);
             } finally {
                 currentProcessId = null;
             }
