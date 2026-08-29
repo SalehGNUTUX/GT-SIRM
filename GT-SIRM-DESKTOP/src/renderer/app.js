@@ -219,6 +219,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   restoreMixedAnimsOrder();
   applyCanvasSize();     // v1.2.1 — طَبِّق سَقفَ الدِقّةِ المُستَعادَ واعرِضِ الأَبعاد
   injectResetButtons();  // v1.2.3 — زِرُّ ↺ في تَرويسةِ كُلِّ قِسم
+  ensureCanvasMode();    // v1.2.15 — لَوحةٌ مُعَجَّلةٌ بِالعَتادِ ما لَم تَلزَمِ القِراءةُ بِالبِكسِل
+  document.querySelectorAll('input[name="cf"]').forEach(r =>
+    r.addEventListener("change", () => ensureCanvasMode()));
+  PIXEL_FX_IDS.forEach(id => document.getElementById(id)
+    ?.addEventListener("change", () => ensureCanvasMode()));
   initAutoSave();
 
   // تحميل فهرس القرآن الكامل في الخلفية للعمل دون اتصال
@@ -396,6 +401,312 @@ function enforceSingleModuleActive(state) {
 //  (اُنظُر parseFreeText: تُقسَمُ عَلى /\n\s*\n+/).
 //  ولا نُطَبِّقُ النَصَّ تِلقائيّاً: نَترُكُ المُستَخدِمَ يُعَدِّلُ ثُمَّ يَضغَطُ «تَطبيق».
 // ══════════════════════════════════════════════════════
+// ── مَشروعٌ جَديد ──────────────────────────────────────
+function newProjectPrompt() {
+  const modal = document.getElementById("proj-new-modal");
+  const body = document.getElementById("proj-new-body");
+  const saveBtn = document.getElementById("proj-new-save-btn");
+  if (!modal) {
+    if (confirm("إنشاءُ مَشروعٍ جَديد؟ سَيُمسَحُ العَمَلُ الحاليّ.")) startNewProject();
+    return;
+  }
+  const dirty = !!S.projectDirty;
+  if (body) {
+    body.textContent = dirty
+      ? "في مَشروعِكَ الحاليِّ تَغييراتٌ لَم تُحفَظ. ماذا تُريدُ أن نَفعَلَ بِها؟"
+      : "سَيَبدَأُ مَشروعٌ جَديدٌ مِن صَفحةٍ بَيضاء.";
+  }
+  if (saveBtn) saveBtn.style.display = dirty ? "" : "none";
+  modal.style.display = "flex";
+}
+
+function closeNewProjectModal() {
+  const m = document.getElementById("proj-new-modal");
+  if (m) m.style.display = "none";
+}
+
+/**
+ * يُفرِغُ المُحتَوى والوَسائِطَ ويُعيدُ الإعداداتِ لِلافتِراضيّ.
+ * يُبقي الشِعارَ والقَوالِبَ المَحفوظة — هُوِيّةُ المُستَخدِمِ لا تُمحى مَعَ كُلِّ مَشروع.
+ */
+function startNewProject() {
+  closeNewProjectModal();
+
+  try { if (S.playing && typeof pausePlayer === "function") pausePlayer(); } catch (_) {}
+  try { if (typeof stopRecitationAudio === "function") stopRecitationAudio(); } catch (_) {}
+
+  // امسَحِ الوَسائِطَ عَبرَ مُعالِجاتِ أَقسامِها حَتّى تَتَحَدَّثَ واجِهةُ كُلِّ قِسم
+  try {
+    if (Array.isArray(S.bgVidItems)) {
+      for (let i = S.bgVidItems.length - 1; i >= 0; i--) {
+        if (typeof _removeBgVidItemCore === "function") _removeBgVidItemCore(i);
+      }
+      S.bgVidItems = [];
+      if (typeof renderBgVidList === "function") renderBgVidList();
+    }
+  } catch (e) { console.warn("clear bg videos:", e); }
+  try { if (typeof removeFreeAudio === "function") removeFreeAudio(); } catch (_) {}
+  try { if (typeof removeRecVid === "function") removeRecVid(); } catch (_) {}
+  S.bgImg = null; S.bgImgFile = null;
+  const bgThumb = document.getElementById("bg-img-thumb");
+  if (bgThumb) bgThumb.style.display = "none";
+
+  S.verses = []; S.translations = []; S.ayaDurations = [];
+  S.currentAya = 0; S.elapsed = 0; S.freePerSlice = null; S.useFreeAsSource = false;
+  const fta = document.getElementById("free-text-area");
+  if (fta) fta.value = "";
+
+  const panel = document.getElementById("panel") || document.body;
+  if (typeof resetScope === "function") resetScope(panel, "مَشروعٌ جَديد");
+
+  S.projectFileName = null;
+  S.projectFileHandle = null;
+  S.lastExport = null;
+  if (typeof clearProjectDirty === "function") clearProjectDirty();
+  if (typeof updateProjectTitle === "function") updateProjectTitle();
+  if (typeof updateAyaUI === "function") updateAyaUI();
+
+  toast?.("✨ مَشروعٌ جَديد — شِعارُكَ وقَوالِبُكَ باقِية", "success", 3000);
+}
+
+
+// ══════════════════════════════════════════════════════
+//  v1.2.6 — تَنزيلٌ مِن رابِطٍ مُباشِر (الهاتِف والويب)
+//  ───────────────────────────────────────────────────
+//  yt-dlp بَرنامَجُ Python ولا يَعمَلُ داخِلَ WebView، لَكِنَّ الرَوابِطَ المُباشِرةَ
+//  لا تَحتاجُهُ أَصلاً. المَلَفُّ المُنَزَّلُ يُسَلَّمُ إلى **نَفسِ مُعالِجِ القِسم**
+//  الذي يَستَقبِلُ المَلَفَّ المَرفوعَ يَدَويّاً، فَيَظهَرُ في القائِمةِ ويُحفَظُ
+//  مَعَ المَشروعِ ويُحذَفُ كَغَيرِه — لا مَسارَ مُوازِيَ لَه.
+// ══════════════════════════════════════════════════════
+const DIRECT_DL_TARGETS = {
+  "dlurl-bgvid":  { label: "فيديو الخَلفيّة",   kinds: ["video"] },
+  "dlurl-recvid": { label: "فيديو التِلاوة",    kinds: ["video"] },
+  "dlurl-audio":  { label: "صَوتُ التِلاوة",     kinds: ["audio", "video"] },
+};
+
+async function runDirectDownload(key) {
+  const cfg = DIRECT_DL_TARGETS[key];
+  if (!cfg) return;
+  const urlEl = $(key + "-url");
+  const btn = $(key + "-btn");
+  const status = $(key + "-status");
+  const url = (urlEl?.value || "").trim();
+
+  const say = (t, color) => { if (status) { status.textContent = t; status.style.color = color || "var(--t3)"; } };
+
+  if (!url) { say("⚠️ الصِقِ الرابِطَ أَوَّلاً", "var(--warn,#e9b949)"); return; }
+  if (!/^https?:\/\//i.test(url)) { say("⚠️ الرابِطُ يَجِبُ أن يَبدَأَ بِـhttp أو https", "var(--danger,#e05)"); return; }
+  if (!window.PIO?.downloadDirect) { say("⚠️ التَنزيلُ غَيرُ مُتاحٍ في هذه النُسخة", "var(--danger,#e05)"); return; }
+
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ التَنزيل…"; }
+  say("⏳ يَبدَأُ التَنزيل…");
+  try {
+    // v1.2.7 — إن كانَ الرابِطُ صَفحةً (لا مَلَفّاً مُباشِراً) ووُجِدَ yt-dlp
+    //   في الحُزمة، مَرِّرهُ إلَيه. وإلّا فَالتَنزيلُ المُباشِرُ كَما كان.
+    const looksDirect = /\.(mp4|webm|mkv|mov|m4v|mp3|m4a|aac|ogg|opus|wav|flac)(\?|#|$)/i.test(url);
+    const useYtdlp = !looksDirect && window.PIO.hasYtdlp && window.PIO.hasYtdlp();
+
+    let file;
+    if (useYtdlp) {
+      const kind = (key === "dlurl-audio") ? "audio" : "video";
+      say("⏳ تَهيئةُ yt-dlp ثُمَّ التَنزيل… (قَد تَطولُ أَوَّلَ مَرّة)");
+      file = await window.PIO.ytdlpDownload(url, kind, (pct, line) => {
+        say(pct >= 0 ? `⏳ ${pct}% · ${String(line || "").slice(0, 60)}`
+                     : `⏳ ${String(line || "جارٍ التَنزيل…").slice(0, 70)}`);
+      });
+    } else {
+      file = await window.PIO.downloadDirect(url, (pct, got, total) => {
+        say(total > 0
+          ? `⏳ ${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} م.ب · ${pct}%`
+          : `⏳ ${(got / 1048576).toFixed(1)} م.ب`);
+      });
+    }
+
+    // تَحَقَّق أنَّ النَوعَ يُناسِبُ القِسمَ قَبلَ تَسليمِه
+    const t = (file.type || "").toLowerCase();
+    const okKind = cfg.kinds.some(k => t.startsWith(k + "/"));
+    if (t && !okKind) {
+      say(`⚠️ المَلَفُّ نَوعُهُ ${t} ولا يُناسِبُ ${cfg.label}`, "var(--danger,#e05)");
+      return;
+    }
+
+    if (key === "dlurl-bgvid") {
+      const vBtn = document.querySelector('input[name="bgt"][value="video"]');
+      if (vBtn && !vBtn.checked) { vBtn.checked = true; if (typeof onBgTypeChange === "function") onBgTypeChange(); }
+      await addBgVidItem(file);
+    } else if (key === "dlurl-recvid") {
+      const cb = $("recvid-on");
+      if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event("change")); }
+      onRecVidFile({ files: [file] });
+    } else {
+      const cb = $("free-audio-on");
+      if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event("change")); }
+      handleFreeAudioFile(file);
+    }
+
+    // v1.2.12 — بَيِّن إن كانَ المَقطَعُ مُنَزَّلاً سابِقاً فَأُعيدَ استِعمالُه،
+    //   وأَينَ يَقبَعُ فِعلاً: التَنزيلاتُ تَقَعُ في مُجَلَّدِ البَرنامَجِ الخاصِّ لا في
+    //   «التَنزيلات» العامّة — وكانَ المُستَخدِمُ يَبحَثُ عَنها هُناكَ فَلا يَجِدُها.
+    const reusedNote = file._reused ? " · ♻️ كانَ مُنَزَّلاً سابِقاً فَأُعيدَ استِعمالُه" : "";
+    const dirNote = file._dir ? `\n📁 ${file._dir}` : "";
+    if (status) status.style.whiteSpace = "pre-line";
+    say(`✅ أُضيفَ: ${file.name} (${(file.size / 1048576).toFixed(1)} م.ب)${reusedNote}${dirNote}`, "var(--ok,#4caf50)");
+    if (urlEl) urlEl.value = "";
+    if (typeof markProjectDirty === "function") markProjectDirty();
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (/cancelled/i.test(msg)) { say("🚫 أُلغيَ التَنزيل"); return; }
+    const cors = /Failed to fetch|NetworkError|CORS/i.test(msg);
+    say(cors
+      ? "❌ رَفَضَ الخادِمُ الطَلَبَ مِنَ المُتَصَفِّح (CORS). جَرِّب رابِطاً آخَرَ أو نَزِّلهُ ثُمَّ ارفَعهُ يَدَويّاً."
+      : "❌ " + msg.slice(0, 110), "var(--danger,#e05)");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "⬇️ نَزِّل وأَضِف"; }
+  }
+}
+
+
+// ── v1.2.7 — إصدارُ yt-dlp المُضَمَّنِ وتَحديثُه (الهاتِف) ──
+async function refreshYtdlpMobileVersion() {
+  const el = document.getElementById("ytdlp-mobile-version");
+  if (!el || !window.PIO?.ytdlpVersion) return;
+  el.textContent = "⏳ يُقرَأُ الإصدار…";
+  try {
+    const v = await window.PIO.ytdlpVersion();
+    el.textContent = v ? `الإصدارُ الحاليّ: ${v}` : "غَيرُ مُهَيَّإٍ بَعد";
+  } catch (_) { el.textContent = "غَيرُ مُهَيَّإٍ بَعد"; }
+}
+
+async function runYtdlpMobileUpdate(force) {
+  if (!window.PIO?.hasYtdlp || !window.PIO.hasYtdlp()) return;
+  // خَنقٌ أُسبوعيٌّ لِلفَحصِ التِلقائيّ
+  if (!force) {
+    try {
+      const last = parseInt(localStorage.getItem("gt_sirm_ytdlp_lastcheck") || "0", 10);
+      if (last && Date.now() - last < 7 * 86400000) return;
+      localStorage.setItem("gt_sirm_ytdlp_lastcheck", String(Date.now()));
+    } catch (_) {}
+  }
+  const btn = document.getElementById("ytdlp-mobile-update");
+  if (force && btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ…"; }
+  try {
+    const r = await window.PIO.ytdlpUpdate();
+    if (force) {
+      toast(r.updated ? `⬆️ حُدِّثَ yt-dlp إلى ${r.version || ""}`
+                      : `✅ yt-dlp مُحَدَّثٌ أَصلاً (${r.version || ""})`,
+            "success", 3500);
+    }
+    refreshYtdlpMobileVersion();
+  } catch (e) {
+    const msg = String(e?.message || e).slice(0, 160);
+    if (force) toast("❌ تَعَذَّرَ التَحديث: " + msg, "error", 7000);
+    else console.warn("[SIRM] فَحصُ yt-dlp فَشِل:", msg);
+    // v1.2.7 — اعرِضِ التَشخيصَ في الواجِهةِ بَدَلَ رِسالةٍ مُبهَمة
+    const el = document.getElementById("ytdlp-mobile-version");
+    if (el) {
+      el.textContent = "❌ " + msg;
+      try {
+        const d = await window.PIO?.ytdlpDiagnose?.();
+        if (d) {
+          el.textContent += `\n📁 ${d.nativeLibraryDir || "?"}` +
+            `\n🐍 libpython.zip.so: ${d.pythonZipPresent ? "مَوجود" : "مَفقود"}` +
+            (d.libs ? `\n📦 ${String(d.libs).slice(0, 200)}` : "");
+          el.style.whiteSpace = "pre-line";
+        }
+      } catch (_) {}
+    }
+  } finally {
+    if (force && btn) { btn.disabled = false; btn.textContent = "⬆️ حَدِّث الآن"; }
+  }
+}
+
+function initDirectDownloadUI() {
+  // v1.2.7 — إن كانَ yt-dlp مُضَمَّناً فَالحَقلُ يَقبَلُ صَفَحاتِ يوتيوب وأَمثالِها
+  const withYtdlp = !!(window.PIO?.hasYtdlp && window.PIO.hasYtdlp());
+  if (withYtdlp) {
+    document.querySelectorAll('[id$="-url"]').forEach(el => {
+      if (!/^dlurl-/.test(el.id)) return;
+      el.placeholder = "رابِطُ صَفحةٍ (يوتيوب…) أو رابِطٌ مُباشِر";
+      const note = el.closest("details")?.querySelector(".note");
+      if (note) note.textContent =
+        "الصِق رابِطَ صَفحةٍ (يوتيوب ومِئاتُ المَواقِع) أو رابِطاً مُباشِراً لِلمَلَفّ. yt-dlp مُضَمَّنٌ في هذه الحُزمة.";
+    });
+    // أَظهِر إصدارَ yt-dlp وزِرَّ تَحديثِهِ في الإعدادات
+    const box = document.getElementById("ytdlp-mobile-box");
+    if (box) box.style.display = "";
+    refreshYtdlpMobileVersion();
+  }
+  for (const key of Object.keys(DIRECT_DL_TARGETS)) {
+    $(key + "-btn")?.addEventListener("click", () => runDirectDownload(key));
+    $(key + "-paste")?.addEventListener("click", async () => {
+      try {
+        const t = await (window.PIO?.readClipboard ? window.PIO.readClipboard() : navigator.clipboard.readText());
+        const el = $(key + "-url");
+        if (el && t) { el.value = t.trim(); el.dispatchEvent(new Event("input", { bubbles: true })); }
+      } catch (_) { toast?.("تَعَذَّرَ الوُصولُ لِلحافِظة — الصِق يَدَويّاً", "warn", 2200); }
+    });
+    $(key + "-url")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); runDirectDownload(key); }
+    });
+  }
+}
+
+
+// ══════════════════════════════════════════════════════
+//  v1.2.15 — فَحصُ تَحديثِ البَرنامَج (سَطحُ المَكتَب)
+//  ───────────────────────────────────────────────────
+//  نُسخةُ الهاتِفِ تُنَزِّلُ وتُثَبِّتُ ذاتِيّاً؛ أمّا هُنا فَحُزَمُ AppImage/DEB/RPM
+//  تُثَبَّتُ بِطَرائِقَ مُختَلِفة، فَنَكتَفي بِالإبلاغِ وفَتحِ صَفحةِ الإصدار.
+//  (أُضيفَ api.github.com إلى connect-src في CSP وإلّا حُجِبَ الطَلَب.)
+// ══════════════════════════════════════════════════════
+function _cmpVer(a, b) {
+  const pa = String(a).replace(/^v/i, "").split(/[.\-+]/);
+  const pb = String(b).replace(/^v/i, "").split(/[.\-+]/);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = parseInt(pa[i] || "0", 10) || 0, nb = parseInt(pb[i] || "0", 10) || 0;
+    if (na !== nb) return na > nb ? 1 : -1;
+  }
+  return 0;
+}
+
+function _currentAppVersion() {
+  const el = document.querySelector(".info-v");
+  const t = el ? el.textContent.trim() : "";
+  return /^\d+\.\d+/.test(t) ? t : "0.0.0";
+}
+
+async function checkForUpdates(silent) {
+  const note = document.getElementById("update-status-note");
+  const btn = document.getElementById("check-update-btn");
+  const say = (t) => { if (note) note.textContent = t; };
+  try {
+    if (!silent && btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ الفَحص…"; }
+    say("⏳ جارٍ الفَحص…");
+    const r = await fetch("https://api.github.com/repos/SalehGNUTUX/GT-SIRM/releases/latest",
+                          { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const rel = await r.json();
+    const latest = String(rel.tag_name || "").replace(/^v/i, "");
+    const cur = _currentAppVersion();
+    if (latest && _cmpVer(latest, cur) > 0) {
+      say(`🎉 يَتَوَفَّرُ الإصدار ${latest} (لَدَيكَ ${cur})`);
+      if (confirm(`يَتَوَفَّرُ الإصدار ${latest} — وأنتَ عَلى ${cur}.\n\nفَتحُ صَفحةِ الإصدارِ لِتَنزيلِه؟`)) {
+        if (window.SIRM?.openExternal) window.SIRM.openExternal(rel.html_url);
+        else window.open(rel.html_url, "_blank");
+      }
+    } else {
+      say(`✅ أنتَ عَلى أَحدَثِ إصدار (${cur})`);
+      if (!silent) toast?.(`✅ أنتَ عَلى أَحدَثِ إصدار (${cur})`, "success", 2500);
+    }
+  } catch (e) {
+    const m = String(e?.message || e).slice(0, 90);
+    say("⚠️ تَعَذَّرَ الفَحص: " + m);
+    if (!silent) toast?.("⚠️ تَعَذَّرَ فَحصُ التَحديثات: " + m, "warn", 4000);
+  } finally {
+    if (!silent && btn) { btn.disabled = false; btn.textContent = "🔄 تَحَقَّق مِن وُجودِ تَحديث"; }
+  }
+}
+
 function versesToFreeText() {
   const verses = Array.isArray(S.verses) ? S.verses : [];
   if (!verses.length) {
@@ -2524,6 +2835,19 @@ function initEventListeners() {
   const resetAllBtn = $("reset-all-settings-btn");
   if (resetAllBtn) resetAllBtn.addEventListener("click", resetAllSettings);
 
+  // v1.2.15 — فَحصُ تَحديثِ البَرنامَج
+  $("check-update-btn")?.addEventListener("click", () => checkForUpdates(false));
+
+  // v1.2.15 — مَشروعٌ جَديد
+  $("proj-new-btn")?.addEventListener("click", newProjectPrompt);
+  $("proj-new-cancel-btn")?.addEventListener("click", closeNewProjectModal);
+  $("proj-new-discard-btn")?.addEventListener("click", startNewProject);
+  $("proj-new-save-btn")?.addEventListener("click", async () => {
+    closeNewProjectModal();
+    try { await saveProjectInteractive(); } catch (e) { console.warn(e); }
+    if (!S.projectDirty) startNewProject();
+  });
+
   // v1.2.8 — نَقلُ الآياتِ إلى النَصِّ الحُرّ
   $("verses-to-free-btn")?.addEventListener("click", versesToFreeText);
 
@@ -3250,9 +3574,61 @@ window.addEventListener("resize", fitCanvas);
 // ══════════════════════════════════════════════════════
 //  MAIN DRAW
 // ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
+//  v1.2.3 — وَضعُ رَسمِ اللَوحة: مُعَجَّلٌ بِالعَتادِ أم مَقروءٌ بِالبِكسِل
+//  ───────────────────────────────────────────────────
+//  قِياسٌ حَقيقيٌّ مِن هاتِفِ المُستَخدِم (951 إطاراً): الرَسمُ 82.2ms لِلإطار
+//  مِن أَصلِ 120.5ms — أَي 68% مِنَ الزَمَن.
+//  السَبَب: اللَوحةُ تُنشَأُ دائِماً بِـ`willReadFrequently: true`، وهذا يُجبِرُ
+//  المُتَصَفِّحَ عَلى إبقائِها في ذاكِرةِ المُعالِجِ ويُلغي تَسريعَ العَتاد — فَيَصيرُ
+//  كُلُّ `drawImage` وتَدَرُّجٍ وظِلٍّ (shadowBlur في 18 مَوضِعاً) ونَصٍّ عَرَبيٍّ
+//  مَرسوماً بِالبَرمَجيّاتِ وَحدَها.
+//  لَكِنَّ القِراءةَ بِالبِكسِل لا يَحتاجُها إلّا: أَنماطُ اللَونِ (غَيرُ «بِدون»)،
+//  والحُبَيباتُ، والمُؤَثِّراتُ الثَمانِيةُ الثَقيلة. فَإن كانَت كُلُّها مُطفَأةً —
+//  وهُوَ الغالِبُ — فَالعَلَمُ خَسارةٌ خالِصة.
+//  خاصيّةُ `willReadFrequently` تُثَبَّتُ عِندَ أَوَّلِ `getContext` ولا تُغَيَّرُ
+//  بَعدَها، فَلا سَبيلَ إلّا استِبدالُ العُنصُرِ نَفسِه. وهُوَ آمِنٌ هُنا: لا
+//  مُستَمِعَ أَحداثٍ عَلى `#cv`، وكُلُّ المَواضِعِ تَطلُبُهُ بِـ`$("cv")` عِندَ الحاجة.
+// ══════════════════════════════════════════════════════
+const PIXEL_FX_IDS = ["fx-grain", "fx-pixel", "fx-mosaic", "fx-ripple",
+                      "fx-wave", "fx-swirl", "fx-kaleido", "fx-glitch", "fx-oldfilm"];
+
+function needsPixelReadback() {
+  try {
+    if (typeof radioVal === "function" && radioVal("cf") !== "none") return true;
+  } catch (_) { return true; }
+  for (const id of PIXEL_FX_IDS) {
+    const el = document.getElementById(id);
+    if (el && el.checked) return true;
+  }
+  return false;
+}
+
+// يُبَدِّلُ عُنصُرَ اللَوحةِ عِندَ تَغَيُّرِ الحاجةِ إلى القِراءةِ بِالبِكسِل.
+// ⚠️ لا يُبَدَّلُ أثناءَ التَصدير: مُحَرِّكُ التَصديرِ يُمسِكُ مَرجِعَ اللَوحةِ
+//    لِإنشاءِ VideoFrame، فَتَبديلُها تَحتَه يُنتِجُ إطاراتٍ فارِغة.
+function ensureCanvasMode() {
+  const cv = document.getElementById("cv");
+  if (!cv) return null;
+  if (S.exporting) return cv;
+  const want = needsPixelReadback();
+  if (cv._pixelMode === want) return cv;
+
+  const fresh = cv.cloneNode(false);       // يَنسَخُ id و class و width و height
+  fresh._pixelMode = want;
+  cv.replaceWith(fresh);
+  // ثَبِّتِ الوَضعَ بِأَوَّلِ نِداءِ getContext
+  fresh.getContext("2d", { willReadFrequently: want });
+  if (typeof fitCanvas === "function") fitCanvas();
+  console.log(`[SIRM] وَضعُ اللَوحة: ${want ? "قِراءةٌ بِالبِكسِل (بَرمَجيّ)" : "مُعَجَّلٌ بِالعَتاد"}`);
+  return fresh;
+}
+
 function drawFrame(ts) {
   const cv = $("cv");
-  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  // v1.2.15 — الوَضعُ مُثَبَّتٌ مُسبَقاً عَبرَ ensureCanvasMode (الوُسَطاءُ تُتَجاهَلُ
+  //   بَعدَ أَوَّلِ نِداء). كانَ العَلَمُ مَرفوعاً دائِماً فَيُلغي تَسريعَ العَتاد.
+  const ctx = cv.getContext("2d", { willReadFrequently: cv._pixelMode !== false });
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
 
@@ -4028,7 +4404,10 @@ function onLogoUpload(input) {
   const isVideo = /\.(mov|mp4|webm)$/i.test(file.name) || file.type.startsWith("video/");
 
   if (S.logoVid) { try { S.logoVid.pause(); } catch (_) {} S.logoVid = null; }
+  if (S.logoVidMate) { try { S.logoVidMate.pause(); } catch (_) {} S.logoVidMate = null; }
   S.logoImg = null;
+  // v1.2.15 — احفَظِ المَلَفَّ لِيُضَمَّنَ في المَشروع (كانَ شِعارُ الفيديو يَضيعُ)
+  S.logoVidFile = isVideo ? file : null;
 
   if (isVideo) {
     const vid = document.createElement("video");
@@ -4045,7 +4424,9 @@ function onLogoUpload(input) {
       $("logo-vid-preview").src = url;
       $("logo-vid-preview").style.display = "block";
       $("logo-img-preview").style.display = "none";
-      toast("✅ شعار فيديو تم تحميله (الفيديو لا يُحفظ تلقائياً بين المشاريع — حجمه كبير)", "info", 5000);
+      S.logoVidUrl = url;
+      ensureLogoLoopMate(url);   // v1.2.15 — رَفيقُ اللَفِّ السَلِس
+      toast("✅ شِعارُ فيديو — يُحفَظُ مَعَ المَشروع", "success", 4000);
       // فيديوهات الشعار أكبر من سعة localStorage فلا تُحفظ. ننظّف أي حفظ سابق.
       try { localStorage.removeItem(LOGO_PERSIST_KEY); } catch (_) {}
     };
@@ -4081,6 +4462,8 @@ function onLogoUpload(input) {
 
 function removeLogo() {
   if (S.logoVid) { try { S.logoVid.pause(); } catch (_) {} S.logoVid = null; }
+  if (S.logoVidMate) { try { S.logoVidMate.pause(); } catch (_) {} S.logoVidMate = null; }
+  S.logoVidFile = null; S.logoVidUrl = null;
   S.logoImg = null;
   $("logo-preview").style.display = "none";
   $("logo-upload").value = "";
@@ -4106,8 +4489,56 @@ function restoreLogo() {
   img.src = dataUrl;
 }
 
+// ══════════════════════════════════════════════════════
+//  v1.2.7 — لَفٌّ سَلِسٌ لِشِعارِ الفيديو
+//  ───────────────────────────────────────────────────
+//  `video.loop = true` يَقطَعُ قَطعاً حادّاً مِن آخِرِ إطارٍ إلى أَوَّلِه، فَتُرى
+//  «وَمضةُ» الإعادةِ كُلَّ دَورة. الحَلُّ نَفسُ حَلِّ مَقاطِعِ الخَلفيّة: عُنصُرٌ
+//  ثانٍ بِنَفسِ المَصدَرِ يُشَغَّلُ مِنَ البِدايةِ خِلالَ آخِرِ LOGO_LOOP_FADE ثانِية،
+//  فَيَتَلاشى الأَوَّلُ ويَظهَرُ الثاني — دَورةٌ بِلا انقِطاعٍ مَرئيّ.
+// ══════════════════════════════════════════════════════
+const LOGO_LOOP_FADE = 0.45;   // ثانِية
+
+function ensureLogoLoopMate(url) {
+  if (!url) return;
+  if (S.logoVidMate && S.logoVidMate.dataset.src === url) return;
+  if (S.logoVidMate) { try { S.logoVidMate.pause(); } catch (_) {} }
+  const m = document.createElement("video");
+  m.src = url;
+  m.dataset.src = url;
+  m.loop = true; m.muted = true; m.playsInline = true;
+  m.load();
+  S.logoVidMate = m;
+}
+
+/**
+ * يُعيدُ { src, alpha, src2, alpha2 } لِرَسمِ الشِعارِ بِلَفٍّ سَلِس.
+ * حينَ لا يَكونُ فيديو أو تَكونُ مُدَّتُهُ مَجهولةً يَرجِعُ المَصدَرَ وَحدَه.
+ */
+function logoLoopSources() {
+  const v = S.logoVid;
+  if (!v) return { src: S.logoImg, alpha: 1 };
+  const dur = v.duration;
+  if (!isFinite(dur) || dur < LOGO_LOOP_FADE * 3) return { src: v, alpha: 1 };
+
+  const remain = dur - v.currentTime;
+  const mate = S.logoVidMate;
+  if (remain > LOGO_LOOP_FADE || !mate || mate.readyState < 2) {
+    // خارِجَ نافِذةِ التَلاشي: أَعِدِ الرَفيقَ لِلبِدايةِ استِعداداً لِلدَورةِ القادِمة
+    if (mate && !mate.paused) { try { mate.pause(); mate.currentTime = 0; } catch (_) {} }
+    return { src: v, alpha: 1 };
+  }
+
+  // داخِلَ النافِذة: شَغِّلِ الرَفيقَ مِنَ البِدايةِ وامزِج
+  if (mate.paused) { try { mate.currentTime = 0; mate.play().catch(() => {}); } catch (_) {} }
+  const t = 1 - (remain / LOGO_LOOP_FADE);          // 0 → 1
+  const k = t < 0 ? 0 : t > 1 ? 1 : t;
+  return { src: v, alpha: 1 - k, src2: mate, alpha2: k };
+}
+
 function drawLogo(ctx, W, H) {
-  const src = S.logoVid || S.logoImg;
+  const loop = logoLoopSources();          // v1.2.15 — لَفٌّ سَلِس
+  const src = loop.src || S.logoVid || S.logoImg;
   if (!src) return;
 
   const pos = $("logo-pos").value;
@@ -4152,9 +4583,14 @@ function drawLogo(ctx, W, H) {
     ctx.restore();
   } else {
     ctx.save();
-    ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = "source-over";
+    // v1.2.15 — في نافِذةِ اللَفِّ نَرسُمُ المَصدَرَينِ مُتَمازِجَين فَلا يُرى القَطع
+    ctx.globalAlpha = opacity * (loop.alpha != null ? loop.alpha : 1);
     ctx.drawImage(src, x, y, drawW, drawH);
+    if (loop.src2 && loop.alpha2 > 0) {
+      ctx.globalAlpha = opacity * loop.alpha2;
+      ctx.drawImage(loop.src2, x, y, drawW, drawH);
+    }
     ctx.restore();
   }
 }
@@ -10920,6 +11356,25 @@ async function serializeProject() {
   if (logoDataURL) {
     assets.push({ key: "logo", name: "logo.png", mode: "embedded", dataURL: logoDataURL });
   }
+  // v1.2.15 — شِعارُ الفيديو أَصلٌ كامِلٌ كَغَيرِه (كانَ لا يُحفَظُ البَتّة)
+  if (S.logoVidFile) {
+    const a = {
+      key: "logoVideo",
+      name: S.logoVidFile.name || "logo.mp4",
+      size: S.logoVidFile.size || 0,
+      mime: S.logoVidFile.type || "video/mp4",
+    };
+    if (S.logoVidFile.size <= ASSET_EMBED_MAX) {
+      a.mode = "embedded";
+      a.dataURL = await fileToDataURL(S.logoVidFile);
+    } else {
+      a.mode = "missing";
+      a.reason = "حجم أكبر من الحدّ المسموح";
+    }
+    assets.push(a);
+  }
+  if (false) {
+  }
 
   return {
     format: PROJECT_FORMAT,
@@ -11056,7 +11511,9 @@ async function restoreAssetFromDataURL(asset) {
   const file = new File([blob], asset.name, { type: asset.mime || blob.type });
   const fakeInput = { files: [file], value: "" };
 
-  if (asset.key === "logo") {
+  if (asset.key === "logoVideo") {
+    if (typeof onLogoUpload === "function") onLogoUpload({ files: [file] });
+  } else if (asset.key === "logo") {
     try { localStorage.setItem("gt_sirm_logo_v1", asset.dataURL); } catch (_) {}
     if (typeof restoreLogo === "function") restoreLogo();
   } else if (asset.key === "bgImage") {
