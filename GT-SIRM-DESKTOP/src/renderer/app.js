@@ -11520,11 +11520,19 @@ async function deserializeProject(proj) {
   }
 
   // v1.2 — استعادة حالة الأَقسام القابِلة للطَيّ (details) بحَسب التَرتيب
+  // ⚠️ v1.2.18 — الاستعادةُ بِالفِهرِسِ تَصلُحُ ما دامَ عَدَدُ الأَقسامِ لَم يَتَغَيَّر.
+  //   وقَد أُضيفَت أَقسامٌ وحُذِفَت بَينَ الإصدارات، فَمَشروعٌ قَديمٌ يَفتَحُ أَقساماً
+  //   لا عَلاقةَ لَها بِما حُفِظ ويَطوي غَيرَها. فَإن اختَلَفَ العَدَدُ نُبقي حالةَ
+  //   الصَفحةِ الافتِراضيّةَ بَدَلَ إفسادِها.
   if (Array.isArray(proj.detailsOpen)) {
     const allDetails = document.querySelectorAll("details");
-    proj.detailsOpen.forEach((wasOpen, i) => {
-      if (allDetails[i]) allDetails[i].open = !!wasOpen;
-    });
+    if (proj.detailsOpen.length === allDetails.length) {
+      proj.detailsOpen.forEach((wasOpen, i) => {
+        if (allDetails[i]) allDetails[i].open = !!wasOpen;
+      });
+    } else {
+      console.warn(`[SIRM] عَدَدُ الأَقسامِ تَغَيَّرَ (${proj.detailsOpen.length} → ${allDetails.length}) — أُبقيَت الحالةُ الافتِراضيّة`);
+    }
   }
 
   // v1.2 fix — تَطبيق النَصّ الحرّ فَقط إن كان توگل free-text-on مُفَعَّلاً وقت الحَفظ.
