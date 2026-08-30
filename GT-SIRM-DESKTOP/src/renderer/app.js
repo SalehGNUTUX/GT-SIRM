@@ -675,6 +675,39 @@ function _currentAppVersion() {
   return /^\d+\.\d+/.test(t) ? t : "0.0.0";
 }
 
+// v1.2.17 — الفَحصُ التِلقائيُّ عِندَ الإقلاع (مُشتَغِلٌ افتِراضيّاً)
+function autoUpdateEnabled() {
+  const el = document.getElementById("update-auto-on");
+  if (el) return !!el.checked;
+  try { return localStorage.getItem("gt_sirm_update_auto") !== "0"; } catch (_) { return true; }
+}
+
+function initAutoUpdateToggle() {
+  const el = document.getElementById("update-auto-on");
+  if (!el) return;
+  try {
+    const v = localStorage.getItem("gt_sirm_update_auto");
+    el.checked = (v === null) ? true : (v !== "0");
+  } catch (_) {}
+  el.addEventListener("change", () => {
+    try { localStorage.setItem("gt_sirm_update_auto", el.checked ? "1" : "0"); } catch (_) {}
+    toast?.(el.checked
+      ? "⏱️ سيُفحَصُ عَنِ التَحديثاتِ تِلقائيّاً مَرّةً كُلَّ أُسبوع"
+      : "⏸️ أُوقِفَ الفَحصُ التِلقائيّ — استَعمِل زِرَّ الفَحصِ عِندَ الحاجة", "info", 3000);
+  });
+}
+
+// v1.2.17 — فَحصٌ هادِئٌ أُسبوعيٌّ عِندَ الإقلاع (يَحتَرِمُ التوگل)
+async function autoCheckForUpdates() {
+  if (!autoUpdateEnabled()) return;
+  try {
+    const last = parseInt(localStorage.getItem("gt_sirm_update_lastcheck") || "0", 10);
+    if (last && Date.now() - last < 7 * 86400000) return;
+    localStorage.setItem("gt_sirm_update_lastcheck", String(Date.now()));
+  } catch (_) {}
+  await checkForUpdates(true);
+}
+
 // v1.2.16 — قَناةُ التَحديث: مُستَقِرٌّ وَحدَه (الافتِراض) أَو مَعَ الاختِباريّ
 function betaUpdatesEnabled() {
   const el = document.getElementById("update-include-beta");
@@ -2871,6 +2904,8 @@ function initEventListeners() {
   // v1.2.15 — فَحصُ تَحديثِ البَرنامَج
   $("check-update-btn")?.addEventListener("click", () => checkForUpdates(false));
   initBetaUpdateToggle();   // v1.2.16 — قَناةُ التَحديث
+  initAutoUpdateToggle();   // v1.2.17 — الفَحصُ التِلقائيّ
+  setTimeout(() => { try { autoCheckForUpdates(); } catch (_) {} }, 6000);
 
   // v1.2.15 — مَشروعٌ جَديد
   $("proj-new-btn")?.addEventListener("click", newProjectPrompt);
@@ -2948,8 +2983,6 @@ function initEventListeners() {
   const hidePwaBannerBtn = $("hide-pwa-banner-btn");
   if (hidePwaBannerBtn) hidePwaBannerBtn.addEventListener("click", hidePwaBanner);
 
-  const resetSettingsBtn = $("reset-settings-btn");
-  if (resetSettingsBtn) resetSettingsBtn.addEventListener("click", resetAllSettings);
 
   // ── كتم الصوت ───────────────────────────────────
   const mutePreviewBtn = $("mute-preview-btn");

@@ -2232,6 +2232,7 @@ function initEventListeners() {
   const upCheck = $("check-update-btn");
   if (upCheck) upCheck.addEventListener("click", () => checkForUpdates(false));
   initBetaUpdateToggle();   // v1.2.16 — قَناةُ التَحديث
+  initAutoUpdateToggle();   // v1.2.17 — الفَحصُ التِلقائيّ
 
   // v1.2.1 — سَقفُ دِقّةِ التَصدير (كانَ عُنصُراً مَيِّتاً لا يَقرَؤُهُ أَحَد)
   const resEl = $("export-res");
@@ -2344,8 +2345,6 @@ function initEventListeners() {
   const cancelExportBtn = $("cancel-export-btn");
   if (cancelExportBtn) cancelExportBtn.addEventListener("click", cancelExport);
 
-  const resetSettingsBtn = $("reset-settings-btn");
-  if (resetSettingsBtn) resetSettingsBtn.addEventListener("click", resetAllSettings);
 
   // Radio buttons
   document.querySelectorAll('input[name="fmt"]').forEach(radio => {
@@ -7187,11 +7186,33 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.16";
+const APP_VERSION = "1.2.17";
 let _updateInfo = null;
 
 // v1.2.16 — قَناةُ التَحديث: مُستَقِرٌّ وَحدَه (الافتِراض) أَو مَعَ الاختِباريّ.
 //   الاختِباريُّ يَحمِلُ أَحدَثَ المَزايا وقَد يَحمِلُ أَعطاباً، فَلا يُفرَضُ عَلى أَحَد.
+// v1.2.17 — الفَحصُ التِلقائيُّ عِندَ الإقلاع (مُشتَغِلٌ افتِراضيّاً)
+function autoUpdateEnabled() {
+  const el = document.getElementById("update-auto-on");
+  if (el) return !!el.checked;
+  try { return localStorage.getItem("gt_sirm_update_auto") !== "0"; } catch (_) { return true; }
+}
+
+function initAutoUpdateToggle() {
+  const el = document.getElementById("update-auto-on");
+  if (!el) return;
+  try {
+    const v = localStorage.getItem("gt_sirm_update_auto");
+    el.checked = (v === null) ? true : (v !== "0");
+  } catch (_) {}
+  el.addEventListener("change", () => {
+    try { localStorage.setItem("gt_sirm_update_auto", el.checked ? "1" : "0"); } catch (_) {}
+    toast?.(el.checked
+      ? "⏱️ سيُفحَصُ عَنِ التَحديثاتِ تِلقائيّاً مَرّةً كُلَّ أُسبوع"
+      : "⏸️ أُوقِفَ الفَحصُ التِلقائيّ — استَعمِل زِرَّ الفَحصِ عِندَ الحاجة", "info", 3000);
+  });
+}
+
 function betaUpdatesEnabled() {
   const el = document.getElementById("update-include-beta");
   if (el) return !!el.checked;
@@ -7229,7 +7250,10 @@ async function checkForUpdates(silent) {
     if (info.available) {
       showUpdateModal(info);
     } else if (!silent) {
-      toast(`✅ أنتَ عَلى أَحدَثِ إصدار (${info.current}) — قَناةُ ${betaUpdatesEnabled() ? "الاختِباريّ" : "المُستَقِرّ"}`, "success", 3000);
+      const msg = `✅ أنتَ عَلى أَحدَثِ إصدار (${info.current}) — قَناةُ ${betaUpdatesEnabled() ? "الاختِباريّ" : "المُستَقِرّ"}`;
+      toast(msg, "success", 3000);
+      const note = document.getElementById("update-status-note");
+      if (note) note.textContent = msg;
     }
   } catch (e) {
     if (!silent) toast("⚠️ تَعَذَّرَ الفَحص: " + String(e.message || e).slice(0, 60), "warn", 3500);
@@ -7330,6 +7354,8 @@ async function updateNow() {
 
 // فَحصٌ تِلقائيٌّ هادِئٌ عِندَ الإقلاع (مَرّةً كُلَّ 24 ساعةً كَحَدٍّ أَقصى)
 async function autoCheckForUpdates() {
+  // v1.2.17 — يَحتَرِمُ توگل «الفَحصُ التِلقائيّ» في مِطواةِ التَحديثات
+  if (!autoUpdateEnabled()) return;
   try {
     const raw = localStorage.getItem("gt_sirm_update_snooze");
     if (raw) {
