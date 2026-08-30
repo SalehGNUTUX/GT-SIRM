@@ -62,6 +62,7 @@ public class GtsirmNative extends Plugin {
         String displayPath;   // مَسارٌ يُعرَضُ لِلمُستَخدِم
         long bytes;
         boolean usedFallback; // v1.2.10 — رَفَضَ MediaStore فَنَزَلنا لِمُجَلَّدِ البَرنامَج
+        String mediaStoreError;// v1.2.19 — لِمَ رَفَضَ MediaStore؟ نُبلِغُ المُستَخدِمَ بِهِ
     }
 
     private final Map<String, PendingWrite> pending = new HashMap<>();
@@ -94,62 +95,65 @@ public class GtsirmNative extends Plugin {
         try {
             Context ctx = getContext();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // ⚠️ v1.2.10 — MediaProvider يَرفُضُ (أو يُعيدُ تَسميةَ) المِلَفّاتِ التي
-                //   لا تُطابِقُ لاحِقَتُها نَوعَ المُحتَوى — و`.gtsirm` لاحِقةٌ مَجهولةٌ
-                //   لَه. فَإن فَشِلَ الإدراجُ نَنزِلُ إلى مُجَلَّدِ البَرنامَجِ الخارِجيِّ
-                //   بَدَلَ أن نَفشَلَ — المُهِمُّ ألّا يَضيعَ عَمَلُ المُستَخدِم.
+                // ⚠️ v1.2.19 — سُلَّمُ مُحاوَلات، لا مُحاوَلةٌ واحِدة.
+                //   MediaProvider يَختَلِفُ سُلوكُهُ بَينَ إصداراتِ أندرويد وبَينَ
+                //   المُصَنِّعين: قَد يَرفُضُ نَوعَ المُحتَوى، أَو الاسمَ ذا اللاحِقةِ
+                //   المُزدَوَجة (`.gtsirm.json`)، أَو المُجَلَّدَ الفَرعيّ. كانَت
+                //   مُحاوَلةٌ واحِدةٌ فاشِلةٌ تُسقِطُنا فَوراً إلى مُجَلَّدِ البَرنامَجِ
+                //   الخاصِّ — وهُوَ مَوضِعٌ لا يَراهُ المُستَخدِمُ في «التَنزيلات»،
+                //   فَيَظُنُّ أَنَّ شَيئاً لَم يُحفَظ. الآنَ نُجَرِّبُ أَربَعَ صيَغٍ
+                //   قَبلَ أَن نَستَسلِم، ونُسَجِّلُ سَبَبَ كُلِّ إخفاق.
                 Uri item = null;
-                try {
-                    ContentResolver resolver = ctx.getContentResolver();
-                    ContentValues cv = new ContentValues();
-                    cv.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-                    // ⚠️ v1.2.13 — كانَ يُفرَضُ octet-stream لِغَيرِ الفيديو، فَصَنَّفَ
-                    //   MediaStore مَلَفَّ المَشروعِ **BIN** فَخَفَتَ في مُتَصَفِّحِ
-                    //   المِلَفّاتِ ولَم يَفتَحهُ شَيء. الآنَ اسمُ المَلَفِّ يَنتَهي
-                    //   بِـ.gtsirm.json فَنُمَرِّرُ نَوعَهُ الحَقيقيَّ application/json:
-                    //   تُطابِقُ اللاحِقةُ النَوعَ فَيَقبَلُهُ MediaStore بِلا تَشويهٍ
-                    //   ويُصَنِّفُهُ JSON كَما كانَ يَعمَلُ سابِقاً.
-                    cv.put(MediaStore.MediaColumns.MIME_TYPE, mime);
-                    cv.put(MediaStore.MediaColumns.RELATIVE_PATH, subDir);
-                    cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
-
-                    Uri collection = isVideo
-                            ? MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                            : MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
-
-                    item = resolver.insert(collection, cv);
-                    if (item != null) {
-                        pw.uri = item;
-                        pw.stream = resolver.openOutputStream(item);
-                        pw.displayPath = subDir + "/" + name;
-                    }
-                } catch (Exception mediaEx) {
-                    android.util.Log.w("GT-SIRM", "MediaStore رَفَضَ المَلَفّ: " + mediaEx.getMessage());
-                    item = null;
-                    pw.uri = null;
-                    pw.stream = null;
+                StringBuilder why = new StringBuilder();
+                String simpleName = name.replaceAll("\\.gtsirm(?=\\.)", "");
+                String[][] attempts = {
+                        { name,       mime },
+                        { name,       "application/octet-stream" },
+                        { simpleName, mime },
+                        { simpleName, "application/octet-stream" },
+                };
+                for (int at = 0; at < attempts.length && pw.stream == null; at++) {
+                    String tryName = attempts[at][0];
+                    String tryMime = attempts[at][1];
+                    if (at > 0 && tryName.equals(attempts[at - 1][0])
+                              && tryMime.equals(attempts[at - 1][1])) continue;
+                    item = tryMediaStoreInsert(ctx, pw, tryName, tryMime, subDir, isVideo, why);
                 }
-
                 if (pw.stream == null) {
-                    // احتِياطٌ مَضمون: مُجَلَّدُ البَرنامَجِ الخارِجيّ
-                    File dir = new File(ctx.getExternalFilesDir(null), isVideo ? "videos" : "projects");
-                    if (!dir.exists() && !dir.mkdirs()) throw new Exception("تَعَذَّرَ إنشاءُ مُجَلَّدِ الحِفظ");
+                    android.util.Log.w("GT-SIRM", "MediaStore رَفَضَ كُلَّ الصِيَغ: " + why);
+                    pw.mediaStoreError = why.toString();
+                }
+            } else {
+                // API < 29 — كِتابةٌ مُباشِرةٌ بِإذنِ WRITE_EXTERNAL_STORAGE.
+                // ⚠️ v1.2.19 — الإذنُ خَطِرٌ ويَحتاجُ مَنحاً وَقتَ التَشغيل؛ إن لَم
+                //   يُمنَح رَمى FileOutputStream استِثناءَ EACCES فَسَقَطَ الحَفظُ
+                //   كُلُّهُ. الآنَ نَنزِلُ إلى مُجَلَّدِ البَرنامَجِ بَدَلَ الفَشَل.
+                try {
+                    File base = Environment.getExternalStoragePublicDirectory(
+                            isVideo ? Environment.DIRECTORY_MOVIES : Environment.DIRECTORY_DOWNLOADS);
+                    File dir = new File(base, "GT-SIRM");
+                    if (!dir.exists() && !dir.mkdirs()) throw new Exception("تَعَذَّرَ إنشاءُ المُجَلَّد");
                     File out = new File(dir, name);
                     pw.file = out;
                     pw.stream = new FileOutputStream(out);
                     pw.displayPath = out.getAbsolutePath();
-                    pw.usedFallback = true;
+                } catch (Exception legacyEx) {
+                    pw.mediaStoreError = "التَخزينُ المُشتَرَك: " + legacyEx.getMessage();
+                    pw.file = null; pw.stream = null;
                 }
-            } else {
-                // API < 29 — كِتابةٌ مُباشِرةٌ بِإذنِ WRITE_EXTERNAL_STORAGE
-                File base = Environment.getExternalStoragePublicDirectory(
-                        isVideo ? Environment.DIRECTORY_MOVIES : Environment.DIRECTORY_DOWNLOADS);
-                File dir = new File(base, "GT-SIRM");
-                if (!dir.exists() && !dir.mkdirs()) throw new Exception("تَعَذَّرَ إنشاءُ المُجَلَّد");
+            }
+
+            // احتِياطٌ مَضمونٌ لِكِلا المَسارَين: مُجَلَّدُ البَرنامَجِ الخارِجيّ.
+            //   لا يَحتاجُ إذناً ولا يَفشَلُ — لَكِنَّهُ خارِجَ نَظَرِ المُستَخدِم، لِذا
+            //   نَرفَعُ `usedFallback` فَتَعرِضُ الواجِهةُ عَرضَ «حِفظٌ باسم…» فَوراً.
+            if (pw.stream == null) {
+                File dir = new File(ctx.getExternalFilesDir(null), isVideo ? "videos" : "projects");
+                if (!dir.exists() && !dir.mkdirs()) throw new Exception("تَعَذَّرَ إنشاءُ مُجَلَّدِ الحِفظ");
                 File out = new File(dir, name);
                 pw.file = out;
                 pw.stream = new FileOutputStream(out);
                 pw.displayPath = out.getAbsolutePath();
+                pw.usedFallback = true;
             }
 
             if (pw.stream == null) throw new Exception("تَعَذَّرَ فَتحُ مَجرى الكِتابة");
@@ -160,10 +164,50 @@ public class GtsirmNative extends Plugin {
             JSObject ret = new JSObject();
             ret.put("token", token);
             ret.put("displayPath", pw.displayPath);
+            ret.put("usedFallback", pw.usedFallback);
+            if (pw.mediaStoreError != null) ret.put("mediaStoreError", pw.mediaStoreError);
             call.resolve(ret);
         } catch (Exception e) {
             closeQuietly(pw);
             call.reject("فَشَلَ فَتحُ المَلَفِّ لِلكِتابة: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * مُحاوَلةُ إدراجٍ واحِدةٌ في MediaStore. تُعيدُ العُنوانَ عِندَ النَجاحِ وتَملَأُ
+     * `pw.stream`/`pw.uri`/`pw.displayPath`، أَو `null` وتُضيفُ السَبَبَ إلى `why`.
+     */
+    private Uri tryMediaStoreInsert(Context ctx, PendingWrite pw, String name, String mime,
+                                    String subDir, boolean isVideo, StringBuilder why) {
+        try {
+            ContentResolver resolver = ctx.getContentResolver();
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+            cv.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, subDir);
+            cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+
+            Uri collection = isVideo
+                    ? MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                    : MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+
+            Uri item = resolver.insert(collection, cv);
+            if (item == null) { why.append("[").append(mime).append(" → insert=null] "); return null; }
+            OutputStream os = resolver.openOutputStream(item);
+            if (os == null) {
+                try { resolver.delete(item, null, null); } catch (Exception ignored) {}
+                why.append("[").append(mime).append(" → openOutputStream=null] ");
+                return null;
+            }
+            pw.uri = item;
+            pw.stream = os;
+            pw.displayPath = subDir + "/" + name;
+            return item;
+        } catch (Exception e) {
+            why.append("[").append(mime).append(" → ").append(e.getClass().getSimpleName())
+               .append(": ").append(e.getMessage()).append("] ");
+            pw.uri = null; pw.stream = null;
+            return null;
         }
     }
 
@@ -221,8 +265,18 @@ public class GtsirmNative extends Plugin {
             ret.put("displayPath", pw.displayPath);
             ret.put("bytes", pw.bytes);
             ret.put("usedFallback", pw.usedFallback);
+            if (pw.mediaStoreError != null) ret.put("mediaStoreError", pw.mediaStoreError);
             call.resolve(ret);
         } catch (Exception e) {
+            // ⚠️ v1.2.19 — كانَ الصَفُّ يَبقى في MediaStore بِـIS_PENDING=1 إلى
+            //   الأَبَد: يَظهَرُ في مُتَصَفِّحِ المِلَفّاتِ باهِتاً مُصَنَّفاً BIN ولا
+            //   يَفتَحُهُ شَيء، ويَتَراكَمُ نُسَخاً مَعَ كُلِّ مُحاوَلة. (كانَ `pw` قَد
+            //   أُزيلَ مِنَ الخَريطةِ هُنا، فَلَم يَجِدهُ cancelWrite لِيُنَظِّفَه.)
+            closeQuietly(pw);
+            try {
+                if (pw.uri != null) getContext().getContentResolver().delete(pw.uri, null, null);
+                else if (pw.file != null && pw.file.exists()) pw.file.delete();
+            } catch (Exception ignored) {}
             call.reject("فَشِلَ إغلاقُ المَلَفّ: " + e.getMessage(), e);
         }
     }

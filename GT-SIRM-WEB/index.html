@@ -422,6 +422,13 @@ body.offline .offline-badge{display:block}
     <div id="export-done-where" style="font-size:11px;line-height:1.7;margin-bottom:8px;word-break:break-word"></div>
     <div id="export-done-note" style="font-size:9px;color:var(--t3);line-height:1.6;margin-bottom:8px"></div>
     <div id="export-done-perf" style="display:none;font-size:10px;line-height:1.8;background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-bottom:8px"></div>
+    <!-- v1.2.19 — سِجِلُّ خُطُواتِ الحَفظ: يَظهَرُ عِندَ الفَشَلِ أَوِ النُزولِ
+         لِلاحتِياطِ وَحدَه، فَيَنقُلُهُ المُستَخدِمُ إلَينا بَدَلَ التَخمين. -->
+    <details id="export-done-diag" style="display:none;margin-bottom:8px">
+      <summary style="font-size:9px;color:var(--t3);cursor:pointer">🔎 تَفاصيلُ تِقنيّةٌ لِلحَفظ</summary>
+      <pre id="export-done-diag-txt" dir="ltr" style="font-size:8px;line-height:1.5;max-height:120px;overflow:auto;background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px;margin:6px 0;white-space:pre-wrap;word-break:break-all"></pre>
+      <button class="btn btn-g" id="export-done-diag-copy" style="font-size:9px">📋 اِنسَخِ التَفاصيل</button>
+    </details>
     <div class="modal-btns" style="flex-wrap:wrap;gap:6px">
       <button class="btn btn-g" id="export-done-close-btn">إغلاق</button>
       <button class="btn btn-g" id="export-done-download-btn">⬇️ حِفظٌ آخَر</button>
@@ -500,7 +507,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small>GnuTux Short Islamic Reels Maker v1.2.18</small>
+      <small>GnuTux Short Islamic Reels Maker v1.2.19</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -2056,11 +2063,11 @@ body.offline .offline-badge{display:block}
         <div class="about-logo">
           <img src="GT-SIRM-icons/icon-256.png" class="al-icon" alt="GT-SIRM" style="width:80px;height:80px;">
           <h2>GT-SIRM</h2>
-          <p>GnuTux Short Islamic Reels Maker v1.2.18</p>
+          <p>GnuTux Short Islamic Reels Maker v1.2.19</p>
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.18</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.19</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>

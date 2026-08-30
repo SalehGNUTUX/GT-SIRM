@@ -60,7 +60,13 @@
 
   // حَجمُ القِطعة: يَجِبُ أن يَقبَلَ القِسمةَ عَلى 3 حَتّى لا تَظهَرَ حَشوةُ
   // base64 (=) في وَسَطِ المَجرى فَيَفسُدَ المَلَفّ عِندَ الإلحاق.
-  const CHUNK = 768 * 1024;   // 786432 بايت — يَقبَلُ القِسمةَ عَلى 3
+  // ⚠️ v1.2.19 — كانَت 768 كيلوبايت، أَي **1 ميغابايتٍ بِالتَمام** مِن نَصِّ
+  //   base64 في نِداءٍ واحِدٍ عَبرَ جِسرِ Capacitor. وجِسرُ الـWebView يَعبُرُ
+  //   حُدودَ العَمَليّاتِ بِـBinder، وحَدُّ مُعامَلَتِهِ قُرابةَ 1 م.ب — فَكانَت
+  //   القِطعةُ تَجلِسُ عَلى الحافّةِ تَماماً: تَنجَحُ مَعَ المَشاريعِ الصَغيرةِ
+  //   وتَفشَلُ (أَو تُقتَلُ العارِضَ) مَعَ الأَكبَر. 256 كيلوبايت ⇒ 341 كيلوبايتَ
+  //   نَصّاً: هامِشٌ ثُلاثيٌّ آمِن، والكُلفةُ نِداءاتٌ أَكثَرُ لا غَير.
+  const CHUNK = 256 * 1024;   // 262144 بايت — يَقبَلُ القِسمةَ عَلى 3
 
   async function* blobChunks(blob, size) {
     for (let off = 0; off < blob.size; off += size) {
@@ -69,23 +75,54 @@
     }
   }
 
+  // ── سِجِلُّ الحَفظ ────────────────────────────────────────────
+  //   دائِرةٌ قَصيرةٌ تَحفَظُ آخِرَ خُطُواتِ مُحاوَلةِ الحَفظِ ونَتيجَتَها. تُعرَضُ
+  //   لِلمُستَخدِمِ عِندَ الفَشَلِ أَو النُزولِ لِلاحتِياطِ فَيَنسَخَها إلَينا: بِلا
+  //   هذا لا سَبيلَ لِمَعرِفةِ ما جَرى داخِلَ الجِهاز.
+  const _trace = [];
+  function trace(step, detail) {
+    const line = new Date().toISOString().slice(11, 23) + " · " + step +
+                 (detail === undefined ? "" : " — " + detail);
+    _trace.push(line);
+    if (_trace.length > 60) _trace.shift();
+    try { console.log("[PIO] " + line); } catch (_) {}
+  }
+  function saveTrace() { return _trace.join("\n"); }
+  function clearTrace() { _trace.length = 0; }
+
   // ── 1) الحَفظُ عَبرَ الجِسرِ الأَصليّ (MediaStore) ─────────────
   async function saveViaNative(blob, filename, mime, kind, onProgress) {
     const P = nativePlugin();
-    if (!P) return null;
+    if (!P) { trace("الجِسرُ الأَصليُّ غائِب"); return null; }
     let token = null;
     try {
+      trace("beginWrite", filename + " · " + mime + " · " + kind + " · " +
+                          (blob.size / 1048576).toFixed(2) + " م.ب");
       const begun = await P.beginWrite({ name: filename, mime, kind });
       token = begun.token;
-      let done = 0;
+      if (begun.usedFallback) trace("MediaStore رَفَض", begun.mediaStoreError || "بِلا سَبَبٍ مُعلَن");
+      trace("المَوضِع", begun.displayPath);
+      let done = 0, n = 0;
       for await (const chunk of blobChunks(blob, CHUNK)) {
         await P.appendChunk({ token, data: bytesToBase64(chunk) });
-        done += chunk.length;
+        done += chunk.length; n++;
         if (onProgress) onProgress(done / blob.size);
       }
+      trace("كُتِبَت القِطَع", n + " قِطعة · " + done + " بايت");
       const res = await P.endWrite({ token });
-      return { method: "native", path: res.displayPath, uri: res.uri, bytes: res.bytes };
+      trace("endWrite ✓", res.displayPath + " · " + res.bytes + " بايت");
+      // ⚠️ v1.2.19 — كانَ `usedFallback` يَصِلُ مِنَ الأَصليِّ ثُمَّ يُهمَلُ هُنا،
+      //   فَتَقولُ الواجِهةُ «تَجِدُهُ في مُجَلَّدِ التَنزيلات» والمَلَفُّ في مُجَلَّدِ
+      //   البَرنامَجِ الخاصِّ لا يَراهُ أَحَد. هذا وَحدَهُ يَكفي لِيَظُنَّ المُستَخدِمُ
+      //   أَنَّ الحَفظَ لا يَعمَل.
+      return {
+        method: res.usedFallback ? "native-private" : "native",
+        path: res.displayPath, uri: res.uri, bytes: res.bytes,
+        usedFallback: !!res.usedFallback,
+        reason: res.mediaStoreError || begun.mediaStoreError || null,
+      };
     } catch (e) {
+      trace("فَشِلَ الحَفظُ الأَصليّ", String(e && e.message || e));
       if (token) { try { await P.cancelWrite({ token }); } catch (_) {} }
       console.warn("[PIO] الحَفظُ الأَصليُّ فَشِل:", e);
       return null;
@@ -114,7 +151,7 @@
       }
       let uri = null;
       try { uri = (await FS.getUri({ path, directory })).uri; } catch (_) {}
-      return { method: "capacitor-fs", path, uri, bytes: blob.size };
+      return { method: "capacitor-fs", path, uri, bytes: blob.size, usedFallback: true };
     } catch (e) {
       console.warn("[PIO] كِتابةُ Capacitor Filesystem فَشِلَت:", e);
       return null;
@@ -229,11 +266,15 @@
     }
 
     if (isNativeAndroid()) {
+      clearTrace();
+      trace("طَلَبُ حَفظ", filename);
       const r1 = await saveViaNative(blob, filename, mime, kind, opts.onProgress);
       if (r1) return r1;
+      trace("سُقوطٌ إلى Capacitor Filesystem");
       const r2 = await saveViaCapacitorFS(blob, filename, opts.onProgress);
-      if (r2) return r2;
+      if (r2) { trace("Capacitor FS ✓", r2.path); return r2; }
       // كِلاهُما فَشِل: أَبلِغ بِالفَشَلِ صَراحةً بَدَلَ ادِّعاءِ نَجاحٍ كاذِب
+      trace("فَشِلَت كُلُّ الوَسائِل ✗");
       return null;
     }
 
@@ -676,6 +717,7 @@
     compareVersions,
     GITHUB_REPO,
     isNativeAndroid,
+    saveTrace,
     hasNativeBridge: () => !!nativePlugin(),
     HAS_FSA_SAVE,
     prepareSaveTarget,

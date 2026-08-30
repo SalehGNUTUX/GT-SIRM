@@ -2223,6 +2223,24 @@ function initEventListeners() {
   if (edShare) edShare.addEventListener("click", shareLastExport);
   const edSaveAs = $("export-done-saveas-btn");
   if (edSaveAs) edSaveAs.addEventListener("click", saveAsLastExport);
+  // v1.2.19 — نَسخُ سِجِلِّ الحَفظ (يُغني عَن وَصفِ العَطَبِ بِالكَلِمات)
+  const edDiag = $("export-done-diag-copy");
+  if (edDiag) edDiag.addEventListener("click", async () => {
+    const t = $("export-done-diag-txt")?.textContent || "";
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(t);
+      else throw new Error("no clipboard api");
+      toast("📋 نُسِخَت تَفاصيلُ الحَفظ", "success", 1800);
+    } catch (_) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        document.execCommand("copy"); ta.remove();
+        toast("📋 نُسِخَت تَفاصيلُ الحَفظ", "success", 1800);
+      } catch (e2) { toast("تَعَذَّرَ النَسخ — حَدِّدِ النَصَّ يَدَويّاً", "warn", 3000); }
+    }
+  });
 
   // v1.2.2 — التَحديثات
   const upLater = $("update-later-btn");
@@ -7186,7 +7204,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.18";
+const APP_VERSION = "1.2.19";
 let _updateInfo = null;
 
 // v1.2.16 — قَناةُ التَحديث: مُستَقِرٌّ وَحدَه (الافتِراض) أَو مَعَ الاختِباريّ.
@@ -7635,6 +7653,10 @@ function askProjectName() {
     const cancelBtn = document.getElementById("proj-name-cancel-btn");
     if (!modal || !inp || !okBtn || !cancelBtn) return resolve({ name: suggestedProjectName(), share: false });
     inp.value = suggestedProjectName();
+    // v1.2.19 — قُلِ اللاحِقةَ الحَقيقيّةَ: في الهاتِفِ هيَ `.gtsirm.json`
+    //   (يَشتَرِطُ MediaStore تَطابُقَ اللاحِقةِ مَعَ نَوعِ المُحتَوى).
+    const extHint = modal.querySelector("code");
+    if (extHint && typeof projectFileExt === "function") extHint.textContent = projectFileExt();
     modal.style.display = "flex";
     setTimeout(() => { try { inp.focus(); inp.select(); } catch (_) {} }, 60);
 
@@ -7951,9 +7973,12 @@ function showExportResult(res) {
   if (method === "native") {
     where = `📁 حُفِظَ في: <b>${res.saved.path}</b>`;
     note = "تَجِدُهُ في مَعرِضِ الصُوَرِ والفيديو أو في تَطبيقِ «المِلَفّات». إن لَم يَظهَر فَوراً فَأَعِد فَتحَ المَعرِض.";
-  } else if (method === "capacitor-fs") {
-    where = `📁 حُفِظَ في مُجَلَّدِ البَرنامَج: <b>${res.saved.path}</b>`;
-    note = "تَعَذَّرَ الحَفظُ في المَعرِض، فَحُفِظَ في مُجَلَّدِ البَرنامَجِ الخارِجيّ. استَعمِل «مُشارَكة» لِنَقلِهِ حَيثُ تَشاء.";
+  } else if (method === "native-private" || method === "capacitor-fs") {
+    // ⚠️ v1.2.19 — قُلِ الحَقيقةَ: هذا مُجَلَّدٌ خاصٌّ بِالبَرنامَجِ لا يَظهَرُ في
+    //   المَعرِضِ ولا في «التَنزيلات».
+    where = `⚠️ لَم يُقبَل في التَخزينِ المُشتَرَك — حُفِظَ في مُجَلَّدِ البَرنامَج:<br><b dir="ltr">${res.saved.path}</b>`;
+    note = "هذا المُجَلَّدُ لا يَظهَرُ في المَعرِضِ ولا في «التَنزيلات»، ويُمحى بِإزالةِ البَرنامَج. " +
+           "اِضغَط «📁 حِفظٌ باسم…» الآنَ لِتَنقُلَهُ إلى مَكانٍ دائِمٍ تَختارُهُ بِنَفسِك.";
   } else if (method === "fsa") {
     where = `📁 حُفِظَ في المَكانِ الذي اختَرتَه: <b>${res.saved.path}</b>`;
     note = "";
@@ -7967,6 +7992,8 @@ function showExportResult(res) {
     return;
   }
 
+  updateSaveDiagnostics(res.saved);
+  highlightSaveAsWhenHidden(res.saved);
   $("export-done-title").textContent = "✅ اكتَمَلَ التَصدير";
   $("export-done-where").innerHTML = `${where}<br><span style="color:var(--t3)">الحَجم: ${sizeMB} ميغابايت</span>`;
   const saveAsBtn = $("export-done-saveas-btn");
@@ -8093,6 +8120,41 @@ async function saveAsLastExport() {
 // ══════════════════════════════════════════════════════
 //  v1.2.2 — نَتيجةُ حِفظِ المَشروع: نَفسُ نافِذةِ الناتِجِ مَعَ المُشارَكةِ والحَفظِ باسم
 // ══════════════════════════════════════════════════════
+// v1.2.19 — يُظهِرُ سِجِلَّ خُطُواتِ الحَفظِ عِندَ الإخفاقِ أَوِ النُزولِ لِلاحتِياط.
+//   عِندَ النَجاحِ التامِّ يَبقى مَخفيّاً: لا داعِيَ لِإزعاجِ المُستَخدِمِ بِالتَفاصيل.
+function highlightSaveAsWhenHidden(saved) {
+  const b = $("export-done-saveas-btn");
+  if (!b) return;
+  const m = saved && saved.method;
+  const hidden = !!(saved && (saved.usedFallback || m === "native-private" || m === "capacitor-fs"));
+  b.classList.toggle("btn-a", hidden);
+  b.classList.toggle("btn-g", !hidden);
+}
+
+function updateSaveDiagnostics(saved) {
+  const box = $("export-done-diag"), txt = $("export-done-diag-txt");
+  if (!box || !txt) return;
+  const method = saved && saved.method;
+  const troubled = !saved || method === "native-private" || method === "capacitor-fs" ||
+                   (saved && saved.usedFallback);
+  if (!troubled) { box.style.display = "none"; box.open = false; return; }
+  const lines = [];
+  lines.push("GT-SIRM " + (typeof APP_VERSION !== "undefined" ? APP_VERSION : "?"));
+  lines.push("UA: " + navigator.userAgent);
+  if (saved) {
+    lines.push("method: " + method + "  bytes: " + (saved.bytes ?? "?"));
+    lines.push("path: " + (saved.path || "-"));
+    if (saved.reason) lines.push("reason: " + saved.reason);
+  } else {
+    lines.push("النَتيجة: لَم يُكتَب أَيُّ مَلَفّ");
+  }
+  const tr = (window.PIO && window.PIO.saveTrace) ? window.PIO.saveTrace() : "";
+  if (tr) { lines.push("──"); lines.push(tr); }
+  txt.textContent = lines.join("\n");
+  box.style.display = "";
+  box.open = true;
+}
+
 function showProjectSavedResult(saved, blob, filename, proj) {
   S.lastExport = { blob, filename, mime: "application/json", saved: saved || null, isProject: true };
   const modal = $("export-done-modal");
@@ -8103,9 +8165,10 @@ function showProjectSavedResult(saved, blob, filename, proj) {
   if (method === "native") {
     where = `📁 حُفِظَ المَشروعُ في: <b>${saved.path}</b>`;
     note = "تَجِدُهُ في تَطبيقِ «المِلَفّات» ضِمنَ مُجَلَّدِ التَنزيلات.";
-  } else if (method === "capacitor-fs") {
-    where = `📁 حُفِظَ في مُجَلَّدِ البَرنامَج: <b>${saved.path}</b>`;
-    note = "استَعمِل «مُشارَكة» أو «حِفظٌ باسم…» لِنَقلِهِ حَيثُ تَشاء.";
+  } else if (method === "native-private" || method === "capacitor-fs") {
+    where = `⚠️ لَم يُقبَل في التَخزينِ المُشتَرَك — حُفِظَ في مُجَلَّدِ البَرنامَج:<br><b dir="ltr">${saved.path}</b>`;
+    note = "هذا المُجَلَّدُ لا يَظهَرُ في «التَنزيلات» ويُمحى بِإزالةِ البَرنامَج. " +
+           "اِضغَط «📁 حِفظٌ باسم…» الآنَ لِتَنقُلَ المَشروعَ إلى مَكانٍ دائِمٍ تَختارُهُ بِنَفسِك.";
   } else if (method === "fsa") {
     where = `📁 حُفِظَ في: <b>${saved.path}</b>`;
     note = "";
@@ -8143,6 +8206,9 @@ function showProjectSavedResult(saved, blob, filename, proj) {
       perfEl.style.display = "none";
     }
   }
+
+  updateSaveDiagnostics(saved);
+  highlightSaveAsWhenHidden(saved);
 
   const shareBtn = $("export-done-share-btn");
   if (shareBtn) {
@@ -9877,7 +9943,7 @@ async function deserializeProject(proj) {
   if (missing.length) showMissingAssetsModal(missing);
 
   // v1.2 — استعادة حالة الأَقسام القابِلة للطَيّ (details) بحَسب التَرتيب
-  // ⚠️ v1.2.18 — الاستعادةُ بِالفِهرِسِ تَصلُحُ ما دامَ عَدَدُ الأَقسامِ لَم يَتَغَيَّر.
+  // ⚠️ v1.2.19 — الاستعادةُ بِالفِهرِسِ تَصلُحُ ما دامَ عَدَدُ الأَقسامِ لَم يَتَغَيَّر.
   //   وقَد أُضيفَت أَقسامٌ وحُذِفَت بَينَ الإصدارات، فَمَشروعٌ قَديمٌ يَفتَحُ أَقساماً
   //   لا عَلاقةَ لَها بِما حُفِظ ويَطوي غَيرَها. فَإن اختَلَفَ العَدَدُ نُبقي حالةَ
   //   الصَفحةِ الافتِراضيّةَ بَدَلَ إفسادِها.
@@ -10087,6 +10153,7 @@ async function saveProjectToPath(_filePath) {
           "المَشروعُ ما زالَ في الذاكِرة. استَعمِل «📤 مُشارَكة» لِإرسالِهِ أو حِفظِهِ " +
           "بِتَطبيقٍ آخَر، أو «📁 حِفظٌ باسم…» لِاختيارِ مَوضِعٍ بِنَفسِك.";
         const perfEl = $("export-done-perf"); if (perfEl) perfEl.style.display = "none";
+        updateSaveDiagnostics(null);
         const sb = $("export-done-share-btn"); if (sb) sb.style.display = "";
         const sa = $("export-done-saveas-btn"); if (sa) sa.style.display = "";
         const db = $("export-done-download-btn"); if (db) db.style.display = "";
