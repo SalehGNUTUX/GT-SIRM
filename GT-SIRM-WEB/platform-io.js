@@ -87,8 +87,16 @@
     if (_trace.length > 60) _trace.shift();
     try { console.log("[PIO] " + line); } catch (_) {}
   }
-  function saveTrace() { return _trace.join("\n"); }
+  function saveTrace() {
+    if (_trace.length) return _trace.join("\n");
+    // v1.2.20 — سِجِلُّ آخِرِ مُحاوَلةٍ يَبقى بَعدَ إغلاقِ البَرنامَج: العَطَبُ قَد
+    //   يَقَعُ ولا يُفتَحُ التَشخيصُ إلّا في جَلسةٍ تالِية.
+    try { return localStorage.getItem("gt_sirm_last_save_trace") || ""; } catch (_) { return ""; }
+  }
   function clearTrace() { _trace.length = 0; }
+  function persistTrace() {
+    try { localStorage.setItem("gt_sirm_last_save_trace", _trace.join("\n")); } catch (_) {}
+  }
 
   // ── 1) الحَفظُ عَبرَ الجِسرِ الأَصليّ (MediaStore) ─────────────
   async function saveViaNative(blob, filename, mime, kind, onProgress) {
@@ -269,12 +277,13 @@
       clearTrace();
       trace("طَلَبُ حَفظ", filename);
       const r1 = await saveViaNative(blob, filename, mime, kind, opts.onProgress);
-      if (r1) return r1;
+      if (r1) { persistTrace(); return r1; }
       trace("سُقوطٌ إلى Capacitor Filesystem");
       const r2 = await saveViaCapacitorFS(blob, filename, opts.onProgress);
-      if (r2) { trace("Capacitor FS ✓", r2.path); return r2; }
+      if (r2) { trace("Capacitor FS ✓", r2.path); persistTrace(); return r2; }
       // كِلاهُما فَشِل: أَبلِغ بِالفَشَلِ صَراحةً بَدَلَ ادِّعاءِ نَجاحٍ كاذِب
       trace("فَشِلَت كُلُّ الوَسائِل ✗");
+      persistTrace();
       return null;
     }
 

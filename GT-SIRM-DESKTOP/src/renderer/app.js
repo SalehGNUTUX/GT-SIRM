@@ -11978,3 +11978,164 @@ if (document.readyState === "loading") {
 } else {
   setTimeout(initProjectSystem, 100);
 }
+
+// ══════════════════════════════════════════════════════
+//  v1.2.20 — نِظامُ التَحديثِ في سَطحِ المَكتَب
+//  ───────────────────────────────────────────────────
+//  ⚠️ كانَ قِسمُ «🔄 التَحديثات» مَوجوداً في الواجِهةِ مُنذُ v1.2.17 **بِلا أَيِّ
+//  مَنطِقٍ خَلفَه**: التوگلانِ لا يُخَزَّنانِ وزِرُّ الفَحصِ لا يَفعَلُ شَيئاً. أُضيفَ
+//  في الحُزمَتَينِ مَعاً ووُصِلَ في نُسخةِ الويبِ وَحدَها. هذا يُصلِحُه.
+//
+//  سَطحُ المَكتَبِ لا يُثَبِّتُ بِنَفسِه: حُزَمُ AppImage/DEB/RPM يُثَبِّتُها
+//  المُستَخدِمُ بِمُديرِ حُزَمِهِ — فَنَفتَحُ صَفحةَ الإصدارِ ولا نَدَّعي أَكثَر.
+// ══════════════════════════════════════════════════════
+const GT_SIRM_REPO = "SalehGNUTUX/GT-SIRM";
+let _dtUpdateInfo = null;
+
+function _dtCmpVersions(a, b) {
+  const pa = String(a).replace(/^v/i, "").split(/[.\-+]/);
+  const pb = String(b).replace(/^v/i, "").split(/[.\-+]/);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = parseInt(pa[i] || "0", 10) || 0;
+    const nb = parseInt(pb[i] || "0", 10) || 0;
+    if (na !== nb) return na > nb ? 1 : -1;
+  }
+  return 0;
+}
+
+function _dtUpdateEls(baseId) {
+  return [document.getElementById(baseId),
+          document.getElementById(baseId + "-about")].filter(Boolean);
+}
+
+function _dtAppVersion() {
+  const el = document.querySelector(".info-v");
+  const t = el ? el.textContent.trim() : "";
+  return /^\d+\.\d+/.test(t) ? t : "1.2.20";
+}
+
+function dtBetaUpdatesEnabled() {
+  const el = document.getElementById("update-include-beta");
+  if (el) return !!el.checked;
+  try { return localStorage.getItem("gt_sirm_update_beta") === "1"; } catch (_) { return false; }
+}
+
+function _dtInitUpdateToggle(baseId, storeKey, dflt, msgOn, msgOff, alsoClearSnooze) {
+  const els = _dtUpdateEls(baseId);
+  if (!els.length) return;
+  let on = dflt;
+  try {
+    const v = localStorage.getItem(storeKey);
+    on = (v === null) ? dflt : (v === "1");
+  } catch (_) {}
+  els.forEach(el => {
+    el.checked = on;
+    el.addEventListener("change", () => {
+      try { localStorage.setItem(storeKey, el.checked ? "1" : "0"); } catch (_) {}
+      els.forEach(o => { if (o !== el) o.checked = el.checked; });
+      if (alsoClearSnooze) {
+        try {
+          localStorage.removeItem("gt_sirm_update_snooze");
+          localStorage.removeItem("gt_sirm_update_lastcheck");
+        } catch (_) {}
+      }
+      toast?.(el.checked ? msgOn : msgOff, "info", 3000);
+    });
+  });
+}
+
+async function dtCheckForUpdates(silent) {
+  const btns = _dtUpdateEls("check-update-btn");
+  const notes = _dtUpdateEls("update-status-note");
+  const setNote = t => notes.forEach(n => { n.textContent = t; });
+  try {
+    if (!silent) btns.forEach(b => { b.disabled = true; b.textContent = "⏳ جارٍ الفَحص…"; });
+    const beta = dtBetaUpdatesEnabled();
+    // `/releases/latest` يَتَجاهَلُ الاختِباريّةَ تِلقائيّاً؛ `/releases` يَشمَلُها
+    const url = beta
+      ? `https://api.github.com/repos/${GT_SIRM_REPO}/releases?per_page=10`
+      : `https://api.github.com/repos/${GT_SIRM_REPO}/releases/latest`;
+    const res = await fetch(url, { headers: { Accept: "application/vnd.github+json" } });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    const rel = Array.isArray(data) ? data.find(r => !r.draft) : data;
+    if (!rel) throw new Error("لا إصداراتٍ مَنشورة");
+    const latest = String(rel.tag_name || "").replace(/^v/i, "").replace(/-beta$/i, "");
+    const current = _dtAppVersion();
+    try { localStorage.setItem("gt_sirm_update_lastcheck", String(Date.now())); } catch (_) {}
+
+    if (_dtCmpVersions(latest, current) > 0) {
+      _dtUpdateInfo = { latest, current, url: rel.html_url, notes: rel.body || "" };
+      dtShowUpdateModal(_dtUpdateInfo);
+      setNote(`🎉 يَتَوَفَّرُ ${latest}`);
+    } else {
+      const msg = `✅ أنتَ عَلى أَحدَثِ إصدار (${current}) — قَناةُ ${beta ? "الاختِباريّ" : "المُستَقِرّ"}`;
+      setNote(msg);
+      if (!silent) toast?.(msg, "success", 3000);
+    }
+  } catch (e) {
+    const msg = "⚠️ تَعَذَّرَ الفَحص: " + String(e.message || e).slice(0, 60);
+    setNote(msg);
+    if (!silent) toast?.(msg, "warn", 3500);
+  } finally {
+    if (!silent) btns.forEach(b => { b.disabled = false; b.textContent = "🔄 افحَص عَنِ التَحديثاتِ الآن"; });
+  }
+}
+
+function dtShowUpdateModal(info) {
+  const modal = document.getElementById("update-modal");
+  if (!modal) { toast?.(`🎉 يَتَوَفَّرُ الإصدار ${info.latest}`, "info", 6000); return; }
+  const body = document.getElementById("update-body");
+  if (body) {
+    body.innerHTML = `يَتَوَفَّرُ الإصدارُ <b>${info.latest}</b> — وأنتَ عَلى <b>${info.current}</b>.` +
+      `<br><span style="color:var(--t3)">حُزَمُ لينُكس (AppImage · DEB · RPM) في صَفحةِ الإصدار؛ ثَبِّتها بِمُديرِ حُزَمِك.</span>`;
+  }
+  const nt = document.getElementById("update-notes");
+  if (nt) {
+    if (info.notes) { nt.textContent = info.notes.slice(0, 4000); nt.style.display = ""; }
+    else nt.style.display = "none";
+  }
+  modal.style.display = "flex";
+}
+
+function dtInitUpdateSystem() {
+  _dtInitUpdateToggle("update-auto-on", "gt_sirm_update_auto", true,
+    "⏱️ سيُفحَصُ عَنِ التَحديثاتِ تِلقائيّاً مَرّةً كُلَّ أُسبوع",
+    "⏸️ أُوقِفَ الفَحصُ التِلقائيّ — استَعمِل زِرَّ الفَحصِ عِندَ الحاجة", false);
+  _dtInitUpdateToggle("update-include-beta", "gt_sirm_update_beta", false,
+    "🧪 ستَصِلُكَ الإصداراتُ الاختِباريّةُ أيضاً — وهي غَيرُ مُستَقِرّة",
+    "✅ الإصداراتُ المُستَقِرّةُ وَحدَها", true);
+
+  _dtUpdateEls("check-update-btn").forEach(b =>
+    b.addEventListener("click", () => dtCheckForUpdates(false)));
+
+  const later = document.getElementById("update-later-btn");
+  if (later) later.addEventListener("click", () => {
+    const m = document.getElementById("update-modal");
+    if (m) m.style.display = "none";
+    try { localStorage.setItem("gt_sirm_update_snooze", String(Date.now())); } catch (_) {}
+  });
+  const now = document.getElementById("update-now-btn");
+  if (now) now.addEventListener("click", () => {
+    const u = _dtUpdateInfo?.url || `https://github.com/${GT_SIRM_REPO}/releases`;
+    try { window.SIRM?.openExternal ? window.SIRM.openExternal(u) : window.open(u, "_blank"); }
+    catch (_) { window.open(u, "_blank"); }
+    const m = document.getElementById("update-modal");
+    if (m) m.style.display = "none";
+  });
+
+  // فَحصٌ تِلقائيٌّ صامِتٌ مَرّةً كُلَّ أُسبوع
+  let auto = true;
+  try { auto = localStorage.getItem("gt_sirm_update_auto") !== "0"; } catch (_) {}
+  if (!auto) return;
+  let last = 0;
+  try { last = parseInt(localStorage.getItem("gt_sirm_update_lastcheck") || "0", 10) || 0; } catch (_) {}
+  if (Date.now() - last < 7 * 24 * 3600 * 1000) return;
+  setTimeout(() => { try { dtCheckForUpdates(true); } catch (_) {} }, 9000);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => setTimeout(dtInitUpdateSystem, 300));
+} else {
+  setTimeout(dtInitUpdateSystem, 300);
+}

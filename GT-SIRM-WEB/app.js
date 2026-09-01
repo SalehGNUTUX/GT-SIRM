@@ -2223,7 +2223,27 @@ function initEventListeners() {
   if (edShare) edShare.addEventListener("click", shareLastExport);
   const edSaveAs = $("export-done-saveas-btn");
   if (edSaveAs) edSaveAs.addEventListener("click", saveAsLastExport);
-  // v1.2.19 — نَسخُ سِجِلِّ الحَفظ (يُغني عَن وَصفِ العَطَبِ بِالكَلِمات)
+  // v1.2.20 — قِسمُ التَشخيصِ الثابِتُ في «حَول»
+  const dSec = $("save-diag-sec");
+  if (dSec) dSec.addEventListener("toggle", () => { if (dSec.open) refreshSaveDiagSection(); });
+  $("save-diag-copy")?.addEventListener("click", async () => {
+    refreshSaveDiagSection();
+    const t = $("save-diag-txt")?.textContent || "";
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(t);
+      else throw new Error("no clipboard");
+      toast("📋 نُسِخَ التَشخيص", "success", 1800);
+    } catch (_) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+        toast("📋 نُسِخَ التَشخيص", "success", 1800);
+      } catch (e2) { toast("حَدِّدِ النَصَّ وانسَخهُ يَدَويّاً", "warn", 3000); }
+    }
+  });
+
+  // v1.2.20 — نَسخُ سِجِلِّ الحَفظ (يُغني عَن وَصفِ العَطَبِ بِالكَلِمات)
   const edDiag = $("export-done-diag-copy");
   if (edDiag) edDiag.addEventListener("click", async () => {
     const t = $("export-done-diag-txt")?.textContent || "";
@@ -2247,8 +2267,8 @@ function initEventListeners() {
   if (upLater) upLater.addEventListener("click", updateLater);
   const upNow = $("update-now-btn");
   if (upNow) upNow.addEventListener("click", updateNow);
-  const upCheck = $("check-update-btn");
-  if (upCheck) upCheck.addEventListener("click", () => checkForUpdates(false));
+  _updateEls("check-update-btn").forEach(b =>
+    b.addEventListener("click", () => checkForUpdates(false)));
   initBetaUpdateToggle();   // v1.2.16 — قَناةُ التَحديث
   initAutoUpdateToggle();   // v1.2.17 — الفَحصُ التِلقائيّ
 
@@ -2260,10 +2280,11 @@ function initEventListeners() {
 
   // v1.2.14 — مُشارَكةُ حُزمةِ التَطبيق (تَظهَرُ في الهاتِفِ فَقَط)
   if (window.PIO?.canShareApk && window.PIO.canShareApk()) {
-    const b = $("share-apk-btn"), nt = $("share-apk-note");
-    if (b) {
+    const nt = $("share-apk-note");
+    if (nt) nt.style.display = "";
+    // v1.2.20 — الزِرُّ في «الإعدادات» و«حَول» مَعاً
+    [$("share-apk-btn"), $("share-apk-btn-about")].filter(Boolean).forEach(b => {
       b.style.display = "";
-      if (nt) nt.style.display = "";
       b.addEventListener("click", async () => {
         b.disabled = true; const t0 = b.textContent; b.textContent = "⏳ جارٍ التَجهيز…";
         try {
@@ -2273,7 +2294,7 @@ function initEventListeners() {
           toast?.("❌ " + String(e?.message || e).slice(0, 110), "error", 5000);
         } finally { b.disabled = false; b.textContent = t0; }
       });
-    }
+    });
   }
   // v1.2.7 — تَحديثُ yt-dlp المُضَمَّن
   $("ytdlp-mobile-update")?.addEventListener("click", () => runYtdlpMobileUpdate(true));
@@ -7204,7 +7225,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.19";
+const APP_VERSION = "1.2.20";
 let _updateInfo = null;
 
 // v1.2.16 — قَناةُ التَحديث: مُستَقِرٌّ وَحدَه (الافتِراض) أَو مَعَ الاختِباريّ.
@@ -7216,18 +7237,34 @@ function autoUpdateEnabled() {
   try { return localStorage.getItem("gt_sirm_update_auto") !== "0"; } catch (_) { return true; }
 }
 
+// v1.2.20 — ضَوابِطُ التَحديثِ مَوجودةٌ في «الإعدادات» و«حَول» مَعاً (يَبحَثُ
+//   المُستَخدِمُ عَنها في كِلَيهِما). مَصدَرُ الحَقيقةِ واحِدٌ — `localStorage` —
+//   والنُسخَتانِ مِرآتانِ تَتَزامَنانِ لَحظيّاً، فَلا تَختَلِفانِ أَبَداً.
+function _updateEls(baseId) {
+  return [document.getElementById(baseId),
+          document.getElementById(baseId + "-about")].filter(Boolean);
+}
+function _setUpdateNote(text) {
+  _updateEls("update-status-note").forEach(el => { el.textContent = text; });
+}
+
 function initAutoUpdateToggle() {
-  const el = document.getElementById("update-auto-on");
-  if (!el) return;
+  const els = _updateEls("update-auto-on");
+  if (!els.length) return;
+  let on = true;
   try {
     const v = localStorage.getItem("gt_sirm_update_auto");
-    el.checked = (v === null) ? true : (v !== "0");
+    on = (v === null) ? true : (v !== "0");
   } catch (_) {}
-  el.addEventListener("change", () => {
-    try { localStorage.setItem("gt_sirm_update_auto", el.checked ? "1" : "0"); } catch (_) {}
-    toast?.(el.checked
-      ? "⏱️ سيُفحَصُ عَنِ التَحديثاتِ تِلقائيّاً مَرّةً كُلَّ أُسبوع"
-      : "⏸️ أُوقِفَ الفَحصُ التِلقائيّ — استَعمِل زِرَّ الفَحصِ عِندَ الحاجة", "info", 3000);
+  els.forEach(el => {
+    el.checked = on;
+    el.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_update_auto", el.checked ? "1" : "0"); } catch (_) {}
+      els.forEach(o => { if (o !== el) o.checked = el.checked; });
+      toast?.(el.checked
+        ? "⏱️ سيُفحَصُ عَنِ التَحديثاتِ تِلقائيّاً مَرّةً كُلَّ أُسبوع"
+        : "⏸️ أُوقِفَ الفَحصُ التِلقائيّ — استَعمِل زِرَّ الفَحصِ عِندَ الحاجة", "info", 3000);
+    });
   });
 }
 
@@ -7238,16 +7275,21 @@ function betaUpdatesEnabled() {
 }
 
 function initBetaUpdateToggle() {
-  const el = document.getElementById("update-include-beta");
-  if (!el) return;
-  try { el.checked = localStorage.getItem("gt_sirm_update_beta") === "1"; } catch (_) {}
-  el.addEventListener("change", () => {
-    try { localStorage.setItem("gt_sirm_update_beta", el.checked ? "1" : "0"); } catch (_) {}
-    // تَبديلُ القَناةِ يُلغي تَأجيلَ إصدارٍ سابِقٍ حَتّى يُفحَصَ مِن جَديد
-    try { localStorage.removeItem("gt_sirm_update_snooze"); localStorage.removeItem("gt_sirm_update_lastcheck"); } catch (_) {}
-    toast?.(el.checked
-      ? "🧪 ستَصِلُكَ الإصداراتُ الاختِباريّةُ أيضاً — وهي غَيرُ مُستَقِرّة"
-      : "✅ الإصداراتُ المُستَقِرّةُ وَحدَها", "info", 3000);
+  const els = _updateEls("update-include-beta");
+  if (!els.length) return;
+  let on = false;
+  try { on = localStorage.getItem("gt_sirm_update_beta") === "1"; } catch (_) {}
+  els.forEach(el => {
+    el.checked = on;
+    el.addEventListener("change", () => {
+      try { localStorage.setItem("gt_sirm_update_beta", el.checked ? "1" : "0"); } catch (_) {}
+      els.forEach(o => { if (o !== el) o.checked = el.checked; });
+      // تَبديلُ القَناةِ يُلغي تَأجيلَ إصدارٍ سابِقٍ حَتّى يُفحَصَ مِن جَديد
+      try { localStorage.removeItem("gt_sirm_update_snooze"); localStorage.removeItem("gt_sirm_update_lastcheck"); } catch (_) {}
+      toast?.(el.checked
+        ? "🧪 ستَصِلُكَ الإصداراتُ الاختِباريّةُ أيضاً — وهي غَيرُ مُستَقِرّة"
+        : "✅ الإصداراتُ المُستَقِرّةُ وَحدَها", "info", 3000);
+    });
   });
 }
 
@@ -7260,9 +7302,9 @@ function _appVersion() {
 // silent=true عِندَ الفَحصِ التِلقائيِّ عِندَ الإقلاع (لا نُزعِجُ بِلا داعٍ)
 async function checkForUpdates(silent) {
   if (!window.PIO || !window.PIO.checkForUpdate) return;
-  const btn = $("check-update-btn");
+  const btns = _updateEls("check-update-btn");
   try {
-    if (!silent && btn) { btn.disabled = true; btn.textContent = "⏳ جارٍ الفَحص…"; }
+    if (!silent) btns.forEach(b => { b.disabled = true; b.textContent = "⏳ جارٍ الفَحص…"; });
     const info = await window.PIO.checkForUpdate(_appVersion(), betaUpdatesEnabled());
     _updateInfo = info;
     if (info.available) {
@@ -7270,14 +7312,13 @@ async function checkForUpdates(silent) {
     } else if (!silent) {
       const msg = `✅ أنتَ عَلى أَحدَثِ إصدار (${info.current}) — قَناةُ ${betaUpdatesEnabled() ? "الاختِباريّ" : "المُستَقِرّ"}`;
       toast(msg, "success", 3000);
-      const note = document.getElementById("update-status-note");
-      if (note) note.textContent = msg;
+      _setUpdateNote(msg);
     }
   } catch (e) {
     if (!silent) toast("⚠️ تَعَذَّرَ الفَحص: " + String(e.message || e).slice(0, 60), "warn", 3500);
     console.warn("تَعَذَّرَ فَحصُ التَحديثات:", e);
   } finally {
-    if (!silent && btn) { btn.disabled = false; btn.textContent = "🔄 تَحَقَّق مِن وُجودِ تَحديث"; }
+    if (!silent) btns.forEach(b => { b.disabled = false; b.textContent = "🔄 افحَص عَنِ التَحديثاتِ الآن"; });
   }
 }
 
@@ -7653,7 +7694,7 @@ function askProjectName() {
     const cancelBtn = document.getElementById("proj-name-cancel-btn");
     if (!modal || !inp || !okBtn || !cancelBtn) return resolve({ name: suggestedProjectName(), share: false });
     inp.value = suggestedProjectName();
-    // v1.2.19 — قُلِ اللاحِقةَ الحَقيقيّةَ: في الهاتِفِ هيَ `.gtsirm.json`
+    // v1.2.20 — قُلِ اللاحِقةَ الحَقيقيّةَ: في الهاتِفِ هيَ `.gtsirm.json`
     //   (يَشتَرِطُ MediaStore تَطابُقَ اللاحِقةِ مَعَ نَوعِ المُحتَوى).
     const extHint = modal.querySelector("code");
     if (extHint && typeof projectFileExt === "function") extHint.textContent = projectFileExt();
@@ -7974,7 +8015,7 @@ function showExportResult(res) {
     where = `📁 حُفِظَ في: <b>${res.saved.path}</b>`;
     note = "تَجِدُهُ في مَعرِضِ الصُوَرِ والفيديو أو في تَطبيقِ «المِلَفّات». إن لَم يَظهَر فَوراً فَأَعِد فَتحَ المَعرِض.";
   } else if (method === "native-private" || method === "capacitor-fs") {
-    // ⚠️ v1.2.19 — قُلِ الحَقيقةَ: هذا مُجَلَّدٌ خاصٌّ بِالبَرنامَجِ لا يَظهَرُ في
+    // ⚠️ v1.2.20 — قُلِ الحَقيقةَ: هذا مُجَلَّدٌ خاصٌّ بِالبَرنامَجِ لا يَظهَرُ في
     //   المَعرِضِ ولا في «التَنزيلات».
     where = `⚠️ لَم يُقبَل في التَخزينِ المُشتَرَك — حُفِظَ في مُجَلَّدِ البَرنامَج:<br><b dir="ltr">${res.saved.path}</b>`;
     note = "هذا المُجَلَّدُ لا يَظهَرُ في المَعرِضِ ولا في «التَنزيلات»، ويُمحى بِإزالةِ البَرنامَج. " +
@@ -8120,8 +8161,24 @@ async function saveAsLastExport() {
 // ══════════════════════════════════════════════════════
 //  v1.2.2 — نَتيجةُ حِفظِ المَشروع: نَفسُ نافِذةِ الناتِجِ مَعَ المُشارَكةِ والحَفظِ باسم
 // ══════════════════════════════════════════════════════
-// v1.2.19 — يُظهِرُ سِجِلَّ خُطُواتِ الحَفظِ عِندَ الإخفاقِ أَوِ النُزولِ لِلاحتِياط.
+// v1.2.20 — يُظهِرُ سِجِلَّ خُطُواتِ الحَفظِ عِندَ الإخفاقِ أَوِ النُزولِ لِلاحتِياط.
 //   عِندَ النَجاحِ التامِّ يَبقى مَخفيّاً: لا داعِيَ لِإزعاجِ المُستَخدِمِ بِالتَفاصيل.
+// v1.2.20 — يَملَأُ قِسمَ التَشخيصِ الثابِتَ في «حَول». يُستَدعى عِندَ فَتحِ
+//   القِسمِ وبَعدَ كُلِّ مُحاوَلةِ حَفظ — فَلا يَتَوَقَّفُ الخَبَرُ عَلى نافِذةٍ قَد
+//   لا تَظهَر.
+function refreshSaveDiagSection() {
+  const txt = document.getElementById("save-diag-txt");
+  if (!txt) return;
+  const tr = (window.PIO && window.PIO.saveTrace) ? window.PIO.saveTrace() : "";
+  const head = [
+    "GT-SIRM " + (typeof APP_VERSION !== "undefined" ? APP_VERSION : "?"),
+    "UA: " + navigator.userAgent,
+    "أَصليّ: " + (window.PIO && window.PIO.isNativeAndroid && window.PIO.isNativeAndroid() ? "نَعَم" : "لا"),
+    "آخِرُ مَلَفٍّ: " + (S.lastProjectSavePath || S.projectFileName || "—"),
+  ].join("\n");
+  txt.textContent = tr ? (head + "\n──\n" + tr) : (head + "\n──\nلَم تُسَجَّل مُحاوَلةُ حَفظٍ بَعد.");
+}
+
 function highlightSaveAsWhenHidden(saved) {
   const b = $("export-done-saveas-btn");
   if (!b) return;
@@ -9943,7 +10000,7 @@ async function deserializeProject(proj) {
   if (missing.length) showMissingAssetsModal(missing);
 
   // v1.2 — استعادة حالة الأَقسام القابِلة للطَيّ (details) بحَسب التَرتيب
-  // ⚠️ v1.2.19 — الاستعادةُ بِالفِهرِسِ تَصلُحُ ما دامَ عَدَدُ الأَقسامِ لَم يَتَغَيَّر.
+  // ⚠️ v1.2.20 — الاستعادةُ بِالفِهرِسِ تَصلُحُ ما دامَ عَدَدُ الأَقسامِ لَم يَتَغَيَّر.
   //   وقَد أُضيفَت أَقسامٌ وحُذِفَت بَينَ الإصدارات، فَمَشروعٌ قَديمٌ يَفتَحُ أَقساماً
   //   لا عَلاقةَ لَها بِما حُفِظ ويَطوي غَيرَها. فَإن اختَلَفَ العَدَدُ نُبقي حالةَ
   //   الصَفحةِ الافتِراضيّةَ بَدَلَ إفسادِها.
@@ -10168,7 +10225,25 @@ async function saveProjectToPath(_filePath) {
     clearProjectDirty();
     // v1.2.2 — الحِفظُ اليَدَويُّ يَعرِضُ نافِذةً فيها «مُشارَكة» و«حِفظٌ باسم…».
     //   الحِفظُ التِلقائيُّ صامِتٌ (لا نُقاطِعُ المُستَخدِمَ كُلَّ بِضعِ دَقائِق).
-    if (!_silentProjectSave) showProjectSavedResult(saved, blob, fname, proj);
+    // ⚠️ v1.2.20 — الفُقاعةُ أَوَّلاً، ثُمَّ النافِذة. كانَ الإعلانُ كُلُّهُ داخِلَ
+    //   `showProjectSavedResult`: أَيُّ خَطَإٍ فيها (عُنصُرٌ ناقِصٌ في الواجِهة)
+    //   يَبتَلِعُ خَبَرَ النَجاحِ كُلَّه، فَيَظُنُّ المُستَخدِمُ أَنَّ شَيئاً لَم يُحفَظ.
+    if (!_silentProjectSave) {
+      const where = saved.usedFallback || saved.method === "capacitor-fs"
+        ? `⚠️ حُفِظَ في مُجَلَّدِ البَرنامَج (لا يَظهَرُ في التَنزيلات): ${saved.path}`
+        : `💾 حُفِظَ: ${saved.path}`;
+      toast?.(where, saved.usedFallback ? "warn" : "success", saved.usedFallback ? 8000 : 3500);
+      try { showProjectSavedResult(saved, blob, fname, proj); }
+      catch (e) { console.error("تَعَذَّرَ عَرضُ نافِذةِ النَتيجة:", e); }
+      // v1.2.20 — المُجَلَّدُ الخاصُّ لَيسَ حِفظاً بِنَظَرِ المُستَخدِم: افتَح مُنتَقيَ
+      //   النِظامِ فَوراً لِيَضَعَ المَلَفَّ حَيثُ يَراه. نَقرةٌ واحِدةٌ بَدَلَ ضَياع.
+      if (saved.usedFallback || saved.method === "capacitor-fs") {
+        setTimeout(() => {
+          Promise.resolve().then(() => saveAsLastExport())
+            .catch(e2 => console.warn("تَعَذَّرَ فَتحُ «حِفظٌ باسم»:", e2));
+        }, 700);
+      }
+    }
     // v1.2.11 — مُشارَكةٌ فَوريّةٌ إن طَلَبَها المُستَخدِمُ في نافِذةِ التَسمية
     if (_shareAfterProjectSave && !_silentProjectSave) {
       _shareAfterProjectSave = false;
@@ -10218,7 +10293,26 @@ async function saveProjectInteractiveSafe(forcePrompt = false) {
 
     if (btn) { btn.disabled = true; btn.innerHTML = "⏳ <span>جارٍ الحَفظ…</span>"; }
     toast?.("⏳ جارٍ تَجهيزُ المَشروعِ لِلحَفظ…", "info", 1600);
-    await saveProjectInteractive(forcePrompt);
+
+    // ⚠️ v1.2.20 — حارِسٌ زَمَنيّ. بَلَّغَ المُستَخدِمُ مِراراً أَنَّ الضَغطَ عَلى
+    //   «حفظ» لا يُعقِبُهُ **شَيء**: لا نافِذةَ ولا رِسالة. وذلك مُمكِنٌ فِعلاً إن
+    //   لَم يَعُد نِداءُ الجِسرِ أَبَداً (وَعدٌ لا يُحسَم) — فَيَبقى كُلُّ شَيءٍ
+    //   مُعَلَّقاً بِلا خَطَإٍ يُمسَك. الآنَ يَنطِقُ البَرنامَجُ بَعدَ 25 ثانِية.
+    let settled = false;
+    const watchdog = setTimeout(() => {
+      if (settled) return;
+      toast?.("⏱️ الحَفظُ لَم يَستَجِب بَعدَ 25 ثانِية — الجِسرُ الأَصليُّ لا يَرُدّ. " +
+              "اِفتَح «حَول ← 🔎 تَشخيصُ آخِرِ عَمَليّةِ حَفظ» وانسَخِ التَفاصيل.",
+              "error", 12000);
+      try { refreshSaveDiagSection(); } catch (_) {}
+    }, 25000);
+    try {
+      await saveProjectInteractive(forcePrompt);
+    } finally {
+      settled = true;
+      clearTimeout(watchdog);
+      try { refreshSaveDiagSection(); } catch (_) {}
+    }
   } catch (e) {
     console.error("فَشِلَ حِفظُ المَشروع:", e);
     const msg = String((e && e.message) || e);

@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld("SIRM", {
   // ── فحص التبعيات ──────────────────────────────────
   checkDeps: () => ipcRenderer.invoke("check-deps"),
 
+  // v1.2.20 — فَتحُ رابِطٍ في المُتَصَفِّحِ الخارِجيّ (صَفحةُ الإصدار)
+  openExternal: (url) => ipcRenderer.invoke("open-external", url),
+
   // ── التصدير عبر ffmpeg (الطريقة القديمة: transcode من ملف) ─
   ffmpegEncode:      (opts)  => ipcRenderer.invoke("ffmpeg-encode", opts),
   ffmpegCancel:      ()      => ipcRenderer.send("ffmpeg-cancel"),

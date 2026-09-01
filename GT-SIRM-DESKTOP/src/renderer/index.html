@@ -515,6 +515,18 @@ body.offline .offline-badge{display:block}
 </div>
 
 <!-- v1.2.15 — مَشروعٌ جَديد -->
+<div class="modal-bg" id="update-modal">
+  <div class="modal">
+    <h3 id="update-title">🎉 يَتَوَفَّرُ إصدارٌ جَديد</h3>
+    <div id="update-body" style="font-size:11px;line-height:1.8;margin-bottom:8px"></div>
+    <div id="update-notes" style="display:none;font-size:10px;line-height:1.7;color:var(--t2);background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-bottom:8px;max-height:170px;overflow-y:auto;white-space:pre-line"></div>
+    <div class="modal-btns" style="flex-wrap:wrap;gap:6px">
+      <button class="btn btn-g" id="update-later-btn">لاحِقاً</button>
+      <button class="btn btn-a" id="update-now-btn">⬇️ افتَح صَفحةَ الإصدار</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="proj-new-modal">
   <div class="modal">
     <h3>✨ مَشروعٌ جَديد</h3>
@@ -547,7 +559,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.2.19</small>
+      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.2.20</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -2397,7 +2409,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.19</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.20</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3
@@ -2410,6 +2422,25 @@ body.offline .offline-badge{display:block}
           <div class="info-row"><span class="info-k">الخطوط</span><span class="info-v">محلّيّة كاملاً (16 خَطّاً)</span></div>
           <div class="info-row"><span class="info-k">PWA Offline</span><span class="info-v">✅ Service Worker</span></div>
         </details>
+        <!-- v1.2.20 — مِطواةُ التَحديثاتِ هُنا أيضاً (مِرآةٌ لِما في الإعدادات) -->
+        <details class="sec" open>
+          <summary class="sec-t">🔄 التَحديثات</summary>
+          <div class="note">يُفحَصُ المُستَودَعُ عَن إصدارٍ أَحدَث. لا يُنَزَّلُ ولا يُثَبَّتُ شَيءٌ إلّا بِأَمرِك.</div>
+
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-top:7px">
+            <span class="tgl">⏱️ الفَحصُ التِلقائيّ<br><small style="color:var(--t3)">يَفحَصُ مَرّةً كُلَّ أُسبوعٍ عِندَ الإقلاعِ ويُنَبِّهُكَ إن وُجِدَ جَديد.</small></span>
+            <label class="tg"><input type="checkbox" id="update-auto-on-about" checked data-no-reset><span class="tgs"></span></label>
+          </div>
+
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-top:6px">
+            <span class="tgl">🧪 تَلَقّي الإصداراتِ الاختِباريّة<br><small style="color:var(--t3)">الاختِباريُّ (beta) يَحمِلُ أَحدَثَ المَزايا وقَد يَحمِلُ أَعطاباً — لَيسَ لِلعَمَلِ اليَوميّ.</small></span>
+            <label class="tg"><input type="checkbox" id="update-include-beta-about" data-no-reset><span class="tgs"></span></label>
+          </div>
+
+          <button class="btn btn-g bsm bfw" id="check-update-btn-about" style="margin-top:7px">🔄 افحَص عَنِ التَحديثاتِ الآن</button>
+          <div class="note" id="update-status-note-about" style="color:var(--t3);margin-top:4px"></div>
+        </details>
+
         <!-- v0.14.1 — زرّ مُشاركة في حول أيضاً -->
         <details class="sec" open>
           <summary class="sec-t">📤 شارك التَطبيق</summary>

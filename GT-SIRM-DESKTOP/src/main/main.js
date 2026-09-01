@@ -233,6 +233,17 @@ function createWindow() {
   });
 }
 
+// v1.2.20 — فَتحُ رابِطٍ خارِجيّ. مَقصورٌ عَلى http/https عَمداً: تَمريرُ أَيِّ
+//   عُنوانٍ إلى shell يَفتَحُ مِلَفّاتٍ وبَرامِجَ مَحَلّيّةً أيضاً.
+ipcMain.handle("open-external", async (_e, url) => {
+  try {
+    const u = new URL(String(url));
+    if (u.protocol !== "http:" && u.protocol !== "https:") return { ok: false };
+    await shell.openExternal(u.href);
+    return { ok: true };
+  } catch (_) { return { ok: false }; }
+});
+
 ipcMain.handle("confirm-close", () => {
   if (mainWindow) {
     mainWindow._allowClose = true;

@@ -528,14 +528,29 @@ function createBgPlaybackSync() {
     resyncs: 0,
     rateChanges: 0,
     playFailed: false,
+    // v1.2.20 — مُراقِبُ «الفيديو لا يَتَقَدَّم»
+    lastCurTime: -1,
+    stalled: 0,
+    slowSeek: false,
   };
 }
 
 async function syncBgByPlayback(st, vid, wantTime, clipIndex, mediaDone, wallSec) {
   if (!vid || !isFinite(vid.duration)) return;
 
+  // ⚠️ v1.2.20 — لِمَ 0.25 لا 0.0625؟
+  //   مُزامَنةُ التَشغيلِ تَضبِطُ سُرعةَ الفيديو لِتُطابِقَ تَقَدُّمَ التَصدير. فَإن
+  //   كانَ التَصديرُ بَطيئاً جِدّاً (تَحريكُ خَلفيّةٍ بِالتَكبير + مُؤَثِّراتٌ تَقرَأُ
+  //   البِكسِلات) هَبَطَتِ السُرعةُ المَطلوبةُ إلى عُشرِ الحَقيقيّ أَو أَقَلّ —
+  //   وعِندَ هذه السُرعاتِ لا يَتَقَدَّمُ مَجرى فَكِّ التَرميزِ في WebView أَصلاً،
+  //   فَتَخرُجُ **خَلفيّةٌ مُجَمَّدة** بَينَما يَعمَلُ كُلُّ شَيءٍ آخَرَ بِطَبيعَتِه.
+  //   (هذا سَبَبُ «التَكبير ⇒ خَلفيّةٌ مُجَمَّدة» بَينَما «ثابِت ⇒ سَليم».)
+  //   دونَ 0.25 لا فائِدةَ مِنَ التَشغيلِ أَصلاً: النَقلُ (seek) أَدَقُّ وأَوثَق،
+  //   وكُلفَتُهُ لا تُذكَرُ ما دُمنا بَطيئينَ إلى هذا الحَدّ.
   const RESYNC_EPS = 0.75;   // ثانِية — فَوقَها نَنقُلُ مَرّةً واحِدة
-  const RATE_MIN = 0.0625, RATE_MAX = 4;
+  const RATE_MIN = 0.25, RATE_MAX = 4;
+  const SEEK_EPS = 0.05;     // في وَضعِ النَقلِ نُطابِقُ كُلَّ إطارٍ تَقريباً
+  const STALL_LIMIT = 6;     // إطاراتٌ مُتَتالِيةٌ بِلا تَقَدُّمٍ ⇒ التَشغيلُ عاجِز
 
   // تَبديلُ مَقطَعٍ أو رُجوعٌ لِلوَراء (لَفُّ القائِمة) ⇒ إعادةُ مُزامَنةٍ صَريحة
   const switched = (clipIndex !== st.clipIndex) || (wantTime + 0.05 < st.lastWant);
@@ -544,18 +559,43 @@ async function syncBgByPlayback(st, vid, wantTime, clipIndex, mediaDone, wallSec
 
   const drift = vid.currentTime - wantTime;
 
-  if (switched || Math.abs(drift) > RESYNC_EPS) {
-    st.resyncs++;
-    try { vid.pause(); } catch (_) {}
-    await seekVideoToTimeWeb(vid, wantTime, 0.03, 1200);
+  // ── مُراقِبُ الجُمود: هَل يَتَقَدَّمُ الفيديو فِعلاً؟ ────────────────
+  //   v1.2.20 — لا نَثِقُ بِأَنَّ `play()` نَجَحَ لِأَنَّهُ لَم يَرمِ خَطَأً: قَد
+  //   يَقبَلُهُ المُحَرِّكُ ثُمَّ لا يُقَدِّمُ إطاراً واحِداً. نَقيسُ التَقَدُّمَ نَفسَه.
+  if (!st.slowSeek && !switched && st.lastCurTime >= 0) {
+    if (Math.abs(vid.currentTime - st.lastCurTime) < 1e-4) {
+      if (++st.stalled >= STALL_LIMIT) {
+        st.slowSeek = true;
+        console.warn("[V2] خَلفيّةُ الفيديو لا تَتَقَدَّمُ بِالتَشغيل — التَحَوُّلُ إلى النَقل");
+      }
+    } else st.stalled = 0;
   }
-
-  if (st.playFailed) return;   // لا تُشَغِّل: نَعتَمِدُ عَلى النَقلِ وَحدَه
+  st.lastCurTime = vid.currentTime;
 
   // السُرعةُ الأَساسُ = نِسبةُ تَقَدُّمِنا الحَقيقيّ، مَعَ تَصحيحِ الانحِراف
   const base = (wallSec > 0.4) ? (mediaDone / wallSec) : 0.5;
   let rate = base - drift * 1.2;
   if (!isFinite(rate)) rate = base;
+
+  // بَطيءٌ أَكثَرَ مِمّا يُطيقُهُ التَشغيل ⇒ اِنقُل بَدَلَ أَن تُشَغِّل
+  const tooSlow = rate < RATE_MIN;
+  if (tooSlow || st.slowSeek || st.playFailed) {
+    if (!vid.paused) { try { vid.pause(); } catch (_) {} }
+    if (switched || Math.abs(drift) > SEEK_EPS) {
+      st.resyncs++;
+      await seekVideoToTimeWeb(vid, wantTime, 0.03, 1200);
+      st.lastCurTime = vid.currentTime;
+    }
+    return;
+  }
+
+  if (switched || Math.abs(drift) > RESYNC_EPS) {
+    st.resyncs++;
+    try { vid.pause(); } catch (_) {}
+    await seekVideoToTimeWeb(vid, wantTime, 0.03, 1200);
+    st.lastCurTime = vid.currentTime;
+  }
+
   rate = Math.max(RATE_MIN, Math.min(RATE_MAX, rate));
   if (Math.abs(vid.playbackRate - rate) > 0.03) {
     try { vid.playbackRate = rate; st.rateChanges++; } catch (_) {}
@@ -807,7 +847,7 @@ async function startWebExportV2(opts) {
     seeks: 0, seekTimeouts: 0, seekSkips: 0, seekNoWait: 0, frames: 0, bgFrames: 0,
   };
   window._sirmExportProfile = prof;
-  let seekDisabled = false;
+  let bgSeekBroken = false;   // v1.2.20 — النَقلُ مُتَعَثِّرٌ ⇒ حَوِّل لِلتَشغيل
 
   // v1.2.2 — وَضعُ الخَلفيّةِ السَريع + مُهلةُ نَقلٍ أَقصَر.
   //   صارَ تَقصيرُ المُهلةِ آمِناً بَعدَ ذاكِرةِ آخِرِ إطارٍ صالِح: أَسوَأُ ما يَقَعُ
@@ -832,24 +872,27 @@ async function startWebExportV2(opts) {
     //   البيئة (تَنقَضي المُهلةُ ولا يَصِلُ حَدَثُ seeked)، فَنَحنُ نَدفَعُ 800ms
     //   لِكُلِّ إطارٍ ثُمَّ نَرسُمُ إطاراً قَديماً عَلى أَيّ حال — خَسارةٌ خالِصة.
     //   بَعدَ 10 مُحاوَلاتٍ أَغلَبُها فاشِل: أَوقِفِ النَقلَ وأَبلِغِ المُستَخدِم.
-    if (!seekDisabled && prof.seeks >= 10 && prof.seekTimeouts / prof.seeks > 0.5) {
-      seekDisabled = true;
-      console.warn("[V2] النَقلُ (seek) يَفشَلُ في هذه البيئة — أُوقِفَ لِتَسريعِ التَصدير");
+    // ⚠️ v1.2.20 — كانَ هذا يُجَمِّدُ الخَلفيّةَ لِبَقيّةِ التَصدير: العَلَمُ القَديم
+    //   يَتَخَطّى كُتلةَ المُزامَنةِ كُلَّها فَيَبقى الفيديو عَلى إطارٍ واحِد. الآنَ
+    //   نَتَحَوَّلُ إلى مُزامَنةِ التَشغيل (لا تَحتاجُ نَقلاً) بَدَلَ التَجميد، ولا
+    //   نُعَطِّلُ النَقلَ إلّا لِما لا بَديلَ لَه.
+    if (!bgSeekBroken && prof.seeks >= 10 && prof.seekTimeouts / prof.seeks > 0.5) {
+      bgSeekBroken = true;
+      console.warn("[V2] النَقلُ (seek) يَفشَلُ في هذه البيئة — التَحَوُّلُ إلى مُزامَنةِ التَشغيل");
       if (typeof toast === "function") {
-        toast("⚠️ تَعَذَّرَ نَقلُ فيديو الخَلفيّةِ إطاراً بِإطار عَلى هذا الجِهاز — " +
-              "سَيُكمِلُ التَصديرُ بِلا تَحريكِ الفيديو (أَسرَعُ بِكَثير). " +
-              "لِنَتيجةٍ أَفضَل: استَعمِل صورةَ خَلفيّة، أو صَدِّر مِن نُسخةِ سَطحِ المَكتَب.",
-              "warn", 9000);
+        toast("⚠️ نَقلُ الفيديو إطاراً بِإطارٍ يَتَعَثَّرُ عَلى هذا الجِهاز — " +
+              "تَحَوَّلَ التَصديرُ إلى مُزامَنةِ التَشغيل (أَسرَعُ، والخَلفيّةُ تَبقى مُتَحَرِّكة).",
+              "warn", 7000);
       }
     }
-    if (!seekDisabled && visibleBgClips.length) {
+    if (visibleBgClips.length) {
       const cinfo = getBgClipAtTimeWeb(t, bgClipDurations, bgXf);
       if (cinfo) {
         S.bgVid = visibleBgClips[cinfo.clipIndex].vid;
         // Feature#2 — المَوضِعُ المَطلوب = trimStart + الزَمَنُ المَحَلّيّ
         const wantPos = bgClipTrimStarts[cinfo.clipIndex] + cinfo.localTime;
 
-        if (bgFastMode) {
+        if (bgFastMode || bgSeekBroken) {
           // v1.2.4 — مُزامَنةٌ بِالتَشغيل: سَلِسةٌ وسَريعة (لا نَقلَ لِكُلِّ إطار)
           const wallSec = (performance.now() - tStartMs) / 1000;
           await syncBgByPlayback(bgSync, S.bgVid, wantPos, cinfo.clipIndex, t, wallSec);
@@ -874,7 +917,7 @@ async function startWebExportV2(opts) {
     }
     // v0.7.3 — مزامنة فيديو التلاوة مع زمن الإطار
     // فيديو التِلاوةِ يَبقى دَقيقاً دائِماً — تَأخُّرُهُ يَعني اختِلالَ المُزامَنةِ مَعَ الصَوت
-    if (!seekDisabled && recVidOn) seekJobs.push(seekVideoToTimeWeb(S.recVidEl, t, recSeekTol));
+    if (recVidOn) seekJobs.push(seekVideoToTimeWeb(S.recVidEl, t, recSeekTol));
     if (seekJobs.length) {
       const tSeek = performance.now();
       const results = await Promise.all(seekJobs);
@@ -1016,7 +1059,11 @@ async function startWebExportV2(opts) {
   // فَلا يَضيعُ الناتِجُ إن فَشِلَت وَسيلةُ الحَفظِ المُختارة.
   prof.bgResyncs = bgSync.resyncs;
   prof.bgPlayFailed = bgSync.playFailed;
-  prof.bgMode = bgFastMode ? (bgSync.playFailed ? "نَقل (تَعَذَّرَ التَشغيل)" : "تَشغيل") : "نَقل دَقيق";
+  prof.bgMode = bgFastMode
+    ? (bgSync.playFailed ? "نَقل (تَعَذَّرَ التَشغيل)"
+       : bgSync.slowSeek ? "نَقل (التَشغيلُ لَم يَتَقَدَّم)"
+       : "تَشغيل")
+    : "نَقل دَقيق";
   return { ok: true, size: buffer.byteLength, blob, filename, mime, saved, profile: prof };
 }
 

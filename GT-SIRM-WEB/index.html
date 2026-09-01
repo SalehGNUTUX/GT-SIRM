@@ -422,7 +422,7 @@ body.offline .offline-badge{display:block}
     <div id="export-done-where" style="font-size:11px;line-height:1.7;margin-bottom:8px;word-break:break-word"></div>
     <div id="export-done-note" style="font-size:9px;color:var(--t3);line-height:1.6;margin-bottom:8px"></div>
     <div id="export-done-perf" style="display:none;font-size:10px;line-height:1.8;background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-bottom:8px"></div>
-    <!-- v1.2.19 — سِجِلُّ خُطُواتِ الحَفظ: يَظهَرُ عِندَ الفَشَلِ أَوِ النُزولِ
+    <!-- v1.2.20 — سِجِلُّ خُطُواتِ الحَفظ: يَظهَرُ عِندَ الفَشَلِ أَوِ النُزولِ
          لِلاحتِياطِ وَحدَه، فَيَنقُلُهُ المُستَخدِمُ إلَينا بَدَلَ التَخمين. -->
     <details id="export-done-diag" style="display:none;margin-bottom:8px">
       <summary style="font-size:9px;color:var(--t3);cursor:pointer">🔎 تَفاصيلُ تِقنيّةٌ لِلحَفظ</summary>
@@ -507,7 +507,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small>GnuTux Short Islamic Reels Maker v1.2.19</small>
+      <small>GnuTux Short Islamic Reels Maker v1.2.20</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -2063,11 +2063,11 @@ body.offline .offline-badge{display:block}
         <div class="about-logo">
           <img src="GT-SIRM-icons/icon-256.png" class="al-icon" alt="GT-SIRM" style="width:80px;height:80px;">
           <h2>GT-SIRM</h2>
-          <p>GnuTux Short Islamic Reels Maker v1.2.19</p>
+          <p>GnuTux Short Islamic Reels Maker v1.2.20</p>
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.19</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.20</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3</span></div>
@@ -2079,11 +2079,42 @@ body.offline .offline-badge{display:block}
           <div class="info-row"><span class="info-k">الخطوط</span><span class="info-v">محلّيّة كاملاً (16 خَطّاً)</span></div>
           <div class="info-row"><span class="info-k">PWA Offline</span><span class="info-v">✅ Service Worker</span></div>
         </details>
+        <!-- v1.2.20 — تَشخيصُ آخِرِ عَمَليّةِ حَفظ، في مَوضِعٍ ثابِتٍ لا يَعتَمِدُ
+             عَلى ظُهورِ نافِذةٍ: إن لَم تَظهَرِ النافِذةُ أَصلاً فَهُنا الخَبَر. -->
+        <details class="sec" id="save-diag-sec">
+          <summary class="sec-t">🔎 تَشخيصُ آخِرِ عَمَليّةِ حَفظ</summary>
+          <div class="note">خُطُواتُ آخِرِ مُحاوَلةِ حَفظٍ كَما سَجَّلَها الجِهاز. إن لَم يُحفَظِ المَشروعُ فانسَخها وأَرسِلها.</div>
+          <pre id="save-diag-txt" dir="ltr" style="font-size:8px;line-height:1.5;max-height:180px;overflow:auto;background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px;margin:6px 0;white-space:pre-wrap;word-break:break-all"></pre>
+          <button class="btn btn-g bsm bfw" id="save-diag-copy">📋 اِنسَخِ التَشخيص</button>
+        </details>
+
+        <!-- v1.2.20 — مِطواةُ التَحديثاتِ هُنا أيضاً: يَبحَثُ عَنها المُستَخدِمُ في
+             «حَول» بِقَدرِ ما يَبحَثُ عَنها في «الإعدادات». الضَوابِطُ مُتَطابِقةٌ
+             ومُتَزامِنةٌ لَحظيّاً مَعَ نَظائِرِها هُناك — مَصدَرُ الحَقيقةِ واحِد. -->
+        <details class="sec" open>
+          <summary class="sec-t">🔄 التَحديثات</summary>
+          <div class="note">يُفحَصُ المُستَودَعُ عَن إصدارٍ أَحدَث. لا يُنَزَّلُ ولا يُثَبَّتُ شَيءٌ إلّا بِأَمرِك.</div>
+
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-top:7px">
+            <span class="tgl">⏱️ الفَحصُ التِلقائيّ<br><small style="color:var(--t3)">يَفحَصُ مَرّةً كُلَّ أُسبوعٍ عِندَ الإقلاعِ ويُنَبِّهُكَ إن وُجِدَ جَديد.</small></span>
+            <label class="tg"><input type="checkbox" id="update-auto-on-about" checked data-no-reset><span class="tgs"></span></label>
+          </div>
+
+          <div class="tgg" style="background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-top:6px">
+            <span class="tgl">🧪 تَلَقّي الإصداراتِ الاختِباريّة<br><small style="color:var(--t3)">الاختِباريُّ (beta) يَحمِلُ أَحدَثَ المَزايا وقَد يَحمِلُ أَعطاباً — لَيسَ لِلعَمَلِ اليَوميّ.</small></span>
+            <label class="tg"><input type="checkbox" id="update-include-beta-about" data-no-reset><span class="tgs"></span></label>
+          </div>
+
+          <button class="btn btn-g bsm bfw" id="check-update-btn-about" style="margin-top:7px">🔄 افحَص عَنِ التَحديثاتِ الآن</button>
+          <div class="note" id="update-status-note-about" style="color:var(--t3);margin-top:4px"></div>
+        </details>
+
         <!-- v0.14.1 — زرّ مُشاركة في حول أيضاً -->
         <details class="sec" open>
           <summary class="sec-t">📤 شارك التَطبيق</summary>
           <div class="note">لو نَفَعك البَرنامج، شاركه لِيَنتفع غيرك. الأجر مَوصول إن شاء الله.</div>
           <button class="btn btn-p bfw" id="share-app-btn-about" style="font-weight:700;margin-top:8px;padding:12px">📤 مُشاركة GT-SIRM</button>
+          <button class="btn btn-g bfw" id="share-apk-btn-about" style="display:none;margin-top:8px;padding:10px">📦 شارِك حُزمةَ التَطبيق (APK)</button>
           <div style="font-size:10px;color:var(--t3);margin-top:6px;line-height:1.7">
             على الهاتف يَفتح قائمة تَطبيقات التَواصل والمُراسلة مُباشَرةً. على المُتصفّحات الأخرى يَنسخ نَصّ المُشاركة للحافظة.
           </div>
