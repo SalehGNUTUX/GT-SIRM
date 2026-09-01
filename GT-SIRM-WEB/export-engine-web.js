@@ -528,6 +528,7 @@ function createBgPlaybackSync() {
     resyncs: 0,
     rateChanges: 0,
     playFailed: false,
+    playAborts: 0,          // v1.2.22 — رَفضُ play() العارِضُ لا الدائِم
     // v1.2.20 — مُراقِبُ «الفيديو لا يَتَقَدَّم»
     lastCurTime: -1,
     stalled: 0,
@@ -604,9 +605,29 @@ async function syncBgByPlayback(st, vid, wantTime, clipIndex, mediaDone, wallSec
     try {
       vid.muted = true;             // الصَوتُ يُخلَطُ مُنفَصِلاً — والكَتمُ يُجيزُ التَشغيلَ بِلا إيماءة
       await vid.play();
+      st.playAborts = 0;
     } catch (e) {
-      st.playFailed = true;         // مَنَعَ المُتَصَفِّحُ التَشغيل ⇒ عُد لِلنَقل
-      console.warn("[V2] تَعَذَّرَ تَشغيلُ خَلفيّةِ الفيديو — العَودةُ إلى النَقل:", e && e.message);
+      // ⚠️ v1.2.22 — لا تُعامِل كُلَّ رَفضٍ مُعامَلةَ المَنعِ الدائِم.
+      //   `play()` يُعيدُ وَعداً؛ فَإن استَدعَينا `pause()` قَبلَ أَن يُحسَم —
+      //   وهذا يَقَعُ في الإطارِ التالي كُلَّما لَزِمَت إعادةُ مُزامَنة — رُفِضَ
+      //   الوَعدُ بِـAbortError: «The play() request was interrupted by a call
+      //   to pause()». وهُوَ **فِعلُنا نَحنُ** لا مَنعٌ مِنَ المُتَصَفِّح. وكانَ
+      //   الرَمزُ يَرفَعُ `playFailed` عَلَيهِ رَفعاً **دائِماً**، فَيَسقُطُ التَصديرُ
+      //   كُلُّهُ إلى النَقلِ إطاراً بِإطار: خَلفيّةٌ بِـ9.8 إطار/ث بَدَلَ 30،
+      //   و757 إعادةَ مُزامَنةٍ في مَقطَعٍ واحِد (كَما في تَقريرِ المُستَخدِم).
+      //   المَنعُ الحَقيقيُّ اسمُهُ NotAllowedError وَحدَه.
+      const name = (e && e.name) || "";
+      if (name === "NotAllowedError" || name === "NotSupportedError") {
+        st.playFailed = true;
+        console.warn("[V2] المُتَصَفِّحُ مَنَعَ تَشغيلَ خَلفيّةِ الفيديو — العَودةُ إلى النَقل:", e && e.message);
+      } else {
+        // AbortError وأَمثالُه: عارِضٌ. أَعِدِ المُحاوَلةَ في الإطارِ التالي.
+        st.playAborts = (st.playAborts || 0) + 1;
+        if (st.playAborts >= 12) {
+          st.playFailed = true;     // تَكَرَّرَ كَثيراً ⇒ لا جَدوى
+          console.warn("[V2] تَعَذَّرَ تَثبيتُ تَشغيلِ الخَلفيّة — العَودةُ إلى النَقل");
+        }
+      }
     }
   }
 }

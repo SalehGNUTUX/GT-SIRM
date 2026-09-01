@@ -2223,7 +2223,7 @@ function initEventListeners() {
   if (edShare) edShare.addEventListener("click", shareLastExport);
   const edSaveAs = $("export-done-saveas-btn");
   if (edSaveAs) edSaveAs.addEventListener("click", saveAsLastExport);
-  // v1.2.21 — قِسمُ التَشخيصِ الثابِتُ في «حَول»
+  // v1.2.22 — قِسمُ التَشخيصِ الثابِتُ في «حَول»
   const dSec = $("save-diag-sec");
   if (dSec) dSec.addEventListener("toggle", () => { if (dSec.open) refreshSaveDiagSection(); });
   $("save-diag-copy")?.addEventListener("click", async () => {
@@ -2243,7 +2243,7 @@ function initEventListeners() {
     }
   });
 
-  // v1.2.21 — نَسخُ سِجِلِّ الحَفظ (يُغني عَن وَصفِ العَطَبِ بِالكَلِمات)
+  // v1.2.22 — نَسخُ سِجِلِّ الحَفظ (يُغني عَن وَصفِ العَطَبِ بِالكَلِمات)
   const edDiag = $("export-done-diag-copy");
   if (edDiag) edDiag.addEventListener("click", async () => {
     const t = $("export-done-diag-txt")?.textContent || "";
@@ -2276,13 +2276,14 @@ function initEventListeners() {
   const resEl = $("export-res");
   if (resEl) resEl.addEventListener("change", onExportResChange);
 
+  initExportQualityUI();    // v1.2.22 — مُقتَرَحاتُ الجَودةِ وتَقديرُ الحَجم
   initDirectDownloadUI();   // v1.2.6 — حُقولُ التَنزيلِ مِن رابِطٍ مُباشِر
 
   // v1.2.14 — مُشارَكةُ حُزمةِ التَطبيق (تَظهَرُ في الهاتِفِ فَقَط)
   if (window.PIO?.canShareApk && window.PIO.canShareApk()) {
     const nt = $("share-apk-note");
     if (nt) nt.style.display = "";
-    // v1.2.21 — الزِرُّ في «الإعدادات» و«حَول» مَعاً
+    // v1.2.22 — الزِرُّ في «الإعدادات» و«حَول» مَعاً
     [$("share-apk-btn"), $("share-apk-btn-about")].filter(Boolean).forEach(b => {
       b.style.display = "";
       b.addEventListener("click", async () => {
@@ -2956,9 +2957,102 @@ function applyCanvasSize() {
   if (typeof fitCanvas === "function") fitCanvas();
 }
 
+// ══════════════════════════════════════════════════════
+//  v1.2.22 — مُعَدَّلُ البِتِّ بِحَسَبِ الدِقّة + تَقديرُ الحَجمِ قَبلَ التَصدير
+//  ───────────────────────────────────────────────────
+//  «تَخفيفُ الحَجمِ دونَ التَأثيرِ عَلى الجَودة» لَيسَ سِحراً: المُرَمِّزُ مَضبوطٌ
+//  أَصلاً عَلى أَفضَلِ ما تُتيحُهُ المِنَصّة (H.264 High · VBR · أَولَويّةُ الجَودة).
+//  الرافِعةُ الباقِيةُ أَن يُطابِقَ المُعَدَّلُ **الدِقّةَ الفِعليّة**: ثَمانِيةُ
+//  ميغابِتٍ لِمَقطَعِ 480p إهدارٌ خالِصٌ لا يَزيدُ العَينَ شَيئاً، ولِـ1080p
+//  مَعقولة. فَنَحسِبُ المُقتَرَحَ مِن عَدَدِ البِكسِلاتِ ومُعَدَّلِ الإطارات.
+// ══════════════════════════════════════════════════════
+
+// بِتّ لِكُلِّ بِكسِلٍ في الإطار (معامِل الجَودة) — مُستَمَدٌّ مِن مُمارَساتِ
+//   H.264 المَعروفة: القيمةُ الوُسطى تُعطي صورةً نَظيفةً لِمَشاهِدِ الرِيلز.
+//   المِعيار: «مُتَوازِن» عِندَ 1080×1920 و30 إطاراً = 8 Mbps — وهُوَ الافتِراضيُّ
+//   الذي أَعطى 49.5 م.ب لِخَمسينَ ثانِيةً في تَقريرِ المُستَخدِم، وصورَتُهُ نَظيفة.
+const VBR_BPP = { small: 0.080, balanced: 0.130, high: 0.200 };
+
+function suggestedBitrateMbps(preset) {
+  const { w, h } = (typeof computeCanvasSize === "function")
+    ? computeCanvasSize() : { w: 1080, h: 1920 };
+  const fps = parseInt(gv("export-fps") || "30") || 30;
+  const bpp = VBR_BPP[preset] || VBR_BPP.balanced;
+  const mbps = (w * h * fps * bpp) / 1e6;
+  return Math.max(2, Math.min(20, Math.round(mbps * 2) / 2));   // خُطوةُ نِصفِ ميغابِت
+}
+
+function projectDurationSec() {
+  if (Array.isArray(S.ayaDurations) && S.ayaDurations.length) {
+    const t = S.ayaDurations.reduce((a, b) => a + (parseFloat(b) || 0), 0);
+    if (t > 0) return t;
+  }
+  return (typeof S.totalDur === "number" && S.totalDur > 0) ? S.totalDur : 0;
+}
+
+function updateExportSizeNote() {
+  try { _updateExportSizeNote(); } catch (e) { /* الأَبعادُ لَم تُحسَب بَعد */ }
+}
+
+function _updateExportSizeNote() {
+  const note = document.getElementById("export-size-note");
+  if (!note) return;
+  const vbr = parseFloat(gv("export-vbr") || "8") || 8;
+  const abrTxt = gv("export-abr") || "192k";
+  const abr = (parseInt(abrTxt) || 192) / 1000;          // ميغابِت
+  const { w, h } = (typeof computeCanvasSize === "function")
+    ? computeCanvasSize() : { w: 0, h: 0 };
+  const dur = projectDurationSec();
+  const rec = suggestedBitrateMbps("balanced");
+
+  let txt = `الأَبعاد ${w}×${h}`;
+  if (dur > 0) {
+    const mb = ((vbr + abr) * dur) / 8;                   // ميغابايت
+    txt += ` · المُدّة ${dur.toFixed(0)} ث · الحَجمُ المُتَوَقَّع ≈ ${mb.toFixed(1)} م.ب`;
+  } else {
+    txt += ` · ${(vbr / 8).toFixed(2)} م.ب لِكُلِّ ثانِية`;
+  }
+  if (vbr > rec * 1.25) {
+    txt += `<br><span style="color:var(--a)">💡 ${rec} Mbps تَكفي لِهذه الأَبعادِ — ما فَوقَها يُكَبِّرُ المَلَفَّ بِلا فَرقٍ يُرى.</span>`;
+  }
+  note.innerHTML = txt;
+}
+
+function initExportQualityUI() {
+  const vbr = document.getElementById("export-vbr");
+  if (!vbr) return;
+  const apply = (preset) => {
+    const v = suggestedBitrateMbps(preset);
+    vbr.value = String(v);
+    vbr.dispatchEvent(new Event("input"));
+    vbr.dispatchEvent(new Event("change"));
+    updateExportSizeNote();
+    toast?.(`🎚️ ${v} Mbps — مُقتَرَحٌ لِأَبعادِ التَصديرِ الحاليّة`, "info", 2500);
+  };
+  document.getElementById("vbr-preset-small")?.addEventListener("click", () => apply("small"));
+  document.getElementById("vbr-preset-balanced")?.addEventListener("click", () => apply("balanced"));
+  document.getElementById("vbr-preset-high")?.addEventListener("click", () => apply("high"));
+
+  ["export-vbr", "export-abr", "export-fps", "export-res"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", updateExportSizeNote);
+    el.addEventListener("change", updateExportSizeNote);
+  });
+  document.querySelectorAll('input[name="fmt"]').forEach(el =>
+    el.addEventListener("change", updateExportSizeNote));
+
+  // ⚠️ v1.2.22 — التَحديثُ الأَوَّلُ **بَعدَ** استِعادةِ الإعداداتِ وضَبطِ اللَوحة:
+  //   عِندَ تَسجيلِ المُستَمِعينَ لَم تُحسَب أَبعادُ اللَوحةِ بَعدُ، فَكانَ أَوَّلُ
+  //   حِسابٍ يُخفِقُ ويَبقى السَطرُ فارِغاً حَتّى يُحَرِّكَ المُستَخدِمُ شَيئاً.
+  updateExportSizeNote();
+  setTimeout(updateExportSizeNote, 800);
+}
+
 function onExportResChange() {
   applyCanvasSize();
   const { w, h } = computeCanvasSize();
+  try { updateExportSizeNote(); } catch (_) {}
   toast?.(`🎬 أبعاد التصدير: ${w}×${h}`, "info", 2000);
 }
 
@@ -7225,7 +7319,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.21";
+const APP_VERSION = "1.2.22";
 let _updateInfo = null;
 
 // v1.2.16 — قَناةُ التَحديث: مُستَقِرٌّ وَحدَه (الافتِراض) أَو مَعَ الاختِباريّ.
@@ -7237,7 +7331,7 @@ function autoUpdateEnabled() {
   try { return localStorage.getItem("gt_sirm_update_auto") !== "0"; } catch (_) { return true; }
 }
 
-// v1.2.21 — ضَوابِطُ التَحديثِ مَوجودةٌ في «الإعدادات» و«حَول» مَعاً (يَبحَثُ
+// v1.2.22 — ضَوابِطُ التَحديثِ مَوجودةٌ في «الإعدادات» و«حَول» مَعاً (يَبحَثُ
 //   المُستَخدِمُ عَنها في كِلَيهِما). مَصدَرُ الحَقيقةِ واحِدٌ — `localStorage` —
 //   والنُسخَتانِ مِرآتانِ تَتَزامَنانِ لَحظيّاً، فَلا تَختَلِفانِ أَبَداً.
 function _updateEls(baseId) {
@@ -7387,7 +7481,7 @@ async function updateNow() {
   $("update-progress").style.display = "";
   $("update-progress-txt").textContent = "جارٍ التَنزيل…";
 
-  // v1.2.21 — أَبقِ الشاشةَ مُضاءةً ما دامَ التَنزيلُ جارِياً. الخِدمةُ الأَصليّةُ
+  // v1.2.22 — أَبقِ الشاشةَ مُضاءةً ما دامَ التَنزيلُ جارِياً. الخِدمةُ الأَصليّةُ
   //   تَحمي العَمَليّةَ، وهذا يَحمي التَجرِبةَ مِن إطفاءٍ يُقلِقُ المُستَخدِم.
   try { window.PIO?.keepAwakeStart?.(); } catch (_) {}
 
@@ -7410,7 +7504,7 @@ async function updateNow() {
     $("update-progress-txt").textContent = "✅ اكتَمَلَ التَنزيل — أَكمِلِ التَثبيتَ مِن شاشةِ النِظام.";
     setTimeout(closeUpdateModal, 2500);
   } catch (e) {
-    // v1.2.21 — الجُزءُ المُنَزَّلُ مَحفوظٌ: المُحاوَلةُ التالِيةُ تُكمِلُهُ ولا تُعيدُه
+    // v1.2.22 — الجُزءُ المُنَزَّلُ مَحفوظٌ: المُحاوَلةُ التالِيةُ تُكمِلُهُ ولا تُعيدُه
     $("update-progress-txt").textContent = "❌ " + String(e.message || e).slice(0, 120) +
       " — ما نُزِّلَ مَحفوظ؛ «تَحديثٌ الآن» يُكمِلُ مِن حَيثُ تَوَقَّف.";
     $("update-btns").style.display = "";
@@ -7703,7 +7797,7 @@ function askProjectName() {
     const cancelBtn = document.getElementById("proj-name-cancel-btn");
     if (!modal || !inp || !okBtn || !cancelBtn) return resolve({ name: suggestedProjectName(), share: false });
     inp.value = suggestedProjectName();
-    // v1.2.21 — قُلِ اللاحِقةَ الحَقيقيّةَ: في الهاتِفِ هيَ `.gtsirm.json`
+    // v1.2.22 — قُلِ اللاحِقةَ الحَقيقيّةَ: في الهاتِفِ هيَ `.gtsirm.json`
     //   (يَشتَرِطُ MediaStore تَطابُقَ اللاحِقةِ مَعَ نَوعِ المُحتَوى).
     const extHint = modal.querySelector("code");
     if (extHint && typeof projectFileExt === "function") extHint.textContent = projectFileExt();
@@ -8024,7 +8118,7 @@ function showExportResult(res) {
     where = `📁 حُفِظَ في: <b>${res.saved.path}</b>`;
     note = "تَجِدُهُ في مَعرِضِ الصُوَرِ والفيديو أو في تَطبيقِ «المِلَفّات». إن لَم يَظهَر فَوراً فَأَعِد فَتحَ المَعرِض.";
   } else if (method === "native-private" || method === "capacitor-fs") {
-    // ⚠️ v1.2.21 — قُلِ الحَقيقةَ: هذا مُجَلَّدٌ خاصٌّ بِالبَرنامَجِ لا يَظهَرُ في
+    // ⚠️ v1.2.22 — قُلِ الحَقيقةَ: هذا مُجَلَّدٌ خاصٌّ بِالبَرنامَجِ لا يَظهَرُ في
     //   المَعرِضِ ولا في «التَنزيلات».
     where = `⚠️ لَم يُقبَل في التَخزينِ المُشتَرَك — حُفِظَ في مُجَلَّدِ البَرنامَج:<br><b dir="ltr">${res.saved.path}</b>`;
     note = "هذا المُجَلَّدُ لا يَظهَرُ في المَعرِضِ ولا في «التَنزيلات»، ويُمحى بِإزالةِ البَرنامَج. " +
@@ -8170,9 +8264,9 @@ async function saveAsLastExport() {
 // ══════════════════════════════════════════════════════
 //  v1.2.2 — نَتيجةُ حِفظِ المَشروع: نَفسُ نافِذةِ الناتِجِ مَعَ المُشارَكةِ والحَفظِ باسم
 // ══════════════════════════════════════════════════════
-// v1.2.21 — يُظهِرُ سِجِلَّ خُطُواتِ الحَفظِ عِندَ الإخفاقِ أَوِ النُزولِ لِلاحتِياط.
+// v1.2.22 — يُظهِرُ سِجِلَّ خُطُواتِ الحَفظِ عِندَ الإخفاقِ أَوِ النُزولِ لِلاحتِياط.
 //   عِندَ النَجاحِ التامِّ يَبقى مَخفيّاً: لا داعِيَ لِإزعاجِ المُستَخدِمِ بِالتَفاصيل.
-// v1.2.21 — يَملَأُ قِسمَ التَشخيصِ الثابِتَ في «حَول». يُستَدعى عِندَ فَتحِ
+// v1.2.22 — يَملَأُ قِسمَ التَشخيصِ الثابِتَ في «حَول». يُستَدعى عِندَ فَتحِ
 //   القِسمِ وبَعدَ كُلِّ مُحاوَلةِ حَفظ — فَلا يَتَوَقَّفُ الخَبَرُ عَلى نافِذةٍ قَد
 //   لا تَظهَر.
 function refreshSaveDiagSection() {
@@ -8236,7 +8330,7 @@ function showProjectSavedResult(saved, blob, filename, proj) {
     note = "هذا المُجَلَّدُ لا يَظهَرُ في «التَنزيلات» ويُمحى بِإزالةِ البَرنامَج. " +
            "اِضغَط «📁 حِفظٌ باسم…» الآنَ لِتَنقُلَ المَشروعَ إلى مَكانٍ دائِمٍ تَختارُهُ بِنَفسِك.";
   } else if (method === "download-unverified") {
-    // v1.2.21 — لا نَدَّعي يَقيناً: أُطلِقَ التَنزيلُ ولا نَعلَمُ أَقَبِلَهُ النِظامُ أَم لا
+    // v1.2.22 — لا نَدَّعي يَقيناً: أُطلِقَ التَنزيلُ ولا نَعلَمُ أَقَبِلَهُ النِظامُ أَم لا
     where = `⬇️ أُطلِقَ تَنزيلُ المَلَفّ: <b>${saved.path}</b>`;
     note = "تَعَذَّرَتِ الكِتابةُ عَبرَ الجِسرِ الأَصليّ، فَجُرِّبَ تَنزيلُ المُتَصَفِّح. " +
            "تَحَقَّق مِن مُجَلَّدِ «التَنزيلات» — فَإن لَم تَجِدهُ فاستَعمِل «📤 مُشارَكة» " +
@@ -10015,7 +10109,7 @@ async function deserializeProject(proj) {
   if (missing.length) showMissingAssetsModal(missing);
 
   // v1.2 — استعادة حالة الأَقسام القابِلة للطَيّ (details) بحَسب التَرتيب
-  // ⚠️ v1.2.21 — الاستعادةُ بِالفِهرِسِ تَصلُحُ ما دامَ عَدَدُ الأَقسامِ لَم يَتَغَيَّر.
+  // ⚠️ v1.2.22 — الاستعادةُ بِالفِهرِسِ تَصلُحُ ما دامَ عَدَدُ الأَقسامِ لَم يَتَغَيَّر.
   //   وقَد أُضيفَت أَقسامٌ وحُذِفَت بَينَ الإصدارات، فَمَشروعٌ قَديمٌ يَفتَحُ أَقساماً
   //   لا عَلاقةَ لَها بِما حُفِظ ويَطوي غَيرَها. فَإن اختَلَفَ العَدَدُ نُبقي حالةَ
   //   الصَفحةِ الافتِراضيّةَ بَدَلَ إفسادِها.
@@ -10240,7 +10334,7 @@ async function saveProjectToPath(_filePath) {
     clearProjectDirty();
     // v1.2.2 — الحِفظُ اليَدَويُّ يَعرِضُ نافِذةً فيها «مُشارَكة» و«حِفظٌ باسم…».
     //   الحِفظُ التِلقائيُّ صامِتٌ (لا نُقاطِعُ المُستَخدِمَ كُلَّ بِضعِ دَقائِق).
-    // ⚠️ v1.2.21 — الفُقاعةُ أَوَّلاً، ثُمَّ النافِذة. كانَ الإعلانُ كُلُّهُ داخِلَ
+    // ⚠️ v1.2.22 — الفُقاعةُ أَوَّلاً، ثُمَّ النافِذة. كانَ الإعلانُ كُلُّهُ داخِلَ
     //   `showProjectSavedResult`: أَيُّ خَطَإٍ فيها (عُنصُرٌ ناقِصٌ في الواجِهة)
     //   يَبتَلِعُ خَبَرَ النَجاحِ كُلَّه، فَيَظُنُّ المُستَخدِمُ أَنَّ شَيئاً لَم يُحفَظ.
     if (!_silentProjectSave) {
@@ -10250,7 +10344,7 @@ async function saveProjectToPath(_filePath) {
       toast?.(where, saved.usedFallback ? "warn" : "success", saved.usedFallback ? 8000 : 3500);
       try { showProjectSavedResult(saved, blob, fname, proj); }
       catch (e) { console.error("تَعَذَّرَ عَرضُ نافِذةِ النَتيجة:", e); }
-      // v1.2.21 — المُجَلَّدُ الخاصُّ لَيسَ حِفظاً بِنَظَرِ المُستَخدِم: افتَح مُنتَقيَ
+      // v1.2.22 — المُجَلَّدُ الخاصُّ لَيسَ حِفظاً بِنَظَرِ المُستَخدِم: افتَح مُنتَقيَ
       //   النِظامِ فَوراً لِيَضَعَ المَلَفَّ حَيثُ يَراه. نَقرةٌ واحِدةٌ بَدَلَ ضَياع.
       if (saved.uri && (saved.usedFallback || saved.method === "capacitor-fs")) {
         setTimeout(() => {
@@ -10288,7 +10382,7 @@ async function saveProjectToPath(_filePath) {
 }
 
 // v1.1.0 — كَشف File System Access API (يُتيح الحَفظ الصامِت المُباشِر في نَفس المَلفّ)
-// ⚠️ v1.2.21 — هُنا كانَ العَطَبُ الذي أَعيانا أَربَعَ جَولات.
+// ⚠️ v1.2.22 — هُنا كانَ العَطَبُ الذي أَعيانا أَربَعَ جَولات.
 //   كانَ الفَحصُ وُجودَ الدالّةِ لا غَير. ومُنذُ WebView الحَديث (جِهازُ المُستَخدِم:
 //   Android 15 · Chrome 151) صارَت `showSaveFilePicker` **مَوجودةً داخِلَ
 //   WebView** — لَكِنَّها تَرفُضُ فَوراً بِـAbortError لِأَنَّ لا مُنتَقِيَ مِلَفّاتٍ
@@ -10326,7 +10420,7 @@ async function saveProjectInteractiveSafe(forcePrompt = false) {
     if (btn) { btn.disabled = true; btn.innerHTML = "⏳ <span>جارٍ الحَفظ…</span>"; }
     toast?.("⏳ جارٍ تَجهيزُ المَشروعِ لِلحَفظ…", "info", 1600);
 
-    // ⚠️ v1.2.21 — حارِسٌ زَمَنيّ. بَلَّغَ المُستَخدِمُ مِراراً أَنَّ الضَغطَ عَلى
+    // ⚠️ v1.2.22 — حارِسٌ زَمَنيّ. بَلَّغَ المُستَخدِمُ مِراراً أَنَّ الضَغطَ عَلى
     //   «حفظ» لا يُعقِبُهُ **شَيء**: لا نافِذةَ ولا رِسالة. وذلك مُمكِنٌ فِعلاً إن
     //   لَم يَعُد نِداءُ الجِسرِ أَبَداً (وَعدٌ لا يُحسَم) — فَيَبقى كُلُّ شَيءٍ
     //   مُعَلَّقاً بِلا خَطَإٍ يُمسَك. الآنَ يَنطِقُ البَرنامَجُ بَعدَ 25 ثانِية.
