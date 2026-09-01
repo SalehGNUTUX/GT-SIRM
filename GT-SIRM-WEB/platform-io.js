@@ -281,7 +281,33 @@
       trace("سُقوطٌ إلى Capacitor Filesystem");
       const r2 = await saveViaCapacitorFS(blob, filename, opts.onProgress);
       if (r2) { trace("Capacitor FS ✓", r2.path); persistTrace(); return r2; }
-      // كِلاهُما فَشِل: أَبلِغ بِالفَشَلِ صَراحةً بَدَلَ ادِّعاءِ نَجاحٍ كاذِب
+
+      // ── آخِرُ المَطاف: تَنزيلُ المُتَصَفِّحِ حَتّى داخِلَ WebView ──────────
+      //  ⚠️ v1.2.20 — لِمَ نُجَرِّبُهُ وقَد قُلنا إنَّهُ «لا يَعمَلُ في WebView»؟
+      //  لِأَنَّ المُستَخدِمَ شَهِدَ أَنَّ حَفظَ المَشروعِ يَعمَلُ في المُستَقِرِّ
+      //  v1.2.0 — وذلك الإصدارُ لا يَملِكُ هذه الطَبَقةَ أَصلاً: كانَ يَحفَظُ
+      //  بِـ`<a download>` وَحدَه. فَشَهادَتُهُ تَنقُضُ تَعميمَنا، ومَعناها أَنَّ
+      //  هذا المَسارَ يَعمَلُ عَلى جِهازِه. نُبقيهِ آخِراً لا أَوَّلاً (فَقَد يَمضي
+      //  بِلا أَثَرٍ عَلى أَجهِزةٍ أُخرى)، ونُبَلِّغُ عَنهُ بِتَحَفُّظٍ صَريحٍ لا
+      //  بِادِّعاءِ نَجاحٍ مُؤَكَّد — فَالحَفظُ الوَهميُّ أَضاعَ مَشاريعَ مِن قَبل.
+      trace("مُحاوَلةٌ أَخيرة: تَنزيلُ المُتَصَفِّح");
+      try {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename;
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { try { a.remove(); URL.revokeObjectURL(url); } catch (_) {} }, 1500);
+        trace("أُطلِقَ تَنزيلُ المُتَصَفِّح (غَيرُ مُؤَكَّد)");
+        persistTrace();
+        return { method: "download-unverified", path: filename,
+                 uri: null, bytes: blob.size, usedFallback: true,
+                 reason: "لَم يَقبَلِ الجِسرُ الأَصليُّ ولا Capacitor" };
+      } catch (e) {
+        trace("تَنزيلُ المُتَصَفِّحِ فَشِل", String(e && e.message || e));
+      }
+
       trace("فَشِلَت كُلُّ الوَسائِل ✗");
       persistTrace();
       return null;
