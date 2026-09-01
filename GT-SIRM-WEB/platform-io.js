@@ -44,7 +44,11 @@
     try { return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) || null; }
     catch (_) { return null; }
   }
-  const HAS_FSA_SAVE = (typeof window !== "undefined" && typeof window.showSaveFilePicker === "function");
+  // ⚠️ v1.2.21 — `showSaveFilePicker` صارَت مَوجودةً داخِلَ WebView الحَديثِ
+  //   لَكِنَّها تَرفُضُ فَوراً بِـAbortError. اِستِثناءُ التَطبيقِ الأَصليِّ صَريحاً.
+  const HAS_FSA_SAVE = (typeof window !== "undefined"
+    && typeof window.showSaveFilePicker === "function"
+    && !isNativeAndroid());
 
   // ── base64 بِلا إنهاكِ المَكدَس ────────────────────────────
   //   `String.fromCharCode(...u8)` يَنهارُ فَوقَ ~125 أَلفَ بايت،
@@ -87,6 +91,12 @@
     if (_trace.length > 60) _trace.shift();
     try { console.log("[PIO] " + line); } catch (_) {}
   }
+  // v1.2.21 — يُبدَأُ السِجِلُّ مِن أَوَّلِ نَقرةٍ لا مِن دُخولِ طَبَقةِ التَسليم:
+  //   العَطَبُ الذي أَعيانا كانَ **قَبلَ** الوُصولِ إلَيها، فَخَرَجَ السِجِلُّ فارِغاً
+  //   ولَم يَدُلَّ عَلى شَيء. الآنَ كُلُّ خُطوةٍ مُسَجَّلةٌ مِنَ البِداية.
+  function beginSaveTrace(what) { clearTrace(); trace(what || "بَدءُ حَفظ"); persistTrace(); }
+  function noteSaveTrace(step, detail) { trace(step, detail); persistTrace(); }
+
   function saveTrace() {
     if (_trace.length) return _trace.join("\n");
     // v1.2.20 — سِجِلُّ آخِرِ مُحاوَلةٍ يَبقى بَعدَ إغلاقِ البَرنامَج: العَطَبُ قَد
@@ -274,8 +284,7 @@
     }
 
     if (isNativeAndroid()) {
-      clearTrace();
-      trace("طَلَبُ حَفظ", filename);
+      trace("طَبَقةُ التَسليم", filename);
       const r1 = await saveViaNative(blob, filename, mime, kind, opts.onProgress);
       if (r1) { persistTrace(); return r1; }
       trace("سُقوطٌ إلى Capacitor Filesystem");
@@ -563,9 +572,28 @@
       } catch (_) {}
     }
     try {
-      const res = await P.downloadUpdate({ url: apkUrl, name: apkName });
+      // v1.2.21 — التَنزيلُ يَستَأنِفُ مِن حَيثُ تَوَقَّف (تَرويسةُ Range في الطَبَقةِ
+      //   الأَصليّة)، فَانقِطاعُ الشَبَكةِ أَو تَجميدُ النِظامِ لَم يَعُد يَعني
+      //   البَدءَ مِنَ الصِفر. نُعيدُ المُحاوَلةَ ثَلاثاً: كُلُّ مُحاوَلةٍ تُكمِلُ ما
+      //   قَبلَها لا تُلغيه.
+      let res = null, lastErr = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try { res = await P.downloadUpdate({ url: apkUrl, name: apkName }); break; }
+        catch (e) {
+          lastErr = e;
+          const msg = String(e && (e.message || e));
+          // «ناقِص» يَعني أَنَّ جُزءاً حُفِظَ ⇒ المُحاوَلةُ التالِيةُ تُكمِلُه
+          if (attempt < 3) {
+            if (onProgress) onProgress(-1, 0, 0, "اِنقَطَعَ التَنزيل — يُستَأنَفُ مِن حَيثُ تَوَقَّف…");
+            await new Promise(r => setTimeout(r, 1500 * attempt));
+            continue;
+          }
+          throw new Error(msg);
+        }
+      }
+      if (!res) throw (lastErr || new Error("تَعَذَّرَ التَنزيل"));
       const inst = await P.installApk({ path: res.path });
-      return { path: res.path, needsPermission: !!inst.needsPermission };
+      return { path: res.path, needsPermission: !!inst.needsPermission, resumed: !!res.resumed };
     } finally {
       if (handle && handle.remove) { try { await handle.remove(); } catch (_) {} }
     }
@@ -753,6 +781,8 @@
     GITHUB_REPO,
     isNativeAndroid,
     saveTrace,
+    beginSaveTrace,
+    noteSaveTrace,
     hasNativeBridge: () => !!nativePlugin(),
     HAS_FSA_SAVE,
     prepareSaveTarget,

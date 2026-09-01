@@ -12011,7 +12011,7 @@ function _dtUpdateEls(baseId) {
 function _dtAppVersion() {
   const el = document.querySelector(".info-v");
   const t = el ? el.textContent.trim() : "";
-  return /^\d+\.\d+/.test(t) ? t : "1.2.20";
+  return /^\d+\.\d+/.test(t) ? t : "1.2.21";
 }
 
 function dtBetaUpdatesEnabled() {

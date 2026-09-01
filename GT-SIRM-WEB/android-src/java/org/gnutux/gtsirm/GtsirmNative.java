@@ -516,54 +516,141 @@ public class GtsirmNative extends Plugin {
             HttpURLConnection conn = null;
             InputStream in = null;
             OutputStream out = null;
+            // ⚠️ v1.2.21 — التَنزيلُ كانَ يَقِفُ عِندَ إطفاءِ الشاشةِ ثُمَّ يَبدَأُ
+            //   مِنَ الصِفرِ عِندَ المُحاوَلةِ التالِية. سَبَبانِ مُنفَصِلان:
+            //   (١) لا خِدمةَ مُقَدِّمةٍ ولا wake lock ⇒ يُجَمِّدُ النِظامُ الخَيطَ
+            //       ويَنقَطِعُ المِقبَس. الحَلُّ: نَفسُ خِدمةِ التَصدير.
+            //   (٢) كانَ يَحذِفُ **كُلَّ** مُحتَوى مُجَلَّدِ التَحديثاتِ قَبلَ البَدء —
+            //       بِما فيهِ الجُزءُ المُنَزَّلُ سابِقاً — ثُمَّ يَفتَحُ المَلَفَّ
+            //       بِـFileOutputStream عادِيٍّ (يَقطَعُهُ مِن أَوَّلِه) بِلا تَرويسةِ
+            //       Range. فَكانَ الاستِئنافُ مُستَحيلاً بِالبِناء.
+            startUpdateForegroundService("جارٍ تَنزيلُ التَحديث…", 0);
             try {
                 File dir = new File(getContext().getExternalFilesDir(null), "updates");
                 if (!dir.exists() && !dir.mkdirs()) throw new Exception("تَعَذَّرَ إنشاءُ مُجَلَّدِ التَحديثات");
-                // نَظِّف الحُزَمَ القَديمةَ حَتّى لا تَتَراكَم
-                File[] old = dir.listFiles();
-                if (old != null) for (File f : old) { if (f.isFile()) f.delete(); }
 
-                File apk = new File(dir, sanitize(name));
+                File apk  = new File(dir, sanitize(name));
+                File part = new File(dir, sanitize(name) + ".part");
+
+                // نَظِّف ما لا يَخُصُّ هذا التَنزيل، واحفَظِ الجُزءَ المُنَزَّل
+                File[] old = dir.listFiles();
+                if (old != null) for (File f : old) {
+                    if (f.isFile() && !f.equals(part) && !f.equals(apk)) f.delete();
+                }
+                // حُزمةٌ مُكتَمِلةٌ بِنَفسِ الاسمِ مِن قَبل ⇒ لا تُنَزِّل مِن جَديد
+                if (apk.exists() && apk.length() > 0 && !part.exists()) {
+                    JSObject done = new JSObject();
+                    done.put("path", apk.getAbsolutePath());
+                    done.put("bytes", apk.length());
+                    done.put("resumed", false);
+                    done.put("cached", true);
+                    call.resolve(done);
+                    return;
+                }
+
+                long have = part.exists() ? part.length() : 0;
                 conn = (HttpURLConnection) new URL(url).openConnection();
                 conn.setInstanceFollowRedirects(true);
                 conn.setConnectTimeout(30000);
                 conn.setReadTimeout(60000);
+                if (have > 0) conn.setRequestProperty("Range", "bytes=" + have + "-");
                 conn.connect();
                 int code = conn.getResponseCode();
                 if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
-                final int total = conn.getContentLength();
 
-                in = conn.getInputStream();
-                out = new FileOutputStream(apk);
+                // 206 ⇒ قَبِلَ الاستِئناف. 200 مَعَ have>0 ⇒ رَفَضَهُ فَنَبدَأُ مِنَ الصِفر.
+                boolean resumed = (code == 206 && have > 0);
+                if (!resumed) have = 0;
+
+                long total = -1;
+                String cr = conn.getHeaderField("Content-Range");
+                if (resumed && cr != null && cr.contains("/")) {
+                    try { total = Long.parseLong(cr.substring(cr.indexOf('/') + 1).trim()); } catch (Exception ignored) {}
+                }
+                if (total < 0) {
+                    long cl = conn.getContentLengthLong();
+                    if (cl > 0) total = cl + have;
+                }
+
+                in  = conn.getInputStream();
+                out = new FileOutputStream(part, resumed);   // append عِندَ الاستِئناف
                 byte[] buf = new byte[65536];
-                int n; long got = 0; long lastEmit = 0;
+                int n; long got = have; long lastEmit = 0;
                 while ((n = in.read(buf)) > 0) {
                     out.write(buf, 0, n);
                     got += n;
                     long now = System.currentTimeMillis();
                     if (now - lastEmit > 400) {
                         lastEmit = now;
+                        int pct = (total > 0) ? (int) (got * 100 / total) : -1;
                         JSObject ev = new JSObject();
                         ev.put("received", got);
                         ev.put("total", total);
-                        ev.put("percent", total > 0 ? (int) (got * 100 / total) : -1);
+                        ev.put("percent", pct);
+                        ev.put("resumed", resumed);
                         notifyListeners("updateProgress", ev);
+                        updateUpdateForegroundService(
+                            "جارٍ تَنزيلُ التَحديث… " + (pct >= 0 ? pct + "٪" : ""), pct);
                     }
                 }
                 out.flush();
+                try { out.close(); } catch (Exception ignored) {}
+                out = null;
+
+                if (total > 0 && part.length() != total) {
+                    // ناقِصٌ: أَبقِ الجُزءَ لِيُستَأنَفَ، ولا تَدَّعِ اكتِمالاً
+                    throw new Exception("التَنزيلُ ناقِص (" + part.length() + "/" + total + ") — أَعِد المُحاوَلةَ لِيُستَكمَل");
+                }
+                if (apk.exists()) apk.delete();
+                if (!part.renameTo(apk)) throw new Exception("تَعَذَّرَ إتمامُ المَلَفّ");
 
                 JSObject ret = new JSObject();
                 ret.put("path", apk.getAbsolutePath());
-                ret.put("bytes", got);
+                ret.put("bytes", apk.length());
+                ret.put("resumed", resumed);
                 call.resolve(ret);
             } catch (Exception e) {
+                // لا نَحذِفُ `.part`: هُوَ رَصيدُ الاستِئنافِ في المُحاوَلةِ القادِمة
                 call.reject("فَشِلَ تَنزيلُ التَحديث: " + e.getMessage(), e);
             } finally {
                 try { if (in != null) in.close(); } catch (Exception ignored) {}
                 try { if (out != null) out.close(); } catch (Exception ignored) {}
                 if (conn != null) conn.disconnect();
+                stopUpdateForegroundService();
             }
         }).start();
+    }
+
+    // ── خِدمةُ المُقَدِّمةِ أثناءَ تَنزيلِ التَحديث ───────────────────
+    private void startUpdateForegroundService(String text, int progress) {
+        try {
+            Intent i = new Intent(getContext(), ExportService.class);
+            i.setAction(ExportService.ACTION_START);
+            i.putExtra(ExportService.EXTRA_TEXT, text);
+            i.putExtra(ExportService.EXTRA_PROGRESS, progress);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getContext().startForegroundService(i);
+            else getContext().startService(i);
+        } catch (Exception e) {
+            android.util.Log.w("GT-SIRM", "تَعَذَّرَ بَدءُ خِدمةِ التَنزيل: " + e.getMessage());
+        }
+    }
+
+    private void updateUpdateForegroundService(String text, int progress) {
+        try {
+            Intent i = new Intent(getContext(), ExportService.class);
+            i.setAction(ExportService.ACTION_UPDATE);
+            i.putExtra(ExportService.EXTRA_TEXT, text);
+            i.putExtra(ExportService.EXTRA_PROGRESS, progress);
+            getContext().startService(i);
+        } catch (Exception ignored) {}
+    }
+
+    private void stopUpdateForegroundService() {
+        try {
+            Intent i = new Intent(getContext(), ExportService.class);
+            i.setAction(ExportService.ACTION_STOP);
+            getContext().startService(i);
+        } catch (Exception ignored) {}
     }
 
     /** يَفتَحُ شاشةَ تَثبيتِ النِظام لِلحُزمةِ المُنَزَّلة. */

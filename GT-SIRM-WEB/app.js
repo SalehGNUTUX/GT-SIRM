@@ -2223,7 +2223,7 @@ function initEventListeners() {
   if (edShare) edShare.addEventListener("click", shareLastExport);
   const edSaveAs = $("export-done-saveas-btn");
   if (edSaveAs) edSaveAs.addEventListener("click", saveAsLastExport);
-  // v1.2.20 — قِسمُ التَشخيصِ الثابِتُ في «حَول»
+  // v1.2.21 — قِسمُ التَشخيصِ الثابِتُ في «حَول»
   const dSec = $("save-diag-sec");
   if (dSec) dSec.addEventListener("toggle", () => { if (dSec.open) refreshSaveDiagSection(); });
   $("save-diag-copy")?.addEventListener("click", async () => {
@@ -2243,7 +2243,7 @@ function initEventListeners() {
     }
   });
 
-  // v1.2.20 — نَسخُ سِجِلِّ الحَفظ (يُغني عَن وَصفِ العَطَبِ بِالكَلِمات)
+  // v1.2.21 — نَسخُ سِجِلِّ الحَفظ (يُغني عَن وَصفِ العَطَبِ بِالكَلِمات)
   const edDiag = $("export-done-diag-copy");
   if (edDiag) edDiag.addEventListener("click", async () => {
     const t = $("export-done-diag-txt")?.textContent || "";
@@ -2282,7 +2282,7 @@ function initEventListeners() {
   if (window.PIO?.canShareApk && window.PIO.canShareApk()) {
     const nt = $("share-apk-note");
     if (nt) nt.style.display = "";
-    // v1.2.20 — الزِرُّ في «الإعدادات» و«حَول» مَعاً
+    // v1.2.21 — الزِرُّ في «الإعدادات» و«حَول» مَعاً
     [$("share-apk-btn"), $("share-apk-btn-about")].filter(Boolean).forEach(b => {
       b.style.display = "";
       b.addEventListener("click", async () => {
@@ -7225,7 +7225,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.2.20";
+const APP_VERSION = "1.2.21";
 let _updateInfo = null;
 
 // v1.2.16 — قَناةُ التَحديث: مُستَقِرٌّ وَحدَه (الافتِراض) أَو مَعَ الاختِباريّ.
@@ -7237,7 +7237,7 @@ function autoUpdateEnabled() {
   try { return localStorage.getItem("gt_sirm_update_auto") !== "0"; } catch (_) { return true; }
 }
 
-// v1.2.20 — ضَوابِطُ التَحديثِ مَوجودةٌ في «الإعدادات» و«حَول» مَعاً (يَبحَثُ
+// v1.2.21 — ضَوابِطُ التَحديثِ مَوجودةٌ في «الإعدادات» و«حَول» مَعاً (يَبحَثُ
 //   المُستَخدِمُ عَنها في كِلَيهِما). مَصدَرُ الحَقيقةِ واحِدٌ — `localStorage` —
 //   والنُسخَتانِ مِرآتانِ تَتَزامَنانِ لَحظيّاً، فَلا تَختَلِفانِ أَبَداً.
 function _updateEls(baseId) {
@@ -7387,8 +7387,13 @@ async function updateNow() {
   $("update-progress").style.display = "";
   $("update-progress-txt").textContent = "جارٍ التَنزيل…";
 
+  // v1.2.21 — أَبقِ الشاشةَ مُضاءةً ما دامَ التَنزيلُ جارِياً. الخِدمةُ الأَصليّةُ
+  //   تَحمي العَمَليّةَ، وهذا يَحمي التَجرِبةَ مِن إطفاءٍ يُقلِقُ المُستَخدِم.
+  try { window.PIO?.keepAwakeStart?.(); } catch (_) {}
+
   try {
-    const res = await window.PIO.downloadAndInstall(info.apkUrl, info.apkName, (pct, got, total) => {
+    const res = await window.PIO.downloadAndInstall(info.apkUrl, info.apkName, (pct, got, total, note) => {
+      if (note) { $("update-progress-txt").textContent = "⏸️ " + note; return; }
       const p = Math.max(0, Math.min(100, pct));
       $("update-fill").style.width = (p < 0 ? 0 : p) + "%";
       $("update-progress-txt").textContent = total > 0
@@ -7405,9 +7410,13 @@ async function updateNow() {
     $("update-progress-txt").textContent = "✅ اكتَمَلَ التَنزيل — أَكمِلِ التَثبيتَ مِن شاشةِ النِظام.";
     setTimeout(closeUpdateModal, 2500);
   } catch (e) {
-    $("update-progress-txt").textContent = "❌ " + String(e.message || e).slice(0, 120);
+    // v1.2.21 — الجُزءُ المُنَزَّلُ مَحفوظٌ: المُحاوَلةُ التالِيةُ تُكمِلُهُ ولا تُعيدُه
+    $("update-progress-txt").textContent = "❌ " + String(e.message || e).slice(0, 120) +
+      " — ما نُزِّلَ مَحفوظ؛ «تَحديثٌ الآن» يُكمِلُ مِن حَيثُ تَوَقَّف.";
     $("update-btns").style.display = "";
     nowBtn.disabled = false;
+  } finally {
+    try { window.PIO?.keepAwakeStop?.(); } catch (_) {}
   }
 }
 
@@ -7694,7 +7703,7 @@ function askProjectName() {
     const cancelBtn = document.getElementById("proj-name-cancel-btn");
     if (!modal || !inp || !okBtn || !cancelBtn) return resolve({ name: suggestedProjectName(), share: false });
     inp.value = suggestedProjectName();
-    // v1.2.20 — قُلِ اللاحِقةَ الحَقيقيّةَ: في الهاتِفِ هيَ `.gtsirm.json`
+    // v1.2.21 — قُلِ اللاحِقةَ الحَقيقيّةَ: في الهاتِفِ هيَ `.gtsirm.json`
     //   (يَشتَرِطُ MediaStore تَطابُقَ اللاحِقةِ مَعَ نَوعِ المُحتَوى).
     const extHint = modal.querySelector("code");
     if (extHint && typeof projectFileExt === "function") extHint.textContent = projectFileExt();
@@ -8015,7 +8024,7 @@ function showExportResult(res) {
     where = `📁 حُفِظَ في: <b>${res.saved.path}</b>`;
     note = "تَجِدُهُ في مَعرِضِ الصُوَرِ والفيديو أو في تَطبيقِ «المِلَفّات». إن لَم يَظهَر فَوراً فَأَعِد فَتحَ المَعرِض.";
   } else if (method === "native-private" || method === "capacitor-fs") {
-    // ⚠️ v1.2.20 — قُلِ الحَقيقةَ: هذا مُجَلَّدٌ خاصٌّ بِالبَرنامَجِ لا يَظهَرُ في
+    // ⚠️ v1.2.21 — قُلِ الحَقيقةَ: هذا مُجَلَّدٌ خاصٌّ بِالبَرنامَجِ لا يَظهَرُ في
     //   المَعرِضِ ولا في «التَنزيلات».
     where = `⚠️ لَم يُقبَل في التَخزينِ المُشتَرَك — حُفِظَ في مُجَلَّدِ البَرنامَج:<br><b dir="ltr">${res.saved.path}</b>`;
     note = "هذا المُجَلَّدُ لا يَظهَرُ في المَعرِضِ ولا في «التَنزيلات»، ويُمحى بِإزالةِ البَرنامَج. " +
@@ -8161,9 +8170,9 @@ async function saveAsLastExport() {
 // ══════════════════════════════════════════════════════
 //  v1.2.2 — نَتيجةُ حِفظِ المَشروع: نَفسُ نافِذةِ الناتِجِ مَعَ المُشارَكةِ والحَفظِ باسم
 // ══════════════════════════════════════════════════════
-// v1.2.20 — يُظهِرُ سِجِلَّ خُطُواتِ الحَفظِ عِندَ الإخفاقِ أَوِ النُزولِ لِلاحتِياط.
+// v1.2.21 — يُظهِرُ سِجِلَّ خُطُواتِ الحَفظِ عِندَ الإخفاقِ أَوِ النُزولِ لِلاحتِياط.
 //   عِندَ النَجاحِ التامِّ يَبقى مَخفيّاً: لا داعِيَ لِإزعاجِ المُستَخدِمِ بِالتَفاصيل.
-// v1.2.20 — يَملَأُ قِسمَ التَشخيصِ الثابِتَ في «حَول». يُستَدعى عِندَ فَتحِ
+// v1.2.21 — يَملَأُ قِسمَ التَشخيصِ الثابِتَ في «حَول». يُستَدعى عِندَ فَتحِ
 //   القِسمِ وبَعدَ كُلِّ مُحاوَلةِ حَفظ — فَلا يَتَوَقَّفُ الخَبَرُ عَلى نافِذةٍ قَد
 //   لا تَظهَر.
 function refreshSaveDiagSection() {
@@ -8227,7 +8236,7 @@ function showProjectSavedResult(saved, blob, filename, proj) {
     note = "هذا المُجَلَّدُ لا يَظهَرُ في «التَنزيلات» ويُمحى بِإزالةِ البَرنامَج. " +
            "اِضغَط «📁 حِفظٌ باسم…» الآنَ لِتَنقُلَ المَشروعَ إلى مَكانٍ دائِمٍ تَختارُهُ بِنَفسِك.";
   } else if (method === "download-unverified") {
-    // v1.2.20 — لا نَدَّعي يَقيناً: أُطلِقَ التَنزيلُ ولا نَعلَمُ أَقَبِلَهُ النِظامُ أَم لا
+    // v1.2.21 — لا نَدَّعي يَقيناً: أُطلِقَ التَنزيلُ ولا نَعلَمُ أَقَبِلَهُ النِظامُ أَم لا
     where = `⬇️ أُطلِقَ تَنزيلُ المَلَفّ: <b>${saved.path}</b>`;
     note = "تَعَذَّرَتِ الكِتابةُ عَبرَ الجِسرِ الأَصليّ، فَجُرِّبَ تَنزيلُ المُتَصَفِّح. " +
            "تَحَقَّق مِن مُجَلَّدِ «التَنزيلات» — فَإن لَم تَجِدهُ فاستَعمِل «📤 مُشارَكة» " +
@@ -10006,7 +10015,7 @@ async function deserializeProject(proj) {
   if (missing.length) showMissingAssetsModal(missing);
 
   // v1.2 — استعادة حالة الأَقسام القابِلة للطَيّ (details) بحَسب التَرتيب
-  // ⚠️ v1.2.20 — الاستعادةُ بِالفِهرِسِ تَصلُحُ ما دامَ عَدَدُ الأَقسامِ لَم يَتَغَيَّر.
+  // ⚠️ v1.2.21 — الاستعادةُ بِالفِهرِسِ تَصلُحُ ما دامَ عَدَدُ الأَقسامِ لَم يَتَغَيَّر.
   //   وقَد أُضيفَت أَقسامٌ وحُذِفَت بَينَ الإصدارات، فَمَشروعٌ قَديمٌ يَفتَحُ أَقساماً
   //   لا عَلاقةَ لَها بِما حُفِظ ويَطوي غَيرَها. فَإن اختَلَفَ العَدَدُ نُبقي حالةَ
   //   الصَفحةِ الافتِراضيّةَ بَدَلَ إفسادِها.
@@ -10231,7 +10240,7 @@ async function saveProjectToPath(_filePath) {
     clearProjectDirty();
     // v1.2.2 — الحِفظُ اليَدَويُّ يَعرِضُ نافِذةً فيها «مُشارَكة» و«حِفظٌ باسم…».
     //   الحِفظُ التِلقائيُّ صامِتٌ (لا نُقاطِعُ المُستَخدِمَ كُلَّ بِضعِ دَقائِق).
-    // ⚠️ v1.2.20 — الفُقاعةُ أَوَّلاً، ثُمَّ النافِذة. كانَ الإعلانُ كُلُّهُ داخِلَ
+    // ⚠️ v1.2.21 — الفُقاعةُ أَوَّلاً، ثُمَّ النافِذة. كانَ الإعلانُ كُلُّهُ داخِلَ
     //   `showProjectSavedResult`: أَيُّ خَطَإٍ فيها (عُنصُرٌ ناقِصٌ في الواجِهة)
     //   يَبتَلِعُ خَبَرَ النَجاحِ كُلَّه، فَيَظُنُّ المُستَخدِمُ أَنَّ شَيئاً لَم يُحفَظ.
     if (!_silentProjectSave) {
@@ -10241,7 +10250,7 @@ async function saveProjectToPath(_filePath) {
       toast?.(where, saved.usedFallback ? "warn" : "success", saved.usedFallback ? 8000 : 3500);
       try { showProjectSavedResult(saved, blob, fname, proj); }
       catch (e) { console.error("تَعَذَّرَ عَرضُ نافِذةِ النَتيجة:", e); }
-      // v1.2.20 — المُجَلَّدُ الخاصُّ لَيسَ حِفظاً بِنَظَرِ المُستَخدِم: افتَح مُنتَقيَ
+      // v1.2.21 — المُجَلَّدُ الخاصُّ لَيسَ حِفظاً بِنَظَرِ المُستَخدِم: افتَح مُنتَقيَ
       //   النِظامِ فَوراً لِيَضَعَ المَلَفَّ حَيثُ يَراه. نَقرةٌ واحِدةٌ بَدَلَ ضَياع.
       if (saved.uri && (saved.usedFallback || saved.method === "capacitor-fs")) {
         setTimeout(() => {
@@ -10279,7 +10288,21 @@ async function saveProjectToPath(_filePath) {
 }
 
 // v1.1.0 — كَشف File System Access API (يُتيح الحَفظ الصامِت المُباشِر في نَفس المَلفّ)
-const HAS_FSA = typeof window !== "undefined" && typeof window.showSaveFilePicker === "function";
+// ⚠️ v1.2.21 — هُنا كانَ العَطَبُ الذي أَعيانا أَربَعَ جَولات.
+//   كانَ الفَحصُ وُجودَ الدالّةِ لا غَير. ومُنذُ WebView الحَديث (جِهازُ المُستَخدِم:
+//   Android 15 · Chrome 151) صارَت `showSaveFilePicker` **مَوجودةً داخِلَ
+//   WebView** — لَكِنَّها تَرفُضُ فَوراً بِـAbortError لِأَنَّ لا مُنتَقِيَ مِلَفّاتٍ
+//   هُناك. وكانَ الرَمزُ يُفَسِّرُ AbortError بِأَنَّهُ «أَلغى المُستَخدِم» فَيَعودُ
+//   **صامِتاً**: لا نافِذةَ ولا فُقاعةَ ولا مَلَفَّ ولا حَتّى سَطرٌ في السِجِلّ.
+//   وهذا حَرفيّاً ما وصَفَهُ المُستَخدِم، وأَثبَتَهُ التَشخيصُ بِقَولِهِ
+//   «لَم تُسَجَّل مُحاوَلةُ حَفظٍ بَعد» مَعَ أَنَّ اسمَ المَلَفِّ مُسَجَّل.
+//   وهُوَ يُفَسِّرُ أيضاً لِمَ كانَ يَعمَلُ في v1.2.0: WebView أَقدَمُ لَم تَكُنِ
+//   الدالّةُ فيهِ أَصلاً، فَكانَ المَسارُ يَمضي إلى التَنزيلِ المُعتاد.
+//   القاعِدة: في التَطبيقِ الأَصليِّ لا نَستَعمِلُ مُنتَقِيَ المُتَصَفِّحِ أَبَداً —
+//   لَدَينا جِسرٌ أَصليٌّ أَقوى مِنه.
+const HAS_FSA = typeof window !== "undefined"
+  && typeof window.showSaveFilePicker === "function"
+  && !(window.PIO && window.PIO.isNativeAndroid && window.PIO.isNativeAndroid());
 
 // v1.2.3 — الغِلافُ الذي يَمنَعُ «لا استِجابةَ ولا رِسالة».
 //   كانَ نَقرُ 💾 يَستَدعي دالّةً غَيرَ مَحميّةٍ بِـtry: أَيُّ خَطَإٍ في تَسَلسُلِ
@@ -10292,15 +10315,18 @@ async function saveProjectInteractiveSafe(forcePrompt = false) {
   try {
     // v1.2.4 — سَمِّ المَلَفَّ قَبلَ الحَفظ. الاسمُ المُقتَرَحُ مِن عُنوانِ المَقطَعِ
     //   أو السورةِ — نَفسُ ما يَحمِلُهُ المَلَفُّ المُصَدَّر.
+    window.PIO?.beginSaveTrace?.("نَقرُ 💾 — حَفظُ المَشروع");
     const chosen = await askProjectName();
-    if (chosen === null) return;            // أَلغى المُستَخدِم
+    if (chosen === null) { window.PIO?.noteSaveTrace?.("أَلغى المُستَخدِمُ التَسمية"); return; }
     S.projectFileName = buildProjectFileName(chosen.name);
     _shareAfterProjectSave = !!chosen.share;
 
+    window.PIO?.noteSaveTrace?.("الاسم", S.projectFileName +
+      " · FSA=" + HAS_FSA + " · أَصليّ=" + !!(window.PIO && window.PIO.isNativeAndroid()));
     if (btn) { btn.disabled = true; btn.innerHTML = "⏳ <span>جارٍ الحَفظ…</span>"; }
     toast?.("⏳ جارٍ تَجهيزُ المَشروعِ لِلحَفظ…", "info", 1600);
 
-    // ⚠️ v1.2.20 — حارِسٌ زَمَنيّ. بَلَّغَ المُستَخدِمُ مِراراً أَنَّ الضَغطَ عَلى
+    // ⚠️ v1.2.21 — حارِسٌ زَمَنيّ. بَلَّغَ المُستَخدِمُ مِراراً أَنَّ الضَغطَ عَلى
     //   «حفظ» لا يُعقِبُهُ **شَيء**: لا نافِذةَ ولا رِسالة. وذلك مُمكِنٌ فِعلاً إن
     //   لَم يَعُد نِداءُ الجِسرِ أَبَداً (وَعدٌ لا يُحسَم) — فَيَبقى كُلُّ شَيءٍ
     //   مُعَلَّقاً بِلا خَطَإٍ يُمسَك. الآنَ يَنطِقُ البَرنامَجُ بَعدَ 25 ثانِية.
@@ -10358,10 +10384,12 @@ async function saveProjectInteractive(forcePrompt = false) {
       }
       return;
     } catch (e) {
-      if (e.name === "AbortError") return;
+      window.PIO?.noteSaveTrace?.("مُنتَقي المُتَصَفِّحِ أَخفَق", e && e.name);
+      if (e.name === "AbortError") { window.PIO?.noteSaveTrace?.("أَلغى المُستَخدِمُ المُنتَقي"); return; }
       console.warn("FSA save failed:", e);
     }
   }
+  window.PIO?.noteSaveTrace?.("المَسار: طَبَقةُ التَسليم (PIO)");
 
   // Fallback: تَسليمٌ عَبرَ PIO (تَنزيلٌ في المُتَصَفِّح، وكِتابةٌ حَقيقيّةٌ في الهاتِف)
   const ok = await saveProjectToPath(null);
