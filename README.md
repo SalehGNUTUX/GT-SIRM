@@ -10,7 +10,7 @@
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
 [![Platform: Linux + Web + Android](https://img.shields.io/badge/Platform-Linux%20%7C%20Web%20%7C%20Android-orange?logo=linux)](#)
 [![Status](https://img.shields.io/badge/Status-Stable-brightgreen)](#)
-[![Version](https://img.shields.io/badge/Version-1.2.0-success)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-1.3.0-success)](./CHANGELOG.md)
 [![Releases](https://img.shields.io/github/v/release/SalehGNUTUX/GT-SIRM?label=Latest%20Release)](https://github.com/SalehGNUTUX/GT-SIRM/releases)
 
 </div>
@@ -32,6 +32,23 @@
 **GT-SIRM** صانع ريلز إسلامي شامل، يجمع كلَّ ما يحتاجه الداعية والمعلِّم وصانع المحتوى الدينيّ في تطبيق واحد بنسختَين متطابقتَين الميزات: نسخة سطح المكتب لـ GNU/Linux، ونسخة الويب (PWA) تعمل في كلِّ المتصفّحات.
 
 يَرِثُ GT-SIRM كلَّ مزايا [GT-SQRM](https://github.com/SalehGNUTUX/GT-SQRM) (صانع الريلز القرآنيّة) — مع توگل لتفعيل/إلغاء وحدة القرآن — ويُضيف إليها وحدات للحديث والأذكار والأدعية وأسماء الله الحسنى والحِكَم، إلى جانب محرّر نصٍّ حرٍّ، وأداة Chromakey لإزالة الخلفيّات، ومرونةً كاملةً في استيراد الصوت والصورة والفيديو.
+
+### 🆕 الجَديد في v1.3.0 (2026-09-02) — **المُستَقِرُّ الثاني**
+
+- **🔁 لُحمةُ الحَلقة** — عَودةُ قائِمةِ مَقاطِعِ الخَلفيّةِ مِن آخِرِها إلى أَوَّلِها
+  كانَت قَطعاً حادّاً في التَصديرِ وَحدَه بَينَما المُعاينةُ تَمزُجُها. الآنَ الدَورةُ
+  مَلحومةٌ في الجانِبَينِ بِنَفسِ الرِياضِيّات: `ffmpeg` في سَطحِ المَكتَبِ،
+  و`bgLoopSeamWeb` في الويبِ والهاتِف (قَرارٌ واحِدٌ لِلصورةِ والصَوتِ فَلا يَنحَرِفان).
+  آخِرُ أَعطابِ خُطّةِ v1.1.1 الأَربَعة.
+- **⚖️ تَكافُؤٌ كامِل** — مُقتَرَحاتُ الجَودةِ وتَقديرُ الحَجمِ قَبلَ التَصدير (v1.2.22)
+  نَزَلا في الويبِ وَحدَه؛ صارا في النُسخَتَين.
+- **♻️ استعادةُ مَقطَعٍ مَحذوف** — أُغلِقَ البَندُ بَعدَ التَحَقُّقِ مِن إنجازِهِ ضِمنَ
+  نِظامِ التَراجُعِ العامّ (`Ctrl+Z` يُعيدُ المَقطَعَ إلى مَوضِعِهِ الأَصليِّ بِالضَبط).
+- **🔄 نُقِلَت الحُزمةُ كامِلةً** إلى GT-SQRM v3.5.0 و GT-SQR v3.5.0.
+
+وقَبلَهُ استَقَرَّت سِلسِلةُ v1.2.1 → v1.2.22 عَلى جِهازٍ حَقيقيّ: حِفظُ المَشروعِ
+في الهاتِفِ مِن جِذرِه · تَنزيلُ تَحديثٍ يُستَأنَفُ والشاشةُ مُطفَأة · خَلفيّةُ
+التَصديرِ بِمُعَدَّلِها الكامِل · yt-dlp مُضَمَّن · البَسمَلةُ تُتلى.
 
 ### 🆕 الجَديد في v1.2.0 (2026-07-14)
 
@@ -139,32 +156,32 @@
 
 ---
 
-## 🚀 البدء السريع — تَنزيل v1.2.0
+## 🚀 البدء السريع — تَنزيل v1.3.0
 
 ### 📥 رَوابِط مُباشَرة (أَحدَث إصدار)
 
 | المِنَصّة | الحُزمة | الحَجم | تَنزيل |
 |---|---|---:|---|
-| 🐧 **Linux Universal** | AppImage | 182 MB | [GT-SIRM-1.2.0.AppImage](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.2.0/GT-SIRM-1.2.0.AppImage) |
-| 📦 **Debian/Ubuntu/Mint** | DEB | 137 MB | [gt-sirm_1.2.0_amd64.deb](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.2.0/gt-sirm_1.2.0_amd64.deb) |
-| 🎩 **Fedora/RHEL/openSUSE** | RPM | 180 MB | [gt-sirm-1.2.0-2.x86_64.rpm](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.2.0/gt-sirm-1.2.0-2.x86_64.rpm) |
-| 📱 **Android 6+** | APK | 13 MB | [GT-SIRM-1.2.0-debug.apk](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.2.0/GT-SIRM-1.2.0-debug.apk) |
+| 🐧 **Linux Universal** | AppImage | 174 MB | [GT-SIRM-1.3.0.AppImage](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.3.0/GT-SIRM-1.3.0.AppImage) |
+| 📦 **Debian/Ubuntu/Mint** | DEB | 131 MB | [gt-sirm_1.3.0_amd64.deb](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.3.0/gt-sirm_1.3.0_amd64.deb) |
+| 🎩 **Fedora/RHEL/openSUSE** | RPM | 171 MB | [gt-sirm-1.3.0-2.x86_64.rpm](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.3.0/gt-sirm-1.3.0-2.x86_64.rpm) |
+| 📱 **Android 6+** | APK | 44 MB | [GT-SIRM-1.3.0.apk](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.3.0/GT-SIRM-1.3.0.apk) |
 | 🌐 **الويب (PWA)** | — | — | [تشغيل مُباشَر](https://salehgnutux.github.io/GT-SIRM/GT-SIRM-WEB/) |
 
 📋 **صَفحة الإصدارات:** [github.com/SalehGNUTUX/GT-SIRM/releases](https://github.com/SalehGNUTUX/GT-SIRM/releases)
-🏷️ **آخر إصدار:** [v1.2.0](https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.2.0) — 2026-07-14
+🏷️ **آخر إصدار:** [v1.3.0](https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.3.0) — 2026-09-02
 
 ### ⚙️ التَثبيت
 
 ```bash
 # AppImage (يعمل على كلّ التوزيعات — بلا تَثبيت)
-chmod +x GT-SIRM-1.2.0.AppImage && ./GT-SIRM-1.2.0.AppImage
+chmod +x GT-SIRM-1.3.0.AppImage && ./GT-SIRM-1.3.0.AppImage
 
 # DEB (Debian/Ubuntu/Mint)
-sudo dpkg -i gt-sirm_1.2.0_amd64.deb
+sudo dpkg -i gt-sirm_1.3.0_amd64.deb
 
 # RPM (Fedora/RHEL/openSUSE)
-sudo dnf install ./gt-sirm-1.2.0-2.x86_64.rpm
+sudo dnf install ./gt-sirm-1.3.0-2.x86_64.rpm
 
 # APK Android — ثَبِّت يَدويّاً (يَطلب الأذونات: ميكروفون + تَخزين + وَسائط عند الحاجة)
 ```

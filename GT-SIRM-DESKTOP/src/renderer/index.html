@@ -559,7 +559,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.2.22</small>
+      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.3.0</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -2181,7 +2181,16 @@ body.offline .offline-badge{display:block}
             </select>
           </div>
           <div class="fg"><label class="fl">جودة الصورة (Mbps)</label>
-            <div class="sg"><input type="range" min="2" max="20" value="8" id="export-vbr"><span class="sv" id="export-vbr-v">8 Mbps</span></div>
+            <div class="sg"><input type="range" min="2" max="20" step="0.5" value="8" id="export-vbr"><span class="sv" id="export-vbr-v">8 Mbps</span></div>
+            <!-- v1.2.22 — المِزلاقُ وَحدَهُ رَقمٌ مُجَرَّد. هذه الأَزرارُ تَختارُ
+                 مُعَدَّلاً مُناسِباً **لِدِقّةِ التَصديرِ الفِعليّة**، والسَطرُ تَحتَها
+                 يَعرِضُ الحَجمَ المُتَوَقَّعَ قَبلَ التَصديرِ لا بَعدَه. -->
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">
+              <button type="button" class="btn btn-g bsm" id="vbr-preset-small"  style="flex:1;font-size:9px;padding:4px 6px">🪶 صَغير</button>
+              <button type="button" class="btn btn-g bsm" id="vbr-preset-balanced" style="flex:1;font-size:9px;padding:4px 6px">⚖️ مُتَوازِن</button>
+              <button type="button" class="btn btn-g bsm" id="vbr-preset-high"   style="flex:1;font-size:9px;padding:4px 6px">💎 عالٍ</button>
+            </div>
+            <div id="export-size-note" style="font-size:9px;color:var(--t3);margin-top:4px;line-height:1.6"></div>
           </div>
         </details>
 
@@ -2409,7 +2418,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.2.22</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.3.0</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

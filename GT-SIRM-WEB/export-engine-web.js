@@ -318,7 +318,15 @@ async function mixAudioToBufferWeb({
       starts.push(cum);
       cum += Math.max(0.1, (bgVidAudioItems[i].dur || 0) - xf);
     }
-    const cycleDur = cum + xf;  // المدة الكلية للدورة كاملة
+    // v1.3.0 — لُحمةُ الحَلقة: إن لَحَمَتِ الصورةُ دَورَتَها وَجَبَ أَن يَلحَمَ
+    //   الصَوتُ مِثلَها، وإلّا انحَرَفا بِـxf في كُلِّ لَفّة. الدَورةُ المَلحومةُ
+    //   أَقصَرُ بِـxf وتَبدَأُ مُتَقَدِّمةً بِـxf (أَوَّلُ xf مِنَ المَقطَعِ الأَوَّلِ
+    //   لا تُسمَعُ في اللَفّةِ الأولى كَما لا تُرى).
+    const _seamPlan = (typeof bgLoopSeamWeb === "function")
+      ? bgLoopSeamWeb(bgVidAudioItems.map(it => it.dur || 0), xf, totalDuration)
+      : { seam: false };
+    const cycleDur = _seamPlan.seam ? cum : (cum + xf);  // المدة الكلية للدورة كاملة
+    const seamShift = _seamPlan.seam ? -xf : 0;
 
     // كرّر الـ playlist حتى تغطّي totalDuration
     let cycleStart = 0;
@@ -327,7 +335,9 @@ async function mixAudioToBufferWeb({
       for (let i = 0; i < bgVidAudioItems.length; i++) {
         const it = bgVidAudioItems[i];
         if (!it.buffer) continue;
-        const startTime = cycleStart + starts[i];
+        let startTime = cycleStart + starts[i] + seamShift;
+        let headCut = 0;
+        if (startTime < 0) { headCut = -startTime; startTime = 0; }
         if (startTime >= totalDuration) break;
         const src = oac.createBufferSource();
         src.buffer = it.buffer;
@@ -335,9 +345,9 @@ async function mixAudioToBufferWeb({
         gain.gain.value = it.gain ?? 0.5;
         src.connect(gain); gain.connect(oac.destination);
         // v1.2 Feature#2 — offset في buffer = trimStart، مُدّة = it.dur الفَعّالة
-        const bufOffset = Math.max(0, Math.min(it.trimStart || 0, it.buffer.duration));
+        const bufOffset = Math.max(0, Math.min((it.trimStart || 0) + headCut, it.buffer.duration));
         const clipMaxPlay = Math.max(0.05, it.buffer.duration - bufOffset);
-        const wantDur = Math.min(clipMaxPlay, it.dur || clipMaxPlay);
+        const wantDur = Math.min(clipMaxPlay, Math.max(0, (it.dur || clipMaxPlay) - headCut));
         const remaining = totalDuration - startTime;
         const playDur = Math.min(wantDur, remaining);
         if (playDur > 0.02) src.start(startTime, bufOffset, playDur);
@@ -472,7 +482,18 @@ function precomputeWaveDataForExport(mixed, totalFrames, FPS) {
 //   وينتهي عند start(i) + D[i]
 //   يَتَزامَن مَع بَداية clip i+1 عند start(i) + D[i] − xf (نافذة الـxfade)
 //   cycleDur = ΣD − (N−1)·xf
-function getBgClipAtTimeWeb(t, clipDurations, xf) {
+// v1.3.0 — لُحمةُ الحَلقة: قَرارٌ واحِدٌ يَستَعمِلُهُ الصَوتُ والصورةُ مَعاً
+//   حَتّى لا يَنفَرِدَ أَحَدُهُما بِدَورةٍ أَطوَلَ فَيَنحَرِفا.
+function bgLoopSeamWeb(clipDurations, xf, totalDuration) {
+  const N = Array.isArray(clipDurations) ? clipDurations.length : 0;
+  const sum = N ? clipDurations.reduce((a, b) => a + (parseFloat(b) || 0), 0) : 0;
+  const cycle = sum - (N - 1) * xf;                 // الدَورةُ الخَطّيّة
+  const willLoop = (typeof totalDuration === "number") && totalDuration > cycle + 0.05;
+  const seam = !!(N >= 2 && xf > 0 && willLoop && cycle > 2.5 * xf);
+  return { seam, cycle, loopDur: seam ? cycle - xf : cycle };
+}
+
+function getBgClipAtTimeWeb(t, clipDurations, xf, totalDuration) {
   const N = clipDurations.length;
   if (N === 0) return null;
   if (N === 1) {
@@ -480,28 +501,58 @@ function getBgClipAtTimeWeb(t, clipDurations, xf) {
     if (!(dur > 0)) return { clipIndex: 0, localTime: 0, inXfade: false, nextClipIndex: -1, nextLocalTime: 0, xfadeAlpha: 0 };
     return { clipIndex: 0, localTime: t % dur, inXfade: false, nextClipIndex: -1, nextLocalTime: 0, xfadeAlpha: 0 };
   }
-  const totalCycle = clipDurations.reduce((a, b) => a + b, 0) - (N - 1) * xf;
-  if (totalCycle > 0 && t >= totalCycle) t = t % totalCycle;
 
-  let cum = 0;
-  for (let i = 0; i < N; i++) {
-    const clipEnd = cum + clipDurations[i];
-    if (t < clipEnd) {
-      const localTime = t - cum;
-      const remaining = clipEnd - t;
-      const inXfade = (remaining <= xf && i < N - 1 && xf > 0);
-      let nextClipIndex = -1, nextLocalTime = 0, xfadeAlpha = 0;
-      if (inXfade) {
-        nextClipIndex = i + 1;
-        const nextStart = cum + clipDurations[i] - xf;
-        nextLocalTime = Math.max(0, t - nextStart);
-        xfadeAlpha = Math.max(0, Math.min(1, 1 - remaining / xf));
+  // مَوضِعٌ في التَسَلسُلِ الخَطّيّ [0, cycle) — بِلا لَفّ
+  const resolveLinear = (x) => {
+    let cum = 0;
+    for (let i = 0; i < N; i++) {
+      const clipEnd = cum + clipDurations[i];
+      if (x < clipEnd) {
+        const localTime = x - cum;
+        const remaining = clipEnd - x;
+        const inXfade = (remaining <= xf && i < N - 1 && xf > 0);
+        let nextClipIndex = -1, nextLocalTime = 0, xfadeAlpha = 0;
+        if (inXfade) {
+          nextClipIndex = i + 1;
+          const nextStart = cum + clipDurations[i] - xf;
+          nextLocalTime = Math.max(0, x - nextStart);
+          xfadeAlpha = Math.max(0, Math.min(1, 1 - remaining / xf));
+        }
+        return { clipIndex: i, localTime, inXfade, nextClipIndex, nextLocalTime, xfadeAlpha };
       }
-      return { clipIndex: i, localTime, inXfade, nextClipIndex, nextLocalTime, xfadeAlpha };
+      cum += clipDurations[i] - xf;
     }
-    cum += clipDurations[i] - xf;
+    return { clipIndex: N - 1, localTime: clipDurations[N-1] || 0, inXfade: false, nextClipIndex: -1, nextLocalTime: 0, xfadeAlpha: 0 };
+  };
+
+  const plan = bgLoopSeamWeb(clipDurations, xf, totalDuration);
+
+  // ══ v1.3.0 — عَطَب #3: العَودةُ مِن آخِرِ مَقطَعٍ إلى أَوَّلِهِ كانَت قَطعاً حادّاً
+  //   الاِنتِقالاتُ بَينَ المَقاطِعِ كانَت مَمزوجةً، أمّا لَفُّ القائِمةِ — ويَقَعُ
+  //   كُلَّما طالَتِ التِلاوةُ عَن مَجموعِ المَقاطِع — فَكانَ يَقفِزُ قَفزاً.
+  //   الآنَ الدَورةُ مَلحومة: مُدَّتُها (cycle − xf)، تَبدَأُ عِندَ xf مِنَ المَقطَعِ
+  //   الأَوَّلِ ويَذوبُ آخِرُ مَقطَعٍ في أَوَّلِهِ عِندَ نِهايَتِها. وهذا مُطابِقٌ
+  //   حَرفيّاً لِما يَبنيهِ ffmpeg في نُسخةِ سَطحِ المَكتَب (`extract-bg-frames`).
+  if (plan.seam) {
+    const L = plan.loopDur;                     // = cycle − xf
+    let tau = t % L;
+    if (tau < 0) tau += L;
+    const bodyEnd = L - xf;                     // = cycle − 2·xf
+    if (tau < bodyEnd) return resolveLinear(tau + xf);
+    const a = (tau - bodyEnd) / xf;             // 0 → 1
+    return {
+      clipIndex: N - 1,
+      localTime: Math.max(0, (clipDurations[N - 1] || 0) - xf + (tau - bodyEnd)),
+      inXfade: true,
+      nextClipIndex: 0,
+      nextLocalTime: tau - bodyEnd,
+      xfadeAlpha: Math.max(0, Math.min(1, a)),
+    };
   }
-  return { clipIndex: N - 1, localTime: clipDurations[N-1] || 0, inXfade: false, nextClipIndex: -1, nextLocalTime: 0, xfadeAlpha: 0 };
+
+  let x = t;
+  if (plan.cycle > 0 && x >= plan.cycle) x = x % plan.cycle;
+  return resolveLinear(x);
 }
 
 
@@ -907,7 +958,7 @@ async function startWebExportV2(opts) {
       }
     }
     if (visibleBgClips.length) {
-      const cinfo = getBgClipAtTimeWeb(t, bgClipDurations, bgXf);
+      const cinfo = getBgClipAtTimeWeb(t, bgClipDurations, bgXf, totalDuration);
       if (cinfo) {
         S.bgVid = visibleBgClips[cinfo.clipIndex].vid;
         // Feature#2 — المَوضِعُ المَطلوب = trimStart + الزَمَنُ المَحَلّيّ

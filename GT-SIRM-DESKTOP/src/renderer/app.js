@@ -2897,6 +2897,8 @@ function initEventListeners() {
   const resEl = $("export-res");
   if (resEl) resEl.addEventListener("change", onExportResChange);
 
+  initExportQualityUI();    // v1.2.22 — مُقتَرَحاتُ الجَودةِ وتَقديرُ الحَجم
+
   // v1.2.3 — إعادةٌ شامِلةٌ لِلإعدادات
   const resetAllBtn = $("reset-all-settings-btn");
   if (resetAllBtn) resetAllBtn.addEventListener("click", resetAllSettings);
@@ -3564,9 +3566,102 @@ function applyCanvasSize() {
   if (typeof fitCanvas === "function") fitCanvas();
 }
 
+// ══════════════════════════════════════════════════════
+//  v1.2.22 — مُعَدَّلُ البِتِّ بِحَسَبِ الدِقّة + تَقديرُ الحَجمِ قَبلَ التَصدير
+//  ───────────────────────────────────────────────────
+//  «تَخفيفُ الحَجمِ دونَ التَأثيرِ عَلى الجَودة» لَيسَ سِحراً: المُرَمِّزُ مَضبوطٌ
+//  أَصلاً عَلى أَفضَلِ ما تُتيحُهُ المِنَصّة (H.264 High · VBR · أَولَويّةُ الجَودة).
+//  الرافِعةُ الباقِيةُ أَن يُطابِقَ المُعَدَّلُ **الدِقّةَ الفِعليّة**: ثَمانِيةُ
+//  ميغابِتٍ لِمَقطَعِ 480p إهدارٌ خالِصٌ لا يَزيدُ العَينَ شَيئاً، ولِـ1080p
+//  مَعقولة. فَنَحسِبُ المُقتَرَحَ مِن عَدَدِ البِكسِلاتِ ومُعَدَّلِ الإطارات.
+// ══════════════════════════════════════════════════════
+
+// بِتّ لِكُلِّ بِكسِلٍ في الإطار (معامِل الجَودة) — مُستَمَدٌّ مِن مُمارَساتِ
+//   H.264 المَعروفة: القيمةُ الوُسطى تُعطي صورةً نَظيفةً لِمَشاهِدِ الرِيلز.
+//   المِعيار: «مُتَوازِن» عِندَ 1080×1920 و30 إطاراً = 8 Mbps — وهُوَ الافتِراضيُّ
+//   الذي أَعطى 49.5 م.ب لِخَمسينَ ثانِيةً في تَقريرِ المُستَخدِم، وصورَتُهُ نَظيفة.
+const VBR_BPP = { small: 0.080, balanced: 0.130, high: 0.200 };
+
+function suggestedBitrateMbps(preset) {
+  const { w, h } = (typeof computeCanvasSize === "function")
+    ? computeCanvasSize() : { w: 1080, h: 1920 };
+  const fps = parseInt(gv("export-fps") || "30") || 30;
+  const bpp = VBR_BPP[preset] || VBR_BPP.balanced;
+  const mbps = (w * h * fps * bpp) / 1e6;
+  return Math.max(2, Math.min(20, Math.round(mbps * 2) / 2));   // خُطوةُ نِصفِ ميغابِت
+}
+
+function projectDurationSec() {
+  if (Array.isArray(S.ayaDurations) && S.ayaDurations.length) {
+    const t = S.ayaDurations.reduce((a, b) => a + (parseFloat(b) || 0), 0);
+    if (t > 0) return t;
+  }
+  return (typeof S.totalDur === "number" && S.totalDur > 0) ? S.totalDur : 0;
+}
+
+function updateExportSizeNote() {
+  try { _updateExportSizeNote(); } catch (e) { /* الأَبعادُ لَم تُحسَب بَعد */ }
+}
+
+function _updateExportSizeNote() {
+  const note = document.getElementById("export-size-note");
+  if (!note) return;
+  const vbr = parseFloat(gv("export-vbr") || "8") || 8;
+  const abrTxt = gv("export-abr") || "192k";
+  const abr = (parseInt(abrTxt) || 192) / 1000;          // ميغابِت
+  const { w, h } = (typeof computeCanvasSize === "function")
+    ? computeCanvasSize() : { w: 0, h: 0 };
+  const dur = projectDurationSec();
+  const rec = suggestedBitrateMbps("balanced");
+
+  let txt = `الأَبعاد ${w}×${h}`;
+  if (dur > 0) {
+    const mb = ((vbr + abr) * dur) / 8;                   // ميغابايت
+    txt += ` · المُدّة ${dur.toFixed(0)} ث · الحَجمُ المُتَوَقَّع ≈ ${mb.toFixed(1)} م.ب`;
+  } else {
+    txt += ` · ${(vbr / 8).toFixed(2)} م.ب لِكُلِّ ثانِية`;
+  }
+  if (vbr > rec * 1.25) {
+    txt += `<br><span style="color:var(--a)">💡 ${rec} Mbps تَكفي لِهذه الأَبعادِ — ما فَوقَها يُكَبِّرُ المَلَفَّ بِلا فَرقٍ يُرى.</span>`;
+  }
+  note.innerHTML = txt;
+}
+
+function initExportQualityUI() {
+  const vbr = document.getElementById("export-vbr");
+  if (!vbr) return;
+  const apply = (preset) => {
+    const v = suggestedBitrateMbps(preset);
+    vbr.value = String(v);
+    vbr.dispatchEvent(new Event("input"));
+    vbr.dispatchEvent(new Event("change"));
+    updateExportSizeNote();
+    toast?.(`🎚️ ${v} Mbps — مُقتَرَحٌ لِأَبعادِ التَصديرِ الحاليّة`, "info", 2500);
+  };
+  document.getElementById("vbr-preset-small")?.addEventListener("click", () => apply("small"));
+  document.getElementById("vbr-preset-balanced")?.addEventListener("click", () => apply("balanced"));
+  document.getElementById("vbr-preset-high")?.addEventListener("click", () => apply("high"));
+
+  ["export-vbr", "export-abr", "export-fps", "export-res"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", updateExportSizeNote);
+    el.addEventListener("change", updateExportSizeNote);
+  });
+  document.querySelectorAll('input[name="fmt"]').forEach(el =>
+    el.addEventListener("change", updateExportSizeNote));
+
+  // ⚠️ v1.2.22 — التَحديثُ الأَوَّلُ **بَعدَ** استِعادةِ الإعداداتِ وضَبطِ اللَوحة:
+  //   عِندَ تَسجيلِ المُستَمِعينَ لَم تُحسَب أَبعادُ اللَوحةِ بَعدُ، فَكانَ أَوَّلُ
+  //   حِسابٍ يُخفِقُ ويَبقى السَطرُ فارِغاً حَتّى يُحَرِّكَ المُستَخدِمُ شَيئاً.
+  updateExportSizeNote();
+  setTimeout(updateExportSizeNote, 800);
+}
+
 function onExportResChange() {
   applyCanvasSize();
   const { w, h } = computeCanvasSize();
+  try { updateExportSizeNote(); } catch (_) {}
   toast?.(`🎬 أبعاد التصدير: ${w}×${h}`, "info", 2000);
 }
 
@@ -12011,7 +12106,7 @@ function _dtUpdateEls(baseId) {
 function _dtAppVersion() {
   const el = document.querySelector(".info-v");
   const t = el ? el.textContent.trim() : "";
-  return /^\d+\.\d+/.test(t) ? t : "1.2.22";
+  return /^\d+\.\d+/.test(t) ? t : "1.3.0";
 }
 
 function dtBetaUpdatesEnabled() {
