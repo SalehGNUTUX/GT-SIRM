@@ -10690,7 +10690,12 @@ async function openProjectInteractive() {
       console.warn("FSA open failed, fallback to input:", e);
     }
   }
-  document.getElementById("proj-open-input")?.click();
+  // ⚠️ v1.4.3 — أندرويد يُصَفّي المُنتَقيَ بِحَسَبِ `accept`، و`.gtsirm` لاحِقةٌ
+  //   مَجهولةٌ لَهُ فَتَختَفي مِلَفّاتُ المَشاريعِ المُصَدَّرةُ مِن سَطحِ المَكتَب.
+  //   نَفتَحُ كُلَّ الأَنواعِ هُناكَ ونَفحَصُ المُحتَوى بَعدَ الاختِيار.
+  const _inp = document.getElementById("proj-open-input");
+  if (_inp && window.PIO && window.PIO.isNativeAndroid()) _inp.setAttribute("accept", "*/*");
+  _inp?.click();
 }
 
 async function openProjectFromBlob(file, handle = null) {

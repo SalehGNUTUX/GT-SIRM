@@ -66,7 +66,21 @@
                 <data android:pathPattern=".*\\..*\\.gtsirm\\.json" />
             </intent-filter>
 
-        </activity>
+        
+            <!-- ⚠️ v1.4.3 — «المُشارَكةُ إلى البَرنامَج» تَستَعمِلُ ACTION_SEND لا
+                 ACTION_VIEW. كانَت مَفقودةً تَماماً، فَلَم يَظهَرِ البَرنامَجُ في
+                 ورَقةِ المُشارَكةِ حينَ يُرسِلُ المُستَخدِمُ مَلَفَّ مَشروعٍ مِن
+                 الحاسوبِ إلى الهاتِف. وأَكثَرُ التَطبيقاتِ تُرسِلُ `.gtsirm`
+                 بِنَوعٍ عامٍّ (octet-stream) لِأَنَّ اللاحِقةَ مَجهولةٌ لِلنِظام. -->
+            <intent-filter android:label="GT-SIRM">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+</activity>
 
         <!--
           v1.2.1 — خِدمةُ المُقَدِّمة أثناءَ التَصدير.
