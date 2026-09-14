@@ -799,6 +799,7 @@
     GITHUB_REPO,
     isNativeAndroid,
     nativeAppVersion,
+    compareVersions,
     saveTrace,
     beginSaveTrace,
     noteSaveTrace,

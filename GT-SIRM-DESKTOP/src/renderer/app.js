@@ -12264,7 +12264,7 @@ function _dtAppVersion() {
   if (_dtNativeVersion) return _dtNativeVersion;
   const el = document.querySelector(".info-v");
   const t = el ? el.textContent.trim() : "";
-  return /^\d+\.\d+/.test(t) ? t : "1.4.2";
+  return /^\d+\.\d+/.test(t) ? t : "1.4.3";
 }
 
 function dtBetaUpdatesEnabled() {
@@ -12421,7 +12421,13 @@ async function dtUpdateNow() {
   }
 
   if (btns) btns.style.display = "none";
-  const say = (html) => { if (body) body.innerHTML = html; };
+  const bar  = document.getElementById("update-progress");
+  const fill = document.getElementById("update-fill");
+  const ptxt = document.getElementById("update-progress-txt");
+  if (bar) bar.style.display = "";
+  const say = (html) => { if (ptxt) ptxt.innerHTML = html; else if (body) body.innerHTML = html; };
+  const setPct = (p) => { if (fill) fill.style.width = Math.max(0, Math.min(100, p)) + "%"; };
+  setPct(0);
   say(`⏳ جارٍ تَنزيلُ <b>${info.assetName}</b>…`);
 
   try {
@@ -12429,8 +12435,9 @@ async function dtUpdateNow() {
       const pct = (d && d.percent >= 0) ? d.percent : -1;
       const mb  = d ? (d.received / 1048576).toFixed(1) : "0";
       const tot = (d && d.total > 0) ? (d.total / 1048576).toFixed(1) : "?";
-      say(`⏳ جارٍ التَنزيل: ${mb} / ${tot} م.ب${pct >= 0 ? ` · ${pct}٪` : ""}` +
-          (d && d.resumed ? `<br><span style="color:var(--t3)">استُؤنِفَ مِن حَيثُ تَوَقَّف</span>` : ""));
+      if (pct >= 0) setPct(pct);
+      say(`${mb} / ${tot} م.ب${pct >= 0 ? ` · ${pct}٪` : ""}` +
+          (d && d.resumed ? ` · استُؤنِفَ مِن حَيثُ تَوَقَّف` : ""));
     });
 
     let res = null, lastErr = null;
@@ -12452,7 +12459,9 @@ async function dtUpdateNow() {
     const out = await window.SIRM.installUpdate({ filePath: res.path, kind: info.pkgKind });
 
     if (out && out.ok) {
-      say(`✅ رُكِّبَ الإصدارُ <b>${info.latest}</b>. أَعِد تَشغيلَ البَرنامَجِ لِيَعمَلَ الجَديد.`);
+      setPct(100);
+      if (body) body.innerHTML = `✅ رُكِّبَ الإصدارُ <b>${info.latest}</b>. أَعِد تَشغيلَ البَرنامَجِ لِيَعمَلَ الجَديد.`;
+      if (bar) bar.style.display = "none";
       if (btns) {
         btns.style.display = "";
         const later = document.getElementById("update-later-btn");
@@ -12472,8 +12481,9 @@ async function dtUpdateNow() {
       if (btns) btns.style.display = "";
     }
   } catch (e) {
-    say(`❌ ${String(e.message || e).slice(0, 160)}<br>` +
-        `<span style="color:var(--t3)">ما نُزِّلَ مَحفوظ؛ «تَحديثٌ الآن» يُكمِلُ مِن حَيثُ تَوَقَّف.</span>`);
+    if (bar) bar.style.display = "none";
+    if (body) body.innerHTML = `❌ ${String(e.message || e).slice(0, 160)}<br>` +
+        `<span style="color:var(--t3)">ما نُزِّلَ مَحفوظ؛ «تَحديثٌ الآن» يُكمِلُ مِن حَيثُ تَوَقَّف.</span>`;
     if (btns) btns.style.display = "";
   } finally {
     try { window.SIRM.offUpdateProgress?.(); } catch (_) {}

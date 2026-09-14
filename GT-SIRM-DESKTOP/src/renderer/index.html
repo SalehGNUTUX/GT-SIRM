@@ -537,7 +537,13 @@ body.offline .offline-badge{display:block}
     <h3 id="update-title">🎉 يَتَوَفَّرُ إصدارٌ جَديد</h3>
     <div id="update-body" style="font-size:11px;line-height:1.8;margin-bottom:8px"></div>
     <div id="update-notes" style="display:none;font-size:10px;line-height:1.7;color:var(--t2);background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-bottom:8px;max-height:170px;overflow-y:auto;white-space:pre-line"></div>
-    <div class="modal-btns" style="flex-wrap:wrap;gap:6px">
+    <!-- v1.4.3 — شَريطُ تَقَدُّمٍ مَرئيٌّ كَما في نُسخةِ الهاتِف. كانَ سَطرَ نَصٍّ
+         فَقَط، والنَصُّ وَحدَهُ لا يُعطي إحساسَ التَقَدُّمِ في تَنزيلٍ يَطولُ. -->
+    <div id="update-progress" style="display:none;margin-bottom:8px">
+      <div class="rec-bar"><div class="rec-fill" id="update-fill" style="width:0%"></div></div>
+      <div id="update-progress-txt" style="font-size:10px;color:var(--t3);text-align:center;margin-top:4px"></div>
+    </div>
+    <div class="modal-btns" id="update-btns" style="flex-wrap:wrap;gap:6px">
       <button class="btn btn-g" id="update-later-btn">لاحِقاً</button>
       <button class="btn btn-a" id="update-now-btn">⬇️ افتَح صَفحةَ الإصدار</button>
     </div>
@@ -576,7 +582,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.4.2</small>
+      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.4.3</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -2484,7 +2490,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.4.2</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.4.3</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

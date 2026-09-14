@@ -7447,7 +7447,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.4.2";
+const APP_VERSION = "1.4.3";
 let _updateInfo = null;
 
 // v1.2.16 — قَناةُ التَحديث: مُستَقِرٌّ وَحدَه (الافتِراض) أَو مَعَ الاختِباريّ.
@@ -7523,19 +7523,34 @@ async function _syncNativeVersion() {
     const v = await window.PIO?.nativeAppVersion?.();
     if (!v) return;
     _nativeAppVersion = v;
-    // صَحِّح ما تَعرِضُهُ الصَفحةُ إن كانَ مِن كاشٍ قَديم
+    // صَحِّح عَرضَ الصَفحةِ إن كانَ الأَصليُّ **أَحدَث** فَقَط — لا العَكس
     document.querySelectorAll(".info-v").forEach(el => {
       const cur = el.textContent.trim();
-      if (/^\d+\.\d+/.test(cur) && cur !== v) el.textContent = v;
+      if (!/^\d+\.\d+/.test(cur) || cur === v) return;
+      const cmp = window.PIO?.compareVersions ? window.PIO.compareVersions(v, cur) : 0;
+      if (cmp > 0) el.textContent = v;
     });
   } catch (_) {}
 }
 
 function _appVersion() {
-  if (_nativeAppVersion) return _nativeAppVersion;
+  // ⚠️ v1.4.3 — الجِسرُ الأَصليُّ لَيسَ مَعصوماً: `versionName` في أندرويد ظَلَّ
+  //   "1.0" (افتِراضُ Capacitor) حَتّى v1.4.3، فَكانَ «المَصدَرُ الذي لا يَكذِب»
+  //   يَقولُ 1.0 دائِماً ويَرى تَحديثاً بَعدَ كُلِّ إقلاع. وحُزَمٌ قَديمةٌ ما زالَت
+  //   في أيدي المُستَخدِمين. فَنَأخُذُ **الأَحدَثَ** مِنَ المَصدَرَين: الحُزمةُ
+  //   الصَحيحةُ تَغلِبُ صَفحةً قَديمةً مِنَ الكاش، وصَفحةٌ صَحيحةٌ تَغلِبُ
+  //   `versionName` لَم يُضبَط.
   const el = document.querySelector(".info-v");
-  const t = el ? el.textContent.trim() : "";
-  return /^\d+\.\d+/.test(t) ? t : APP_VERSION;
+  const domV = el ? el.textContent.trim() : "";
+  const domOk = /^\d+\.\d+/.test(domV);
+  if (_nativeAppVersion) {
+    if (!domOk) return _nativeAppVersion;
+    const cmp = (window.PIO && window.PIO.compareVersions)
+      ? window.PIO.compareVersions(_nativeAppVersion, domV)
+      : (_nativeAppVersion === domV ? 0 : (_nativeAppVersion > domV ? 1 : -1));
+    return cmp >= 0 ? _nativeAppVersion : domV;
+  }
+  return domOk ? domV : APP_VERSION;
 }
 
 // silent=true عِندَ الفَحصِ التِلقائيِّ عِندَ الإقلاع (لا نُزعِجُ بِلا داعٍ)
