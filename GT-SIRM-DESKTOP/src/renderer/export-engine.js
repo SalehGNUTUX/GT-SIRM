@@ -743,6 +743,7 @@ async function startDesktopExportV2(opts) {
       console.warn("[V2] تَعَذَّرَ استِخراجُ إطاراتِ فيديو التِلاوة:", e && e.message);
     }
   }
+  let pendingPipe = null;      // v1.4.4 — إطارٌ واحِدٌ في الطَريقِ إلى ffmpeg
   const recBmpCache = new Map();
   const prefetchRec = (idx) => {
     if (!recFramePaths) return;
@@ -819,8 +820,17 @@ async function startDesktopExportV2(opts) {
       const frameBuf = canvasToRgbaBuffer(ctx, W, H);
       _dtProf.readback += performance.now() - _tRead;
 
+      // ⚠️ v1.4.4 — لا تَنتَظِرْ تَمريرَ هذا الإطارِ قَبلَ رَسمِ التالي.
+      //   قِياسُ المُستَخدِمِ بَعدَ استِخراجِ الإطارات: التَمريرُ 47.6 مِلّي ثانِيةٍ
+      //   مِن أَصلِ 127.9 — أَكبَرُ بَندٍ باقٍ. وهُوَ زَمَنُ نَقلِ 8.3 م.ب عَبرَ
+      //   IPC وكِتابَتِها في stdin، والعارِضُ واقِفٌ لا يَفعَلُ شَيئاً.
+      //   نُبقي إطاراً واحِداً «في الطَريق» فَيَتَداخَلُ نَقلُهُ مَعَ رَسمِ الذي
+      //   بَعدَه. وواحِدٌ يَكفي: أَكثَرُ مِنهُ يُراكِمُ 8.3 م.ب لِكُلِّ إطارٍ في
+      //   الذاكِرةِ بِلا مَكسَبٍ يُذكَر. التَرتيبُ مَحفوظٌ بِسِلسِلةِ الكِتابةِ في
+      //   العَمَليّةِ الرَئيسة (اُنظُر `pipeWriteChain`).
       const _tPipe = performance.now();
-      await window.SIRM.ffmpegPipeFrame(frameBuf);
+      if (pendingPipe) await pendingPipe;      // لا يَزيدُ المُعَلَّقُ عَن واحِد
+      pendingPipe = window.SIRM.ffmpegPipeFrame(frameBuf);
       _dtProf.pipe += performance.now() - _tPipe;
       _dtProf.frames++;
 
@@ -832,6 +842,7 @@ async function startDesktopExportV2(opts) {
       }
     }
   } catch (err) {
+    if (pendingPipe) { try { await pendingPipe; } catch (_) {} pendingPipe = null; }
     try { window.SIRM.ffmpegPipeCancel(); } catch (_) {}
     try { await window.SIRM.deleteTempFile(audioPath); } catch (_) {}
     if (bgFramesDir) { try { await window.SIRM.cleanupBgFrames(bgFramesDir); } catch (_) {} }
@@ -852,6 +863,9 @@ async function startDesktopExportV2(opts) {
                   : "تَشغيل";
   _dtProf.recResyncs = recFramePaths ? 0 : recSync.resyncs;
   S._lastExportProfile = _dtProf;
+
+  // v1.4.4 — لا تُغلِقِ الأُنبوبَ وإطارٌ ما زالَ في الطَريق
+  if (pendingPipe) { try { await pendingPipe; } catch (_) {} pendingPipe = null; }
 
   onProgress(98, "📦 جاري إنهاء التغليف…");
   try {

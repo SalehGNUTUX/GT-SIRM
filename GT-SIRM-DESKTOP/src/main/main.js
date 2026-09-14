@@ -939,6 +939,7 @@ ipcMain.handle("ffmpeg-pipe-start", async (event, opts) => {
   }
   pipeState.stderr = "";
   pipeState.canceled = false;
+  pipeWriteChain = Promise.resolve();   // v1.4.4 — سِلسِلةٌ نَظيفةٌ لِكُلِّ تَصدير
 
   const isMp4 = /libx264|libx265/.test(codec);
   const fmt = pixFormat === "mjpeg" ? "mjpeg" : "rgba";
@@ -1022,17 +1023,35 @@ ipcMain.handle("ffmpeg-pipe-start", async (event, opts) => {
   return { ok: true, pid: proc.pid };
 });
 
-ipcMain.handle("ffmpeg-pipe-frame", async (_event, arrayBuffer) => {
-  const proc = pipeState.proc;
-  if (!proc) throw new Error("pipe not started");
-  if (pipeState.canceled) throw new Error("cancelled");
-  if (proc.exitCode !== null) {
-    throw new Error(`ffmpeg exited prematurely (code ${proc.exitCode})\n${pipeState.stderr.slice(-600)}`);
-  }
-  const buf = Buffer.from(arrayBuffer);
-  const ok = proc.stdin.write(buf);
-  if (!ok) await awaitDrain(proc.stdin);
-  return true;
+// v1.4.4 — تَسَلسُلٌ صَريحٌ لِلكِتابةِ في stdin.
+//   بَعدَ أَن صارَ العارِضُ يُرسِلُ إطاراً دونَ انتِظارِ سابِقِهِ (لِيُخفيَ زَمَنَ
+//   التَمرير) صارَت نِداءاتُ هذه الدالّةِ قَد تَتَداخَل.
+//   ⚠️ تَحَرَّيتُ أَوَّلاً: اختِبارٌ بِـ400 إطارٍ وَجَدَ أَنَّ التَرتيبَ يَبقى
+//   سَليماً **حَتّى بِلا سِلسِلة** — لِأَنَّ `stream.write()` يُستَدعى بِتَزامُنٍ
+//   داخِلَ المُعالِجِ فَيُصَفُّ في المَجرى بِتَرتيبِ وُصولِ الرَسائِل. فَالسِلسِلةُ
+//   لَيسَت شَرطاً لِسَلامةِ التَرتيبِ اليَوم، لَكِنَّها:
+//     • تَحُدُّ التَزامُنَ فَلا تَتَراكَمُ مُستَمِعو `drain` (رَصَدَ الاختِبارُ
+//       تَحذيرَ MaxListenersExceeded بِلا سِلسِلة)، و
+//     • تَحفَظُ الصِحّةَ لَو أُدخِلَ يَوماً عَمَلٌ غَيرُ مُتَزامِنٍ قَبلَ الكِتابة.
+//   كُلفَتُها لا تُذكَر، فَأُبقِيَت.
+let pipeWriteChain = Promise.resolve();
+
+ipcMain.handle("ffmpeg-pipe-frame", (_event, arrayBuffer) => {
+  const buf = Buffer.from(arrayBuffer);   // اِنسَخ فَوراً: البافِرُ مِلكُ الرِسالة
+  const run = pipeWriteChain.then(async () => {
+    const proc = pipeState.proc;
+    if (!proc) throw new Error("pipe not started");
+    if (pipeState.canceled) throw new Error("cancelled");
+    if (proc.exitCode !== null) {
+      throw new Error(`ffmpeg exited prematurely (code ${proc.exitCode})\n${pipeState.stderr.slice(-600)}`);
+    }
+    const ok = proc.stdin.write(buf);
+    if (!ok) await awaitDrain(proc.stdin);
+    return true;
+  });
+  // لا تَكسِرِ السِلسِلةَ بِإخفاقٍ واحِد، لَكِن أَعِدِ الإخفاقَ لِلمُنادي
+  pipeWriteChain = run.catch(() => {});
+  return run;
 });
 
 ipcMain.handle("ffmpeg-pipe-end", async () => {
