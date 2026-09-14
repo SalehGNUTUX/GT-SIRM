@@ -12264,7 +12264,7 @@ function _dtAppVersion() {
   if (_dtNativeVersion) return _dtNativeVersion;
   const el = document.querySelector(".info-v");
   const t = el ? el.textContent.trim() : "";
-  return /^\d+\.\d+/.test(t) ? t : "1.4.4";
+  return /^\d+\.\d+/.test(t) ? t : "1.5.0";
 }
 
 function dtBetaUpdatesEnabled() {

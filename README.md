@@ -10,7 +10,7 @@
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
 [![Platform: Linux + Web + Android](https://img.shields.io/badge/Platform-Linux%20%7C%20Web%20%7C%20Android-orange?logo=linux)](#)
 [![Status](https://img.shields.io/badge/Status-Stable-brightgreen)](#)
-[![Version](https://img.shields.io/badge/Version-1.3.0-success)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-1.5.0-success)](./CHANGELOG.md)
 [![Releases](https://img.shields.io/github/v/release/SalehGNUTUX/GT-SIRM?label=Latest%20Release)](https://github.com/SalehGNUTUX/GT-SIRM/releases)
 
 </div>
@@ -33,20 +33,30 @@
 
 يَرِثُ GT-SIRM كلَّ مزايا [GT-SQRM](https://github.com/SalehGNUTUX/GT-SQRM) (صانع الريلز القرآنيّة) — مع توگل لتفعيل/إلغاء وحدة القرآن — ويُضيف إليها وحدات للحديث والأذكار والأدعية وأسماء الله الحسنى والحِكَم، إلى جانب محرّر نصٍّ حرٍّ، وأداة Chromakey لإزالة الخلفيّات، ومرونةً كاملةً في استيراد الصوت والصورة والفيديو.
 
-### 🆕 الجَديد في v1.3.0 (2026-09-02) — **المُستَقِرُّ الثاني**
+### 🆕 الجَديد في v1.5.0 (2026-09-14) — **المُستَقِرُّ الثالِث**
 
-- **🔁 لُحمةُ الحَلقة** — عَودةُ قائِمةِ مَقاطِعِ الخَلفيّةِ مِن آخِرِها إلى أَوَّلِها
-  كانَت قَطعاً حادّاً في التَصديرِ وَحدَه بَينَما المُعاينةُ تَمزُجُها. الآنَ الدَورةُ
-  مَلحومةٌ في الجانِبَينِ بِنَفسِ الرِياضِيّات: `ffmpeg` في سَطحِ المَكتَبِ،
-  و`bgLoopSeamWeb` في الويبِ والهاتِف (قَرارٌ واحِدٌ لِلصورةِ والصَوتِ فَلا يَنحَرِفان).
-  آخِرُ أَعطابِ خُطّةِ v1.1.1 الأَربَعة.
-- **⚖️ تَكافُؤٌ كامِل** — مُقتَرَحاتُ الجَودةِ وتَقديرُ الحَجمِ قَبلَ التَصدير (v1.2.22)
-  نَزَلا في الويبِ وَحدَه؛ صارا في النُسخَتَين.
-- **♻️ استعادةُ مَقطَعٍ مَحذوف** — أُغلِقَ البَندُ بَعدَ التَحَقُّقِ مِن إنجازِهِ ضِمنَ
-  نِظامِ التَراجُعِ العامّ (`Ctrl+Z` يُعيدُ المَقطَعَ إلى مَوضِعِهِ الأَصليِّ بِالضَبط).
-- **🔄 نُقِلَت الحُزمةُ كامِلةً** إلى GT-SQRM v3.5.0 و GT-SQR v3.5.0.
+- **⚡ التَصدير أَسرَعُ بِثَلاثةِ أَضعافٍ ونِصف** — مَقطَعُ دَقيقةٍ ونِصف كانَ يَأخُذُ
+  **21 د 48 ث** فَصارَ **6 د 2 ث** (قِياسٌ مِن جِهازِ مُستَخدِمٍ عَلى نَفسِ المَشروع).
+  السَبَبُ الجَذريّ: عُنصُرُ `<video>` لِفيديو التِلاوةِ لا يُلحَقُ بِالمُستَندِ قَطّ،
+  وعُنصُرٌ مُنفَصِلٌ لا يَتَقَدَّمُ تَشغيلُهُ في Chromium — فَكانَ يُنقَلُ (seek)
+  إطاراً بِإطار: **363.8 مِلّي ثانِيةٍ لِلإطارِ صارَت 0.9**. الآنَ تُستَخرَجُ
+  إطاراتُهُ مُسبَقاً بِـffmpeg، ويَتَداخَلُ التَمريرُ مَعَ رَسمِ الإطارِ التالي.
+- **✂️ اقتِطاعُ مَقطَعٍ مِن فيديو التِلاوة** — «مِن/إلى» بِدَقائِقَ وثَوانٍ، والتِقاطُ
+  الحُدودِ مِنَ المَوضِعِ الحاليّ. المُدّةُ المُحَدَّدةُ تَصيرُ مُدّةَ المَقطَعِ ويُوَزَّعُ
+  عَلَيها النَصُّ الحُرُّ أَو أَيُّ مَصدَرٍ مُعتَمَد.
+- **🎞️ إصلاحُ تَجَمُّدِ الفيديو في المَقطَعِ المُصَدَّر** بَينَما يَعمَلُ النَصُّ
+  والصَوت — ولا تَظهَرُ العِلّةُ في المُعايَنة. في النُسَخِ الثَلاثِ جَميعاً.
+- **⬇️ تَحديثٌ يَعرِفُ نَوعَ حُزمَتِك** — يَكتَشِفُ AppImage/deb/rpm فَيَجلِبُ
+  المُوافِقةَ ويُرَكِّبُها، بِتَنزيلٍ يُستَأنَفُ مِن حَيثُ تَوَقَّف.
+- **⏱ لَوحةُ نَتيجةِ تَصديرٍ** في الحاسوبِ كَما في الهاتِف: تَشريحُ زَمَنِ الإطارِ
+  والمُدّةُ الفِعليّةُ ونِسبَتُها إلى طولِ المَقطَع.
+- **🖼️ أيقونةُ حُزمةِ deb** لَم تَكُن تَظهَرُ في قائِمةِ البَرامِج (كانَت تُرَكَّبُ في
+  مَقاسٍ وَهميٍّ `0x0` وبِصَلاحيّاتٍ لا تُقرَأ) · **وفَتحُ مَلَفِّ `.gtsirm`
+  المُشارَكِ مِنَ الحاسوبِ في الهاتِف**.
+- **📉 أَزرارُ جَودةٍ مَبنيّةٌ عَلى قِياسٍ بِـSSIM** — لا عَلى عادة: عِندَ نَفسِ CRF
+  كانَ `preset` الأَبطَأُ **أَكبَرَ** حَجماً لا أَصغَر.
 
-وقَبلَهُ استَقَرَّت سِلسِلةُ v1.2.1 → v1.2.22 عَلى جِهازٍ حَقيقيّ: حِفظُ المَشروعِ
+وقَبلَهُ استَقَرَّ **v1.3.0** (لُحمةُ الحَلقةِ وتَكافُؤُ النُسخَتَين)، واستَقَرَّت سِلسِلةُ v1.2.1 → v1.2.22 عَلى جِهازٍ حَقيقيّ: حِفظُ المَشروعِ
 في الهاتِفِ مِن جِذرِه · تَنزيلُ تَحديثٍ يُستَأنَفُ والشاشةُ مُطفَأة · خَلفيّةُ
 التَصديرِ بِمُعَدَّلِها الكامِل · yt-dlp مُضَمَّن · البَسمَلةُ تُتلى.
 
@@ -156,32 +166,32 @@
 
 ---
 
-## 🚀 البدء السريع — تَنزيل v1.3.0
+## 🚀 البدء السريع — تَنزيل v1.5.0
 
 ### 📥 رَوابِط مُباشَرة (أَحدَث إصدار)
 
 | المِنَصّة | الحُزمة | الحَجم | تَنزيل |
 |---|---|---:|---|
-| 🐧 **Linux Universal** | AppImage | 174 MB | [GT-SIRM-1.3.0.AppImage](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.3.0/GT-SIRM-1.3.0.AppImage) |
-| 📦 **Debian/Ubuntu/Mint** | DEB | 131 MB | [gt-sirm_1.3.0_amd64.deb](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.3.0/gt-sirm_1.3.0_amd64.deb) |
-| 🎩 **Fedora/RHEL/openSUSE** | RPM | 171 MB | [gt-sirm-1.3.0-2.x86_64.rpm](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.3.0/gt-sirm-1.3.0-2.x86_64.rpm) |
-| 📱 **Android 6+** | APK | 44 MB | [GT-SIRM-1.3.0.apk](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.3.0/GT-SIRM-1.3.0.apk) |
+| 🐧 **Linux Universal** | AppImage | 174 MB | [GT-SIRM-1.5.0.AppImage](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.5.0/GT-SIRM-1.5.0.AppImage) |
+| 📦 **Debian/Ubuntu/Mint** | DEB | 131 MB | [gt-sirm_1.5.0_amd64.deb](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.5.0/gt-sirm_1.5.0_amd64.deb) |
+| 🎩 **Fedora/RHEL/openSUSE** | RPM | 171 MB | [gt-sirm-1.5.0-2.x86_64.rpm](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.5.0/gt-sirm-1.5.0-2.x86_64.rpm) |
+| 📱 **Android 6+** | APK | 44 MB | [GT-SIRM-1.5.0.apk](https://github.com/SalehGNUTUX/GT-SIRM/releases/download/v1.5.0/GT-SIRM-1.5.0.apk) |
 | 🌐 **الويب (PWA)** | — | — | [تشغيل مُباشَر](https://salehgnutux.github.io/GT-SIRM/GT-SIRM-WEB/) |
 
 📋 **صَفحة الإصدارات:** [github.com/SalehGNUTUX/GT-SIRM/releases](https://github.com/SalehGNUTUX/GT-SIRM/releases)
-🏷️ **آخر إصدار:** [v1.3.0](https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.3.0) — 2026-09-02
+🏷️ **آخر إصدار:** [v1.5.0](https://github.com/SalehGNUTUX/GT-SIRM/releases/tag/v1.5.0) — 2026-09-14
 
 ### ⚙️ التَثبيت
 
 ```bash
 # AppImage (يعمل على كلّ التوزيعات — بلا تَثبيت)
-chmod +x GT-SIRM-1.3.0.AppImage && ./GT-SIRM-1.3.0.AppImage
+chmod +x GT-SIRM-1.5.0.AppImage && ./GT-SIRM-1.5.0.AppImage
 
 # DEB (Debian/Ubuntu/Mint)
-sudo dpkg -i gt-sirm_1.3.0_amd64.deb
+sudo dpkg -i gt-sirm_1.5.0_amd64.deb
 
 # RPM (Fedora/RHEL/openSUSE)
-sudo dnf install ./gt-sirm-1.3.0-2.x86_64.rpm
+sudo dnf install ./gt-sirm-1.5.0-2.x86_64.rpm
 
 # APK Android — ثَبِّت يَدويّاً (يَطلب الأذونات: ميكروفون + تَخزين + وَسائط عند الحاجة)
 ```
