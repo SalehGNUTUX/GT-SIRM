@@ -541,7 +541,8 @@ async function startDesktopExportV2(opts) {
     canvas,
     drawFrame,           // (t, frameIndex) => void  — يرسم على canvas مباشرة
     setStateForTime,     // (t) => void              — يحدّث S.currentAya/elapsed للواجهة
-    setBgFrameImage,     // (img) => void            — يضع إطار الخلفية الحالي
+    setBgFrameImage,
+    setRecFrameImage,     // (img) => void            — يضع إطار الخلفية الحالي
     totalDuration,
     fps,
     audioBuffers,
@@ -669,6 +670,7 @@ async function startDesktopExportV2(opts) {
   }
   if (cancelRef?.canceled) {
     if (bgFramesDir) { try { await window.SIRM.cleanupBgFrames(bgFramesDir); } catch (_) {} }
+    if (recFramesDir) { try { await window.SIRM.cleanupRecFrames(recFramesDir); } catch (_) {} }
     try { await window.SIRM.deleteTempFile(audioPath); } catch (_) {}
     throw new Error("cancelled");
   }
@@ -704,6 +706,49 @@ async function startDesktopExportV2(opts) {
           if (bmpLoadErrors++ < 3) console.warn("bg bmp load failed:", bgFramePaths[k], err);
           return null;
         }));
+      }
+    }
+  };
+
+  // ── v1.4.2 — إطاراتُ فيديو التِلاوةِ مُستَخرَجةٌ مُسبَقاً ──────────
+  //   قِياسٌ مِن جِهازِ المُستَخدِم: مُزامَنةُ فيديو التِلاوةِ كانَت 363.8 مِلّي
+  //   ثانِيةٍ لِلإطار — 78% مِنَ الزَمَنِ كُلِّه — و2788 إعادةَ مُزامَنةٍ في 2790
+  //   إطاراً. السَبَب: عُنصُرُ `<video>` غَيرُ مُلحَقٍ بِالمُستَند، فَلا يَتَقَدَّمُ
+  //   تَشغيلُهُ في Chromium، فَيَسقُطُ الأَمرُ إلى نَقلةٍ لِكُلِّ إطار.
+  //   الخَلفيّةُ تُستَخرَجُ مُسبَقاً مُنذُ البِدايةِ وكَلَّفَت **0.0 مِلّي ثانِية**
+  //   في نَفسِ القِياس — فَنَفعَلُ بِفيديو التِلاوةِ مِثلَها.
+  let recFramePaths = null, recFramesDir = null;
+  const recOn = !!(S.recVidEl && typeof ge === "function" && ge("recvid-on"));
+  if (recOn && window.SIRM && window.SIRM.extractRecFrames) {
+    try {
+      onProgress(4, "🎬 تَجهيزُ إطاراتِ فيديو التِلاوة…");
+      const bytes = await fetchVideoBytes(S.recVidEl);
+      if (bytes) {
+        const tr = (typeof getRecVidTrim === "function") ? getRecVidTrim() : null;
+        const res = await window.SIRM.extractRecFrames({
+          videoBytes: bytes,
+          fps: FPS,
+          totalDuration,
+          trimStart: tr ? tr.start : 0,
+          trimEnd: tr ? tr.end : 0,
+          maxSide: Math.max(W, H),
+        });
+        if (res && res.frames && res.frames.length) {
+          recFramePaths = res.frames;
+          recFramesDir = res.dir;
+        }
+      }
+    } catch (e) {
+      // لا نُفشِلُ التَصديرَ لِأَجلِ هذا: نَعودُ إلى المُزامَنةِ بِالتَشغيل/النَقل
+      console.warn("[V2] تَعَذَّرَ استِخراجُ إطاراتِ فيديو التِلاوة:", e && e.message);
+    }
+  }
+  const recBmpCache = new Map();
+  const prefetchRec = (idx) => {
+    if (!recFramePaths) return;
+    for (let k = idx; k < Math.min(recFramePaths.length, idx + PREFETCH); k++) {
+      if (!recBmpCache.has(k)) {
+        recBmpCache.set(k, loadBitmapFromPath(recFramePaths[k]).catch(() => null));
       }
     }
   };
@@ -745,12 +790,25 @@ async function startDesktopExportV2(opts) {
       // بيانات الموجة الصوتية للإطار الحالي (V2 يخلط الصوت offline فلا توجد analyser data)
       S._exportWaveData = exportWaveData[i];
       if (setStateForTime) setStateForTime(t);
-      // v1.4 — مُزامَنةُ فيديو التِلاوةِ بِالتَشغيلِ (اُنظُر syncRecVidByPlayback)
-      if (S.recVidEl && typeof ge === "function" && ge("recvid-on")) {
+      // v1.4.2 — الإطارُ المُستَخرَجُ أَوَّلاً؛ وإلّا المُزامَنةُ بِالتَشغيل/النَقل
+      if (recOn) {
         const _tRec = performance.now();
-        const _src = (typeof recvidSourceTime === "function") ? recvidSourceTime(t) : t;
-        await syncRecVidByPlayback(recSync, S.recVidEl, _src, t,
-                                   (performance.now() - recSyncT0) / 1000);
+        if (recFramePaths) {
+          const ridx = Math.min(i, recFramePaths.length - 1);
+          prefetchRec(ridx);
+          const rbmp = await recBmpCache.get(ridx);
+          if (setRecFrameImage) setRecFrameImage(rbmp || null);
+          const oldR = ridx - PREFETCH;
+          if (recBmpCache.has(oldR)) {
+            const o = await recBmpCache.get(oldR);
+            if (o && o.close) try { o.close(); } catch (_) {}
+            recBmpCache.delete(oldR);
+          }
+        } else {
+          const _src = (typeof recvidSourceTime === "function") ? recvidSourceTime(t) : t;
+          await syncRecVidByPlayback(recSync, S.recVidEl, _src, t,
+                                     (performance.now() - recSyncT0) / 1000);
+        }
         _dtProf.recSync += performance.now() - _tRec;
       }
       const _tDraw = performance.now();
@@ -777,7 +835,9 @@ async function startDesktopExportV2(opts) {
     try { window.SIRM.ffmpegPipeCancel(); } catch (_) {}
     try { await window.SIRM.deleteTempFile(audioPath); } catch (_) {}
     if (bgFramesDir) { try { await window.SIRM.cleanupBgFrames(bgFramesDir); } catch (_) {} }
+    if (recFramesDir) { try { await window.SIRM.cleanupRecFrames(recFramesDir); } catch (_) {} }
     if (setBgFrameImage) setBgFrameImage(null);
+    if (setRecFrameImage) setRecFrameImage(null);
     S._exportWaveData = null;
     throw err;
   }
@@ -785,10 +845,12 @@ async function startDesktopExportV2(opts) {
   // ── 6) إغلاق وإنهاء ffmpeg ─────────────────────────
   // v1.4 — اِنشُرِ القِياسَ لِتَعرِضَهُ نافِذةُ النَتيجةِ كَما في الهاتِف
   _dtProf.wall = performance.now() - _dtProf.t0;
-  _dtProf.recResyncs = recSync.resyncs;
-  _dtProf.recMode = recSync.playFailed ? "نَقل (تَعَذَّرَ التَشغيل)"
-                  : recSync.slowSeek   ? "نَقل (التَشغيلُ لَم يَتَقَدَّم)"
+  _dtProf.recMode = recFramePaths ? "إطاراتٌ مُستَخرَجةٌ مُسبَقاً (ffmpeg)"
+                  : !recOn              ? "—"
+                  : recSync.playFailed  ? "نَقل (تَعَذَّرَ التَشغيل)"
+                  : recSync.slowSeek    ? "نَقل (التَشغيلُ لَم يَتَقَدَّم)"
                   : "تَشغيل";
+  _dtProf.recResyncs = recFramePaths ? 0 : recSync.resyncs;
   S._lastExportProfile = _dtProf;
 
   onProgress(98, "📦 جاري إنهاء التغليف…");
@@ -798,7 +860,9 @@ async function startDesktopExportV2(opts) {
     _restoreRecVidAfterExport();   // v1.4
     try { await window.SIRM.deleteTempFile(audioPath); } catch (_) {}
     if (bgFramesDir) { try { await window.SIRM.cleanupBgFrames(bgFramesDir); } catch (_) {} }
+    if (recFramesDir) { try { await window.SIRM.cleanupRecFrames(recFramesDir); } catch (_) {} }
     if (setBgFrameImage) setBgFrameImage(null);
+    if (setRecFrameImage) setRecFrameImage(null);
     S._exportWaveData = null;
     // أغلق جميع ImageBitmaps المتبقية
     for (const v of bmpCache.values()) {

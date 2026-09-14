@@ -1059,6 +1059,72 @@ ipcMain.on("ffmpeg-pipe-cancel", () => {
 
 // ── استخراج إطارات فيديو الخلفية مسبقاً (مرة واحدة) ───
 //    أسرع وأكثر استقراراً من seek على HTMLVideoElement
+// ══════════════════════════════════════════════════════════════
+//  v1.4.2 — استِخراجُ إطاراتِ فيديو التِلاوةِ مُسبَقاً
+//  ───────────────────────────────────────────────────────────
+//  قِياسٌ مِن جِهازِ المُستَخدِم: 363.8 مِلّي ثانِيةٍ لِكُلِّ إطارٍ في مُزامَنةِ فيديو
+//  التِلاوة، مِن أَصلِ 468.8 — أَي **78% مِن زَمَنِ التَصديرِ كُلِّه**، و2788
+//  إعادةَ مُزامَنةٍ في 2790 إطاراً. السَبَب: عُنصُرُ `<video>` يُنشَأُ بِـ
+//  `createElement` ولا يُلحَقُ بِالمُستَندِ قَطّ، وعُنصُرٌ مُنفَصِلٌ لا يَتَقَدَّمُ
+//  تَشغيلُهُ في Chromium — فَيَسقُطُ كُلُّ شَيءٍ إلى نَقلةٍ (seek) لِكُلِّ إطار،
+//  وهِيَ بَطيئةٌ جِدّاً عَلى مَقاطِعَ مُتَباعِدةِ الإطاراتِ المِفتاحيّة.
+//
+//  الحَلُّ هُوَ نَفسُهُ الذي تَستَعمِلُهُ الخَلفيّةُ مُنذُ البِداية — والذي أَعطى
+//  **0.0 مِلّي ثانِيةٍ** في نَفسِ القِياس: نَدَعُ ffmpeg يَستَخرِجُ الإطاراتِ
+//  دَفعةً واحِدةً ثُمَّ نَقرَؤُها مِنَ القُرص.
+//
+//  ⚠️ بِخِلافِ الخَلفيّةِ لا نَفرِضُ أَبعادَ اللَوحة: `drawRecitationVideo`
+//  تَحسِبُ المُلاءَمةَ والمَوضِعَ والحَجمَ بِنَفسِها، فَالتَحجيمُ هُنا يُشَوِّه.
+//  نُبقي النِسبةَ ونَحُدُّ الضِلعَ الأَطوَلَ تَوفيراً لِلذاكِرةِ والقُرص.
+// ══════════════════════════════════════════════════════════════
+ipcMain.handle("extract-rec-frames", async (event, opts) => {
+  const { videoBytes, fps, totalDuration, trimStart, trimEnd, maxSide } = opts || {};
+  if (!videoBytes) throw new Error("no recvid data");
+  const ffmpegPath = await getBinPath("ffmpeg");
+  if (!ffmpegPath) throw new Error("ffmpeg not found");
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gtsirm-rec-"));
+  const inputPath = path.join(dir, "src.bin");
+  fs.writeFileSync(inputPath, Buffer.from(videoBytes));
+
+  const cap = Math.max(240, parseInt(maxSide, 10) || 1920);
+  const args = ["-y", "-loglevel", "error"];
+  const ss = parseFloat(trimStart);
+  if (isFinite(ss) && ss > 0) args.push("-ss", String(ss));
+  args.push("-i", inputPath);
+  const te = parseFloat(trimEnd);
+  if (isFinite(ss) && isFinite(te) && te > ss) args.push("-t", String(te - ss));
+  else if (totalDuration > 0) args.push("-t", String(totalDuration));
+
+  args.push(
+    "-vf", `fps=${fps},scale='if(gt(iw,ih),min(iw,${cap}),-2)':'if(gt(iw,ih),-2,min(ih,${cap}))'`,
+    "-q:v", "3",
+    "-an",
+    path.join(dir, "f_%06d.jpg"),
+  );
+
+  await new Promise((resolve, reject) => {
+    const proc = spawn(ffmpegPath, args);
+    let err = "";
+    proc.stderr.on("data", c => { err += c.toString(); if (err.length > 40000) err = err.slice(-20000); });
+    proc.on("close", code => code === 0 ? resolve() : reject(new Error("ffmpeg " + code + "\n" + err.slice(-700))));
+    proc.on("error", reject);
+  });
+
+  try { fs.unlinkSync(inputPath); } catch (_) {}
+  const files = fs.readdirSync(dir).filter(f => f.endsWith(".jpg")).sort()
+                  .map(f => path.join(dir, f));
+  if (!files.length) throw new Error("لَم تُستَخرَج إطاراتُ فيديو التِلاوة");
+  return { dir, frames: files };
+});
+
+ipcMain.handle("cleanup-rec-frames", async (_e, dir) => {
+  try {
+    if (dir && String(dir).includes("gtsirm-rec-")) fs.rmSync(dir, { recursive: true, force: true });
+    return true;
+  } catch (_) { return false; }
+});
+
 ipcMain.handle("extract-bg-frames", async (event, opts) => {
   const { videoBytes, videoBytesList, clipDurations, clipTrims, transition, clipTransitions, crossfadeSec, fps, width, height, totalDuration, trimStart, trimEnd } = opts;
   // v1.2 — قائمة أَسماء xfade المَعروفة (يَحمي من قيمة مَجهولة تُفشِل ffmpeg)

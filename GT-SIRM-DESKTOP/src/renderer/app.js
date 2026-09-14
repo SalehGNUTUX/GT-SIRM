@@ -139,6 +139,7 @@ const S = {
   exporting: false, exportSources: [],
   exportCancelRef: null,         // مرجع للإلغاء في محرّك V2
   _exportBgFrameImg: null,       // إطار خلفية مستخرَج مسبقاً للإطار الحالي (V2)
+  _exportRecFrameImg: null,      // v1.4.2 — إطار فيديو التلاوة المستخرَج مسبقاً
   templates: [], reciters: [...RECITERS_LIST],
   allFonts: [...BUILT_IN_FONTS],
   rafId: null,
@@ -4902,9 +4903,14 @@ function getRecVidCanvas(W, H) {
 }
 
 function drawRecitationVideo(ctx, W, H) {
-  const v = S.recVidEl;
-  if (!v || v.readyState < 2) return;
-  const sw = v.videoWidth, sh = v.videoHeight;
+  // v1.4.2 — الإطارُ المُستَخرَجُ مُسبَقاً بِـffmpeg لَهُ الأَولَويّةُ في التَصدير
+  //   (أَسرَعُ مِن نَقلِ عُنصُرِ الفيديو بِمَراتِب، واُنظُر extract-rec-frames).
+  const pre = S._exportRecFrameImg;
+  const v = pre || S.recVidEl;
+  if (!v) return;
+  if (!pre && v.readyState < 2) return;
+  const sw = pre ? (pre.width || 0) : v.videoWidth;
+  const sh = pre ? (pre.height || 0) : v.videoHeight;
   if (!sw || !sh) return;
 
   const fit = $("recvid-fit")?.value || "contain";
@@ -11386,6 +11392,7 @@ async function startExportDesktop(codecKey) {
       drawFrame,
       setStateForTime,
       setBgFrameImage: (img) => { S._exportBgFrameImg = img; },
+      setRecFrameImage: (img) => { S._exportRecFrameImg = img; },
       totalDuration,
       fps: FPS,
       audioBuffers,
@@ -12257,7 +12264,7 @@ function _dtAppVersion() {
   if (_dtNativeVersion) return _dtNativeVersion;
   const el = document.querySelector(".info-v");
   const t = el ? el.textContent.trim() : "";
-  return /^\d+\.\d+/.test(t) ? t : "1.4.1";
+  return /^\d+\.\d+/.test(t) ? t : "1.4.2";
 }
 
 function dtBetaUpdatesEnabled() {
@@ -12531,11 +12538,22 @@ function showDesktopExportResult(outputPath, label, sizeBytes) {
       ].map(([k, v]) => `<div style="display:flex;justify-content:space-between"><span>${k}</span><span dir="ltr">${v} ms</span></div>`).join("");
       const wallSec = (pf.wall || 0) / 1000;
       const fps = wallSec > 0 ? (n / wallSec).toFixed(1) : "—";
+      // v1.4.2 — المُدّةُ الفِعليّةُ بِصيغةٍ تُقرَأ: «1308.3 ث» لا تَقولُ شَيئاً
+      const hh = Math.floor(wallSec / 3600);
+      const mm = Math.floor((wallSec % 3600) / 60);
+      const ss2 = Math.round(wallSec % 60);
+      const wallTxt = (hh ? `${hh} س ` : "") + (hh || mm ? `${mm} د ` : "") + `${ss2} ث`;
+      // نِسبةُ الزَمَنِ إلى طولِ المَقطَع: ×1 يَعني تَصديراً بِزَمَنٍ حَقيقيّ
+      const mediaSec = n / (parseInt(gv("export-fps"), 10) || 30);
+      const ratio = mediaSec > 0 ? (wallSec / mediaSec).toFixed(1) : "—";
       perfEl.innerHTML =
         `<div style="font-weight:700;margin-bottom:4px">⏱ مُتَوَسِّطُ الإطارِ الواحِد (${n} إطاراً)</div>` +
         rows +
         `<div style="display:flex;justify-content:space-between;border-top:1px solid var(--b1);margin-top:4px;padding-top:4px;font-weight:700"><span>المَجموع</span><span dir="ltr">${ms(sum)} ms</span></div>` +
-        `<div style="color:var(--t3);margin-top:4px">الزَمَنُ الكُلّيّ: <b>${wallSec.toFixed(1)} ث</b> · المُعَدَّل: <b>${fps}</b> إطار/ث</div>` +
+        `<div style="border-top:1px solid var(--b1);margin-top:6px;padding-top:5px">` +
+          `<div style="display:flex;justify-content:space-between;font-weight:700"><span>⏳ المُدّةُ الفِعليّةُ لِلتَصدير</span><span dir="ltr">${wallTxt}</span></div>` +
+          `<div style="display:flex;justify-content:space-between;color:var(--t3)"><span>المُعَدَّل</span><span dir="ltr">${fps} إطار/ث · ×${ratio} مِن زَمَنِ المَقطَع</span></div>` +
+        `</div>` +
         `<div style="color:var(--t3)">مُزامَنةُ فيديو التِلاوة: <b>${pf.recMode || "—"}</b>` +
         (pf.recResyncs ? ` · إعاداتُ مُزامَنة: ${pf.recResyncs}` : "") + `</div>` +
         `<div style="color:var(--t3)">وَضعُ اللَوحة: <b>${(typeof needsPixelReadback === "function" && needsPixelReadback()) ? "قِراءةٌ بِالبِكسِل (بَرمَجيّ)" : "مُعَجَّلٌ بِالعَتاد"}</b></div>`;

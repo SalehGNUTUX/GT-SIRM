@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("SIRM", {
   revealFile:        (f)     => ipcRenderer.invoke("reveal-file", f),
   openPath:          (f)     => ipcRenderer.invoke("open-path", f),
   fileSize:          (f)     => ipcRenderer.invoke("file-size", f),
+  extractRecFrames:  (o)     => ipcRenderer.invoke("extract-rec-frames", o),
+  cleanupRecFrames:  (d)     => ipcRenderer.invoke("cleanup-rec-frames", d),
   restartApp:        ()      => ipcRenderer.invoke("restart-app"),
   onUpdateProgress:  (cb)    => ipcRenderer.on("update-progress", (_e, d) => cb(d)),
   offUpdateProgress: ()      => ipcRenderer.removeAllListeners("update-progress"),
