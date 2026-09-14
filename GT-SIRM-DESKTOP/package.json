@@ -1,6 +1,6 @@
 {
   "name": "gt-sirm",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "GnuTux Short Islamic Reels Maker — صانع ريلز إسلاميّة بجودة احترافيّة لـ GNU/Linux: قرآن، حديث، أذكار، أدعية، أسماء الله الحسنى، حِكَم",
   "author": "SalehGNUTUX <https://github.com/SalehGNUTUX>",
   "license": "GPL-3.0",
@@ -42,7 +42,7 @@
       "synopsis": "GnuTux Short Islamic Reels Maker",
       "maintainer": "SalehGNUTUX <https://github.com/SalehGNUTUX>",
       "category": "AudioVideo",
-      "icon": "GT-SIRM-icons/GT-SIRM-icon-original.png",
+      "icon": "build-icons",
       "desktop": {
         "Name": "GT-SIRM",
         "Comment": "GnuTux Short Islamic Reels Maker",
@@ -71,7 +71,8 @@
     "files": [
       "src/**/*",
       "GT-SIRM-icons/**/*",
-      "!resources/bin/**/*"
+      "!resources/bin/**/*",
+      "build-icons/**/*"
     ],
     "directories": {
       "buildResources": "GT-SIRM-icons",

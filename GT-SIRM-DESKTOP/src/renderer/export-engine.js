@@ -711,6 +711,14 @@ async function startDesktopExportV2(opts) {
   let lastUiTick = 0;
   const recSync = createRecVidSync();          // v1.4
   const recSyncT0 = performance.now();
+
+  // v1.4 — تَشريحُ زَمَنِ التَصدير. نُسخةُ الهاتِفِ تَعرِضُ هذا مُنذُ v1.2.2،
+  //   وسَطحُ المَكتَبِ كانَ يَعرِضُ شَريطَ تَقَدُّمٍ لا غَير. بِلا قِياسٍ لا يُعرَفُ
+  //   أَينَ تَذهَبُ الثَواني، وكُلُّ «تَسريعٍ» بَعدَهُ تَخمين.
+  const _dtProf = {
+    frames: 0, bgLoad: 0, recSync: 0, draw: 0, readback: 0, pipe: 0,
+    t0: performance.now(),
+  };
   try {
     for (let i = 0; i < totalFrames; i++) {
       if (cancelRef?.canceled) throw new Error("cancelled");
@@ -718,6 +726,7 @@ async function startDesktopExportV2(opts) {
       const t = i / FPS;
 
       // إطار الخلفية المسبق
+      const _tBg = performance.now();
       if (bgFramePaths) {
         const idx = Math.min(i, bgFramePaths.length - 1);
         prefetch(idx);
@@ -731,20 +740,31 @@ async function startDesktopExportV2(opts) {
           bmpCache.delete(oldKey);
         }
       }
+      _dtProf.bgLoad += performance.now() - _tBg;
 
       // بيانات الموجة الصوتية للإطار الحالي (V2 يخلط الصوت offline فلا توجد analyser data)
       S._exportWaveData = exportWaveData[i];
       if (setStateForTime) setStateForTime(t);
       // v1.4 — مُزامَنةُ فيديو التِلاوةِ بِالتَشغيلِ (اُنظُر syncRecVidByPlayback)
       if (S.recVidEl && typeof ge === "function" && ge("recvid-on")) {
+        const _tRec = performance.now();
         const _src = (typeof recvidSourceTime === "function") ? recvidSourceTime(t) : t;
         await syncRecVidByPlayback(recSync, S.recVidEl, _src, t,
                                    (performance.now() - recSyncT0) / 1000);
+        _dtProf.recSync += performance.now() - _tRec;
       }
+      const _tDraw = performance.now();
       drawFrame(t);
+      _dtProf.draw += performance.now() - _tDraw;
 
+      const _tRead = performance.now();
       const frameBuf = canvasToRgbaBuffer(ctx, W, H);
+      _dtProf.readback += performance.now() - _tRead;
+
+      const _tPipe = performance.now();
       await window.SIRM.ffmpegPipeFrame(frameBuf);
+      _dtProf.pipe += performance.now() - _tPipe;
+      _dtProf.frames++;
 
       const now = performance.now();
       if (now - lastUiTick > 200 || i === totalFrames - 1) {
@@ -763,6 +783,14 @@ async function startDesktopExportV2(opts) {
   }
 
   // ── 6) إغلاق وإنهاء ffmpeg ─────────────────────────
+  // v1.4 — اِنشُرِ القِياسَ لِتَعرِضَهُ نافِذةُ النَتيجةِ كَما في الهاتِف
+  _dtProf.wall = performance.now() - _dtProf.t0;
+  _dtProf.recResyncs = recSync.resyncs;
+  _dtProf.recMode = recSync.playFailed ? "نَقل (تَعَذَّرَ التَشغيل)"
+                  : recSync.slowSeek   ? "نَقل (التَشغيلُ لَم يَتَقَدَّم)"
+                  : "تَشغيل";
+  S._lastExportProfile = _dtProf;
+
   onProgress(98, "📦 جاري إنهاء التغليف…");
   try {
     await window.SIRM.ffmpegPipeEnd();

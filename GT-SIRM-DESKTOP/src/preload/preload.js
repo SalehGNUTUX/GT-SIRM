@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld("SIRM", {
   downloadUpdate:    (o)     => ipcRenderer.invoke("download-update", o),
   installUpdate:     (o)     => ipcRenderer.invoke("install-update", o),
   revealFile:        (f)     => ipcRenderer.invoke("reveal-file", f),
+  openPath:          (f)     => ipcRenderer.invoke("open-path", f),
+  fileSize:          (f)     => ipcRenderer.invoke("file-size", f),
   restartApp:        ()      => ipcRenderer.invoke("restart-app"),
   onUpdateProgress:  (cb)    => ipcRenderer.on("update-progress", (_e, d) => cb(d)),
   offUpdateProgress: ()      => ipcRenderer.removeAllListeners("update-progress"),

@@ -870,14 +870,45 @@ function calcEffectiveSliceDuration(numSlices, baseDur) {
 //  أَو أَيُّ مَصدَرٍ مُعتَمَد — تَماماً كَما يَفعَلُ اقتِطاعُ الصَوت.
 //  التَحويل: زَمَنُ المَشروعِ t ⇒ زَمَنُ المَصدَرِ (start + t)، مَحدوداً بِـend.
 // ══════════════════════════════════════════════════════
+// v1.4 — الحُدودُ تُدخَلُ بِخانَتَين: دَقائِق وثَوانٍ (تَقبَلُ الكَسرَ العَشريّ).
+//   حَقلُ ثَوانٍ واحِدٌ كانَ عَسيراً عَلى مَقطَعٍ طَويل: مَن يَعرِفُ أَنَّ الدَقيقةَ
+//   والنِصفَ تُكتَبُ 90؟ وخانةٌ ثالِثةٌ لِأَجزاءِ الثانِيةِ تُضَيِّقُ المِساحةَ بِلا
+//   داعٍ — الكَسرُ العَشريُّ في خانةِ الثَواني يَكفي (0.1 ث = ثُلثُ إطارٍ تَقريباً).
+function _rvSecs(side) {
+  const m = parseFloat(gv(`recvid-trim-${side}-m`));
+  const s = parseFloat(gv(`recvid-trim-${side}-s`));
+  const mm = (isFinite(m) && m > 0) ? Math.floor(m) : 0;
+  const ss = (isFinite(s) && s > 0) ? Math.min(s, 59.99) : 0;
+  return mm * 60 + ss;
+}
+
+function _rvSet(side, secs) {
+  const t = Math.max(0, secs || 0);
+  const m = Math.floor(t / 60);
+  const s = Math.round((t - m * 60) * 10) / 10;
+  const put = (sfx, val) => {
+    const el = document.getElementById(`recvid-trim-${side}-${sfx}`);
+    if (el) el.value = String(val);
+  };
+  // 60.0 ثانِيةً بَعدَ التَقريبِ تَعني دَقيقةً كامِلة
+  if (s >= 60) { put("m", m + 1); put("s", 0); }
+  else { put("m", m); put("s", s); }
+}
+
+function _rvFmt(secs) {
+  const t = Math.max(0, secs || 0);
+  const m = Math.floor(t / 60);
+  const s = t - m * 60;
+  return `${m}:${(s < 10 ? "0" : "")}${s.toFixed(1)}`;
+}
+
 function getRecVidTrim() {
   if (!ge("recvid-trim-on") || !S.recVidEl) return null;
   const dur = isFinite(S.recVidEl.duration) ? S.recVidEl.duration : 0;
   if (!(dur > 0)) return null;
-  let start = parseFloat(gv("recvid-trim-start"));
-  let end   = parseFloat(gv("recvid-trim-end"));
-  if (!isFinite(start) || start < 0) start = 0;
-  if (!isFinite(end) || end <= 0) end = dur;
+  let start = _rvSecs("start");
+  let end   = _rvSecs("end");
+  if (!(end > 0)) end = dur;
   start = Math.max(0, Math.min(start, dur));
   end   = Math.max(0, Math.min(end, dur));
   if (end - start < 0.3) return null;      // اقتِطاعٌ أَقصَرُ مِن أَن يُفيد
@@ -898,23 +929,17 @@ function updateRecVidTrimInfo() {
   if (!v || !isFinite(v.duration) || v.duration <= 0) { el.textContent = ""; return; }
   const tr = getRecVidTrim();
   el.textContent = tr
-    ? `المُدّةُ المُحَدَّدة: ${tr.dur.toFixed(1)} ث  (مِن ${tr.start.toFixed(1)} إلى ${tr.end.toFixed(1)}) · طولُ المَقطَعِ الأَصليّ ${v.duration.toFixed(1)} ث`
-    : `طولُ المَقطَع ${v.duration.toFixed(1)} ث — حَدِّد «مِن» و«إلى» (فَرقُهُما 0.3 ث فَأَكثَر).`;
+    ? `المُدّةُ المُحَدَّدة: ${_rvFmt(tr.dur)} (مِن ${_rvFmt(tr.start)} إلى ${_rvFmt(tr.end)}) · طولُ المَقطَعِ الأَصليّ ${_rvFmt(v.duration)}`
+    : `طولُ المَقطَع ${_rvFmt(v.duration)} — حَدِّد «مِن» و«إلى» (فَرقُهُما 0.3 ث فَأَكثَر).`;
 }
 
 // يُهَيِّئُ حُدودَ الاقتِطاعِ عِندَ تَحميلِ مَقطَعٍ جَديد
 function initRecVidTrimBounds() {
   const v = S.recVidEl;
   if (!v || !isFinite(v.duration) || v.duration <= 0) return;
-  const s = document.getElementById("recvid-trim-start");
-  const e = document.getElementById("recvid-trim-end");
-  if (s) { s.max = String(v.duration.toFixed(2)); if (!(parseFloat(s.value) > 0)) s.value = "0"; }
-  if (e) {
-    e.max = String(v.duration.toFixed(2));
-    const cur = parseFloat(e.value);
-    // القيمةُ الافتِراضيّةُ 10 لا مَعنى لَها لِمَقطَعٍ مُدَّتُهُ أَقَلّ — ولا لِمَقطَعٍ أَطوَل
-    if (!isFinite(cur) || cur <= 0 || cur > v.duration || cur === 10) e.value = v.duration.toFixed(1);
-  }
+  if (_rvSecs("start") <= 0) _rvSet("start", 0);
+  const end = _rvSecs("end");
+  if (!(end > 0) || end > v.duration) _rvSet("end", v.duration);
   updateRecVidTrimInfo();
 }
 
@@ -930,27 +955,21 @@ function initRecVidTrimUI() {
     markProjectDirty();
   };
   if (on) on.addEventListener("change", sync);
-  ["recvid-trim-start", "recvid-trim-end"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener("input", sync);
-  });
+  ["start", "end"].forEach(side => ["m", "s"].forEach(sfx => {
+    const el = document.getElementById(`recvid-trim-${side}-${sfx}`);
+    if (el) { el.addEventListener("input", sync); el.addEventListener("change", sync); }
+  }));
   document.getElementById("recvid-trim-set-start")?.addEventListener("click", () => {
     const v = S.recVidEl; if (!v) return;
-    const el = document.getElementById("recvid-trim-start");
-    if (el) { el.value = (v.currentTime || 0).toFixed(1); sync(); }
+    _rvSet("start", v.currentTime || 0); sync();
   });
   document.getElementById("recvid-trim-set-end")?.addEventListener("click", () => {
     const v = S.recVidEl; if (!v) return;
-    const el = document.getElementById("recvid-trim-end");
-    if (el) { el.value = (v.currentTime || 0).toFixed(1); sync(); }
+    _rvSet("end", v.currentTime || 0); sync();
   });
   document.getElementById("recvid-trim-all")?.addEventListener("click", () => {
     const v = S.recVidEl; if (!v || !isFinite(v.duration)) return;
-    const s = document.getElementById("recvid-trim-start");
-    const e = document.getElementById("recvid-trim-end");
-    if (s) s.value = "0";
-    if (e) e.value = v.duration.toFixed(1);
-    sync();
+    _rvSet("start", 0); _rvSet("end", v.duration); sync();
   });
   if (row) row.style.display = ge("recvid-trim-on") ? "" : "none";
 }
@@ -11400,8 +11419,11 @@ async function startExportDesktop(codecKey) {
         if (label) $("rec-sub").textContent = label;
       },
     });
-    toast(`✅ تم التصدير: ${fmt.label}`, "success");
-    try { window.SIRM.openFolder?.(outputPath); } catch (_) {}
+    // v1.4 — لَوحةُ النَتيجةِ بَدَلَ فُقاعةٍ عابِرة (كَما في الهاتِف)
+    toast(`✅ تم التصدير: ${fmt.label}`, "success", 3000);
+    let _sz = 0;
+    try { _sz = (await window.SIRM.fileSize?.(outputPath)) || 0; } catch (_) {}
+    showDesktopExportResult(outputPath, fmt.label, _sz);
   } catch (e) {
     if (e && e.message === "cancelled") toast("تم إلغاء التصدير", "info");
     else {
@@ -12235,7 +12257,7 @@ function _dtAppVersion() {
   if (_dtNativeVersion) return _dtNativeVersion;
   const el = document.querySelector(".info-v");
   const t = el ? el.textContent.trim() : "";
-  return /^\d+\.\d+/.test(t) ? t : "1.4.0";
+  return /^\d+\.\d+/.test(t) ? t : "1.4.1";
 }
 
 function dtBetaUpdatesEnabled() {
@@ -12465,8 +12487,182 @@ async function _dtSyncShownVersion() {
   });
 }
 
+// ══════════════════════════════════════════════════════
+//  v1.4 — نَتيجةُ التَصدير في سَطحِ المَكتَب
+//  ───────────────────────────────────────────────────
+//  نُسخةُ الهاتِفِ تَعرِضُ مُنذُ v1.2.2 تَشريحاً لِزَمَنِ التَصدير (أَينَ ذَهَبَت
+//  الثَواني فِعلاً) — وهُوَ ما دَلَّنا عَلى عِلَلٍ حَقيقيّةٍ أَكثَرَ مِن مَرّة.
+//  وسَطحُ المَكتَبِ كانَ يَكتَفي بِفُقاعةٍ عابِرة. الآنَ نَفسُ اللَوحة.
+// ══════════════════════════════════════════════════════
+let _dtLastExportPath = null;
+
+function showDesktopExportResult(outputPath, label, sizeBytes) {
+  _dtLastExportPath = outputPath || null;
+  const modal = document.getElementById("export-done-modal");
+  const pf = S._lastExportProfile;
+
+  if (!modal) {
+    toast?.(`✅ تم التصدير: ${label}`, "success", 5000);
+    return;
+  }
+
+  const sizeMB = sizeBytes ? (sizeBytes / 1048576).toFixed(1) : null;
+  const where = document.getElementById("export-done-where");
+  if (where) {
+    where.innerHTML = `📁 حُفِظَ في: <b dir="ltr">${outputPath || "—"}</b>` +
+      (sizeMB ? `<br><span style="color:var(--t3)">الحَجم: ${sizeMB} ميغابايت · الصيغة: ${label || "—"}</span>`
+              : `<br><span style="color:var(--t3)">الصيغة: ${label || "—"}</span>`);
+  }
+  const note = document.getElementById("export-done-note");
+  if (note) note.textContent = "";
+
+  const perfEl = document.getElementById("export-done-perf");
+  if (perfEl) {
+    if (pf && pf.frames) {
+      const n = pf.frames;
+      const ms = x => (x / n).toFixed(1);
+      const sum = pf.bgLoad + pf.recSync + pf.draw + pf.readback + pf.pipe;
+      const rows = [
+        ["إطارُ الخَلفيّة",      ms(pf.bgLoad)],
+        ["فيديو التِلاوة",      ms(pf.recSync)],
+        ["الرَسم (drawFrame)",  ms(pf.draw)],
+        ["قِراءةُ اللَوحة",      ms(pf.readback)],
+        ["التَمريرُ إلى ffmpeg", ms(pf.pipe)],
+      ].map(([k, v]) => `<div style="display:flex;justify-content:space-between"><span>${k}</span><span dir="ltr">${v} ms</span></div>`).join("");
+      const wallSec = (pf.wall || 0) / 1000;
+      const fps = wallSec > 0 ? (n / wallSec).toFixed(1) : "—";
+      perfEl.innerHTML =
+        `<div style="font-weight:700;margin-bottom:4px">⏱ مُتَوَسِّطُ الإطارِ الواحِد (${n} إطاراً)</div>` +
+        rows +
+        `<div style="display:flex;justify-content:space-between;border-top:1px solid var(--b1);margin-top:4px;padding-top:4px;font-weight:700"><span>المَجموع</span><span dir="ltr">${ms(sum)} ms</span></div>` +
+        `<div style="color:var(--t3);margin-top:4px">الزَمَنُ الكُلّيّ: <b>${wallSec.toFixed(1)} ث</b> · المُعَدَّل: <b>${fps}</b> إطار/ث</div>` +
+        `<div style="color:var(--t3)">مُزامَنةُ فيديو التِلاوة: <b>${pf.recMode || "—"}</b>` +
+        (pf.recResyncs ? ` · إعاداتُ مُزامَنة: ${pf.recResyncs}` : "") + `</div>` +
+        `<div style="color:var(--t3)">وَضعُ اللَوحة: <b>${(typeof needsPixelReadback === "function" && needsPixelReadback()) ? "قِراءةٌ بِالبِكسِل (بَرمَجيّ)" : "مُعَجَّلٌ بِالعَتاد"}</b></div>`;
+      perfEl.style.display = "";
+    } else {
+      perfEl.style.display = "none";
+    }
+  }
+
+  const folderBtn = document.getElementById("export-done-folder-btn");
+  if (folderBtn) folderBtn.style.display = outputPath ? "" : "none";
+  const playBtn = document.getElementById("export-done-play-btn");
+  if (playBtn) playBtn.style.display = outputPath ? "" : "none";
+
+  modal.style.display = "flex";
+}
+
+function closeDesktopExportResult() {
+  const m = document.getElementById("export-done-modal");
+  if (m) m.style.display = "none";
+}
+
+function initDesktopExportResultUI() {
+  document.getElementById("export-done-close-btn")?.addEventListener("click", closeDesktopExportResult);
+  document.getElementById("export-done-folder-btn")?.addEventListener("click", () => {
+    try { window.SIRM?.revealFile?.(_dtLastExportPath) || window.SIRM?.openFolder?.(_dtLastExportPath); } catch (_) {}
+  });
+  document.getElementById("export-done-play-btn")?.addEventListener("click", () => {
+    try { window.SIRM?.openPath?.(_dtLastExportPath) || window.SIRM?.openFolder?.(_dtLastExportPath); } catch (_) {}
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  v1.4 — حَجمُ المَلَفِّ المُصَدَّرِ في سَطحِ المَكتَب
+//  ───────────────────────────────────────────────────
+//  ffmpeg يُرَمِّزُ هُنا بِـCRF (جَودةٌ ثابِتة) لا بِمُعَدَّلِ بِتٍّ ثابِت — وهذا
+//  أَكفَأُ أَصلاً: المَشاهِدُ الساكِنةُ تَأخُذُ بِتّاتٍ أَقَلّ تِلقائيّاً.
+//
+//  ⚠️ قِسنا أَثَرَ `preset` قَبلَ أَن نَمَسَّه، فَنَقَضَ القِياسُ التَوَقُّعَ الشائِع:
+//  عِندَ **نَفسِ CRF** أَعطى `veryfast` أَصغَرَ مَلَفٍّ (8.6 م.ب) وأَسرَعَ زَمَن،
+//  بَينَما `medium` أَكبَرُ بِـ15% و`slow` بِـ13% — لِأَنَّ الإعداداتِ الأَبطَأَ
+//  تُنفِقُ بِتّاتٍ أَكثَرَ لِتَرفَعَ الجَودةَ (SSIM: 0.9930 ← 0.9950)، لا لِتُصَغِّرَ
+//  الحَجم. فَتَغييرُ الافتِراضيِّ إلى `medium` كانَ سَيُكَبِّرُ المَلَفَّ **ويُبطِئُ**
+//  التَصديرَ مَعاً. أُبقيَ `veryfast` افتِراضيّاً عَن قِياسٍ لا عَن عادة.
+//
+//  فَالمِقبَضُ الصادِقُ لِلحَجمِ هُوَ CRF وَحدَه: كُلُّ +6 تُنصِّفُ الحَجمَ تَقريباً.
+// ══════════════════════════════════════════════════════
+const CRF_PRESETS = { small: 28, balanced: 23, high: 19 };
+
+function _dtProjectDurationSec() {
+  if (Array.isArray(S.ayaDurations) && S.ayaDurations.length) {
+    const t = S.ayaDurations.reduce((a, b) => a + (parseFloat(b) || 0), 0);
+    if (t > 0) return t;
+  }
+  return (typeof S.totalDur === "number" && S.totalDur > 0) ? S.totalDur : 0;
+}
+
+function updateDesktopSizeNote() {
+  try { _updateDesktopSizeNote(); } catch (_) {}
+}
+
+function _updateDesktopSizeNote() {
+  const note = document.getElementById("crf-size-note");
+  if (!note) return;
+  const crf = parseInt(gv("export-crf"), 10);
+  if (!isFinite(crf)) { note.textContent = ""; return; }
+  const dur = _dtProjectDurationSec();
+
+  // مُقاسٌ فِعليّاً عَلى 1080×1920 و30 إطاراً (م.ب لِكُلِّ دَقيقة، مَشهَدٌ مُتَحَرِّك):
+  //   CRF 18→65 · 20→54.4 · 23→41 · 26→27.6 · 28→19.4 · 30→14.6
+  //   والمَشاهِدُ الساكِنةُ (خَلفيّةُ صورةٍ + نَصّ) أَصغَرُ مِن ذلكَ بِكَثير.
+  const MEASURED = [[18,65.0],[20,54.4],[23,41.0],[26,27.6],[28,19.4],[30,14.6]];
+  const mbPerMin = (c) => {
+    if (c <= MEASURED[0][0]) return MEASURED[0][1];
+    if (c >= MEASURED[MEASURED.length-1][0]) return MEASURED[MEASURED.length-1][1];
+    for (let k = 0; k < MEASURED.length - 1; k++) {
+      const [c1, v1] = MEASURED[k], [c2, v2] = MEASURED[k+1];
+      if (c >= c1 && c <= c2) return v1 + (v2 - v1) * (c - c1) / (c2 - c1);
+    }
+    return 41.0;
+  };
+  const rel = mbPerMin(crf) / 41.0;
+  const label = crf <= 19 ? "جَودةٌ عالِيةٌ جِدّاً" : crf <= 22 ? "جَودةٌ عالِية"
+              : crf <= 25 ? "مُتَوازِن" : crf <= 29 ? "حَجمٌ أَصغَر" : "حَجمٌ صَغيرٌ جِدّاً";
+  let txt = `CRF ${crf} — ${label}`;
+  if (crf !== 23) {
+    const pct = Math.round((rel - 1) * 100);
+    txt += ` · الحَجمُ ${pct > 0 ? "أَكبَرُ" : "أَصغَرُ"} بِنَحوِ ${Math.abs(pct)}٪ مِنَ المُتَوازِن`;
+  }
+  if (dur > 0) {
+    const mb = mbPerMin(crf) * (dur / 60);
+    txt += ` · الحَجمُ المُتَوَقَّع ≈ ${mb.toFixed(1)} م.ب لِـ${dur.toFixed(0)} ث`;
+  } else {
+    txt += ` · ≈ ${mbPerMin(crf).toFixed(1)} م.ب لِكُلِّ دَقيقة`;
+  }
+  txt += `<br><span style="color:var(--t3)">قِسنا هذا فِعليّاً: مِن 23 إلى <b>26</b> يَصغُرُ المَلَفُّ نَحوَ الثُلُثِ وفَرقُ الجَودةِ (SSIM) أَقَلُّ مِن نِصفِ بِالمِئة — لا تَكادُ تَراهُ العَين. وزَمَنُ التَصديرِ لا يَتَغَيَّرُ بِتَغييرِ هذا الرَقَم.</span>`;
+  note.innerHTML = txt;
+}
+
+function initDesktopQualityUI() {
+  const crf = document.getElementById("export-crf");
+  if (!crf) return;
+  const apply = (key) => {
+    const v = CRF_PRESETS[key] || 23;
+    crf.value = String(v);
+    crf.dispatchEvent(new Event("input"));
+    crf.dispatchEvent(new Event("change"));
+    updateDesktopSizeNote();
+    toast?.(`🎚️ CRF ${v} — ${key === "small" ? "حَجمٌ أَصغَر" : key === "high" ? "جَودةٌ أَعلى" : "مُتَوازِن"}`, "info", 2500);
+  };
+  document.getElementById("crf-preset-small")?.addEventListener("click", () => apply("small"));
+  document.getElementById("crf-preset-balanced")?.addEventListener("click", () => apply("balanced"));
+  document.getElementById("crf-preset-high")?.addEventListener("click", () => apply("high"));
+  ["export-crf", "export-fps", "export-res", "export-codec"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", updateDesktopSizeNote);
+    el.addEventListener("change", updateDesktopSizeNote);
+  });
+  updateDesktopSizeNote();
+  setTimeout(updateDesktopSizeNote, 800);
+}
+
 function dtInitUpdateSystem() {
   _dtSyncShownVersion();
+  initDesktopExportResultUI();   // v1.4
+  initDesktopQualityUI();        // v1.4
   _dtInitUpdateToggle("update-auto-on", "gt_sirm_update_auto", true,
     "⏱️ سيُفحَصُ عَنِ التَحديثاتِ تِلقائيّاً مَرّةً كُلَّ أُسبوع",
     "⏸️ أُوقِفَ الفَحصُ التِلقائيّ — استَعمِل زِرَّ الفَحصِ عِندَ الحاجة", false);

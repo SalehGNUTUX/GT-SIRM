@@ -515,6 +515,23 @@ body.offline .offline-badge{display:block}
 </div>
 
 <!-- v1.2.15 — مَشروعٌ جَديد -->
+<!-- v1.4 — نافِذةُ نَتيجةِ التَصدير: نَفسُ ما تَعرِضُهُ نُسخةُ الهاتِفِ مُنذُ
+     v1.2.2 (مَوضِعُ المَلَفّ + تَشريحُ زَمَنِ التَصدير). كانَ سَطحُ المَكتَبِ
+     يَكتَفي بِفُقاعةٍ عابِرة. -->
+<div class="modal-bg" id="export-done-modal">
+  <div class="modal">
+    <h3 id="export-done-title">✅ اكتَمَلَ التَصدير</h3>
+    <div id="export-done-where" style="font-size:11px;line-height:1.7;margin-bottom:8px;word-break:break-word"></div>
+    <div id="export-done-note" style="font-size:9px;color:var(--t3);line-height:1.6;margin-bottom:8px"></div>
+    <div id="export-done-perf" style="display:none;font-size:10px;line-height:1.8;background:var(--bg2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 8px;margin-bottom:8px"></div>
+    <div class="modal-btns" style="flex-wrap:wrap;gap:6px">
+      <button class="btn btn-g" id="export-done-close-btn">إغلاق</button>
+      <button class="btn btn-g" id="export-done-folder-btn">📂 افتَح المُجَلَّد</button>
+      <button class="btn btn-a" id="export-done-play-btn">▶️ شَغِّل المَقطَع</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="update-modal">
   <div class="modal">
     <h3 id="update-title">🎉 يَتَوَفَّرُ إصدارٌ جَديد</h3>
@@ -559,7 +576,7 @@ body.offline .offline-badge{display:block}
     </div>
     <div class="logo-text">
       <h1>GT-SIRM</h1>
-      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.4.0</small>
+      <small id="app-subtitle">GnuTux Short Islamic Reels Maker v1.4.1</small>
     </div>
   </div>
   <div class="hdr-r">
@@ -1302,10 +1319,31 @@ body.offline .offline-badge{display:block}
               <label class="tg"><input type="checkbox" id="recvid-trim-on"><span class="tgs"></span></label>
             </div>
             <div id="recvid-trim-row" style="display:none;margin-bottom:6px">
-              <div style="display:flex;gap:6px">
-                <div class="fg" style="flex:1"><label class="fl">مِن (ث)</label><input type="number" class="fc" id="recvid-trim-start" min="0" step="0.1" value="0"></div>
-                <div class="fg" style="flex:1"><label class="fl">إلى (ث)</label><input type="number" class="fc" id="recvid-trim-end" min="0.1" step="0.1" value="10"></div>
+              <div style="display:flex;gap:8px">
+                <div class="fg" style="flex:1">
+                  <label class="fl">مِن</label>
+                  <div style="display:flex;gap:4px;align-items:center" dir="ltr">
+                    <input type="number" class="fc" id="recvid-trim-start-m" min="0" max="999" step="1" value="0" style="flex:1;text-align:center" title="دَقائِق">
+                    <span style="color:var(--t3);font-size:12px;font-weight:700">:</span>
+                    <input type="number" class="fc" id="recvid-trim-start-s" min="0" max="59.9" step="0.1" value="0" style="flex:1.3;text-align:center" title="ثَوانٍ (يُقبَلُ الكَسرُ العَشريّ)">
+                  </div>
+                  <div style="display:flex;gap:4px;font-size:8px;color:var(--t3);text-align:center;margin-top:2px" dir="ltr">
+                    <span style="flex:1">دَقيقة</span><span style="width:8px"></span><span style="flex:1.3">ثانِية</span>
+                  </div>
+                </div>
+                <div class="fg" style="flex:1">
+                  <label class="fl">إلى</label>
+                  <div style="display:flex;gap:4px;align-items:center" dir="ltr">
+                    <input type="number" class="fc" id="recvid-trim-end-m" min="0" max="999" step="1" value="0" style="flex:1;text-align:center" title="دَقائِق">
+                    <span style="color:var(--t3);font-size:12px;font-weight:700">:</span>
+                    <input type="number" class="fc" id="recvid-trim-end-s" min="0" max="59.9" step="0.1" value="0" style="flex:1.3;text-align:center" title="ثَوانٍ (يُقبَلُ الكَسرُ العَشريّ)">
+                  </div>
+                  <div style="display:flex;gap:4px;font-size:8px;color:var(--t3);text-align:center;margin-top:2px" dir="ltr">
+                    <span style="flex:1">دَقيقة</span><span style="width:8px"></span><span style="flex:1.3">ثانِية</span>
+                  </div>
+                </div>
               </div>
+
               <div style="display:flex;gap:6px;flex-wrap:wrap">
                 <button class="btn btn-g bsm" id="recvid-trim-set-start" style="flex:1;font-size:9px;padding:4px 6px">⏱️ البِدايةُ = المَوضِعُ الحاليّ</button>
                 <button class="btn btn-g bsm" id="recvid-trim-set-end" style="flex:1;font-size:9px;padding:4px 6px">⏱️ النِهايةُ = المَوضِعُ الحاليّ</button>
@@ -2335,6 +2373,14 @@ body.offline .offline-badge{display:block}
           <div class="fg"><label class="fl">جودة CRF <small style="color:var(--t3)">(أقل = أفضل جودة)</small></label>
             <div class="sg"><input type="range" min="15" max="45" value="23" id="export-crf"><span class="sv" id="export-crf-v">23</span></div>
           </div>
+            <!-- v1.4 — CRF هُوَ مِقبَضُ الحَجمِ الحَقيقيّ في ffmpeg (جَودةٌ ثابِتة،
+                 لا مُعَدَّلُ بِتٍّ ثابِت). قِسنا أَثَرَهُ فِعليّاً فَبَنَينا عَلَيه. -->
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">
+              <button type="button" class="btn btn-g bsm" id="crf-preset-small" style="flex:1;font-size:9px;padding:4px 6px">🪶 حَجمٌ أَصغَر</button>
+              <button type="button" class="btn btn-g bsm" id="crf-preset-balanced" style="flex:1;font-size:9px;padding:4px 6px">⚖️ مُتَوازِن</button>
+              <button type="button" class="btn btn-g bsm" id="crf-preset-high" style="flex:1;font-size:9px;padding:4px 6px">💎 جَودةٌ أَعلى</button>
+            </div>
+            <div id="crf-size-note" style="font-size:9px;color:var(--t3);margin-top:4px;line-height:1.6"></div>
           <div class="fg"><label class="fl">سرعة الترميز</label>
             <select class="fc" id="export-preset">
               <option value="ultrafast">ultrafast (الأسرع)</option>
@@ -2438,7 +2484,7 @@ body.offline .offline-badge{display:block}
         </div>
         <details class="sec" open>
           <summary class="sec-t">📋 المشروع</summary>
-          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.4.0</span></div>
+          <div class="info-row"><span class="info-k">الإصدار</span><span class="info-v">1.4.1</span></div>
           <div class="info-row"><span class="info-k">المطور</span><span class="info-v"><a href="https://github.com/SalehGnuTux" target="_blank">@SalehGnuTux</a></span></div>
           <div class="info-row"><span class="info-k">المستودع</span><span class="info-v"><a href="https://github.com/SalehGnuTux/GT-SIRM" target="_blank">GitHub/GT-SIRM</a></span></div>
           <div class="info-row"><span class="info-k">الرخصة</span><span class="info-v">GPLv3

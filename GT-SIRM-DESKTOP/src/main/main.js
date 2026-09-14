@@ -247,6 +247,12 @@ ipcMain.handle("install-update", (_e, opts) => updater.installUpdate(opts));
 ipcMain.handle("reveal-file", (_e, f) => {
   try { shell.showItemInFolder(f); return true; } catch (_) { return false; }
 });
+ipcMain.handle("open-path", async (_e, f) => {
+  try { await shell.openPath(String(f || "")); return true; } catch (_) { return false; }
+});
+ipcMain.handle("file-size", (_e, f) => {
+  try { return fs.statSync(String(f || "")).size; } catch (_) { return 0; }
+});
 ipcMain.handle("restart-app", () => { app.relaunch(); app.exit(0); });
 
 

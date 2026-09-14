@@ -508,14 +508,45 @@ function calcEffectiveSliceDuration(numSlices, baseDur) {
 //  أَو أَيُّ مَصدَرٍ مُعتَمَد — تَماماً كَما يَفعَلُ اقتِطاعُ الصَوت.
 //  التَحويل: زَمَنُ المَشروعِ t ⇒ زَمَنُ المَصدَرِ (start + t)، مَحدوداً بِـend.
 // ══════════════════════════════════════════════════════
+// v1.4 — الحُدودُ تُدخَلُ بِخانَتَين: دَقائِق وثَوانٍ (تَقبَلُ الكَسرَ العَشريّ).
+//   حَقلُ ثَوانٍ واحِدٌ كانَ عَسيراً عَلى مَقطَعٍ طَويل: مَن يَعرِفُ أَنَّ الدَقيقةَ
+//   والنِصفَ تُكتَبُ 90؟ وخانةٌ ثالِثةٌ لِأَجزاءِ الثانِيةِ تُضَيِّقُ المِساحةَ بِلا
+//   داعٍ — الكَسرُ العَشريُّ في خانةِ الثَواني يَكفي (0.1 ث = ثُلثُ إطارٍ تَقريباً).
+function _rvSecs(side) {
+  const m = parseFloat(gv(`recvid-trim-${side}-m`));
+  const s = parseFloat(gv(`recvid-trim-${side}-s`));
+  const mm = (isFinite(m) && m > 0) ? Math.floor(m) : 0;
+  const ss = (isFinite(s) && s > 0) ? Math.min(s, 59.99) : 0;
+  return mm * 60 + ss;
+}
+
+function _rvSet(side, secs) {
+  const t = Math.max(0, secs || 0);
+  const m = Math.floor(t / 60);
+  const s = Math.round((t - m * 60) * 10) / 10;
+  const put = (sfx, val) => {
+    const el = document.getElementById(`recvid-trim-${side}-${sfx}`);
+    if (el) el.value = String(val);
+  };
+  // 60.0 ثانِيةً بَعدَ التَقريبِ تَعني دَقيقةً كامِلة
+  if (s >= 60) { put("m", m + 1); put("s", 0); }
+  else { put("m", m); put("s", s); }
+}
+
+function _rvFmt(secs) {
+  const t = Math.max(0, secs || 0);
+  const m = Math.floor(t / 60);
+  const s = t - m * 60;
+  return `${m}:${(s < 10 ? "0" : "")}${s.toFixed(1)}`;
+}
+
 function getRecVidTrim() {
   if (!ge("recvid-trim-on") || !S.recVidEl) return null;
   const dur = isFinite(S.recVidEl.duration) ? S.recVidEl.duration : 0;
   if (!(dur > 0)) return null;
-  let start = parseFloat(gv("recvid-trim-start"));
-  let end   = parseFloat(gv("recvid-trim-end"));
-  if (!isFinite(start) || start < 0) start = 0;
-  if (!isFinite(end) || end <= 0) end = dur;
+  let start = _rvSecs("start");
+  let end   = _rvSecs("end");
+  if (!(end > 0)) end = dur;
   start = Math.max(0, Math.min(start, dur));
   end   = Math.max(0, Math.min(end, dur));
   if (end - start < 0.3) return null;      // اقتِطاعٌ أَقصَرُ مِن أَن يُفيد
@@ -536,23 +567,17 @@ function updateRecVidTrimInfo() {
   if (!v || !isFinite(v.duration) || v.duration <= 0) { el.textContent = ""; return; }
   const tr = getRecVidTrim();
   el.textContent = tr
-    ? `المُدّةُ المُحَدَّدة: ${tr.dur.toFixed(1)} ث  (مِن ${tr.start.toFixed(1)} إلى ${tr.end.toFixed(1)}) · طولُ المَقطَعِ الأَصليّ ${v.duration.toFixed(1)} ث`
-    : `طولُ المَقطَع ${v.duration.toFixed(1)} ث — حَدِّد «مِن» و«إلى» (فَرقُهُما 0.3 ث فَأَكثَر).`;
+    ? `المُدّةُ المُحَدَّدة: ${_rvFmt(tr.dur)} (مِن ${_rvFmt(tr.start)} إلى ${_rvFmt(tr.end)}) · طولُ المَقطَعِ الأَصليّ ${_rvFmt(v.duration)}`
+    : `طولُ المَقطَع ${_rvFmt(v.duration)} — حَدِّد «مِن» و«إلى» (فَرقُهُما 0.3 ث فَأَكثَر).`;
 }
 
 // يُهَيِّئُ حُدودَ الاقتِطاعِ عِندَ تَحميلِ مَقطَعٍ جَديد
 function initRecVidTrimBounds() {
   const v = S.recVidEl;
   if (!v || !isFinite(v.duration) || v.duration <= 0) return;
-  const s = document.getElementById("recvid-trim-start");
-  const e = document.getElementById("recvid-trim-end");
-  if (s) { s.max = String(v.duration.toFixed(2)); if (!(parseFloat(s.value) > 0)) s.value = "0"; }
-  if (e) {
-    e.max = String(v.duration.toFixed(2));
-    const cur = parseFloat(e.value);
-    // القيمةُ الافتِراضيّةُ 10 لا مَعنى لَها لِمَقطَعٍ مُدَّتُهُ أَقَلّ — ولا لِمَقطَعٍ أَطوَل
-    if (!isFinite(cur) || cur <= 0 || cur > v.duration || cur === 10) e.value = v.duration.toFixed(1);
-  }
+  if (_rvSecs("start") <= 0) _rvSet("start", 0);
+  const end = _rvSecs("end");
+  if (!(end > 0) || end > v.duration) _rvSet("end", v.duration);
   updateRecVidTrimInfo();
 }
 
@@ -568,27 +593,21 @@ function initRecVidTrimUI() {
     markProjectDirty();
   };
   if (on) on.addEventListener("change", sync);
-  ["recvid-trim-start", "recvid-trim-end"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener("input", sync);
-  });
+  ["start", "end"].forEach(side => ["m", "s"].forEach(sfx => {
+    const el = document.getElementById(`recvid-trim-${side}-${sfx}`);
+    if (el) { el.addEventListener("input", sync); el.addEventListener("change", sync); }
+  }));
   document.getElementById("recvid-trim-set-start")?.addEventListener("click", () => {
     const v = S.recVidEl; if (!v) return;
-    const el = document.getElementById("recvid-trim-start");
-    if (el) { el.value = (v.currentTime || 0).toFixed(1); sync(); }
+    _rvSet("start", v.currentTime || 0); sync();
   });
   document.getElementById("recvid-trim-set-end")?.addEventListener("click", () => {
     const v = S.recVidEl; if (!v) return;
-    const el = document.getElementById("recvid-trim-end");
-    if (el) { el.value = (v.currentTime || 0).toFixed(1); sync(); }
+    _rvSet("end", v.currentTime || 0); sync();
   });
   document.getElementById("recvid-trim-all")?.addEventListener("click", () => {
     const v = S.recVidEl; if (!v || !isFinite(v.duration)) return;
-    const s = document.getElementById("recvid-trim-start");
-    const e = document.getElementById("recvid-trim-end");
-    if (s) s.value = "0";
-    if (e) e.value = v.duration.toFixed(1);
-    sync();
+    _rvSet("start", 0); _rvSet("end", v.duration); sync();
   });
   if (row) row.style.display = ge("recvid-trim-on") ? "" : "none";
 }
@@ -7428,7 +7447,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.4.1";
 let _updateInfo = null;
 
 // v1.2.16 — قَناةُ التَحديث: مُستَقِرٌّ وَحدَه (الافتِراض) أَو مَعَ الاختِباريّ.
