@@ -264,6 +264,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   initAutoSave();
   initCapacitor();       // v0.13.2 — Android: زرّ الرُجوع + فَتح ملفّات .gtsirm
   // v1.2.2 — فَحصُ التَحديثاتِ في الخَلفيّةِ (لا يُعَطِّلُ الإقلاع)
+  // v1.4 — الإصدارُ الحَقيقيُّ أَوَّلاً، ثُمَّ الفَحص
+  setTimeout(() => { try { _syncNativeVersion(); } catch (_) {} }, 900);
   setTimeout(() => { try { autoCheckForUpdates(); } catch (_) {} }, 4000);
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js").catch(() => { });
@@ -498,6 +500,99 @@ function calcEffectiveSliceDuration(numSlices, baseDur) {
   return Math.max(0.5, targetTotal / numSlices);
 }
 
+// ══════════════════════════════════════════════════════
+//  v1.4 — اقتِطاعُ مَقطَعٍ مِن فيديو التِلاوة
+//  ───────────────────────────────────────────────────
+//  المُستَخدِمُ يَجلِبُ مَقطَعاً (بِنَصٍّ أَو بِدونِه) وقَد لا يَحتاجُ إلّا جُزءاً مِنه.
+//  المُدّةُ المُحَدَّدةُ تَصيرُ مُدّةَ المَقطَعِ كُلِّه، فَيُوَزَّعُ عَلَيها النَصُّ الحُرُّ
+//  أَو أَيُّ مَصدَرٍ مُعتَمَد — تَماماً كَما يَفعَلُ اقتِطاعُ الصَوت.
+//  التَحويل: زَمَنُ المَشروعِ t ⇒ زَمَنُ المَصدَرِ (start + t)، مَحدوداً بِـend.
+// ══════════════════════════════════════════════════════
+function getRecVidTrim() {
+  if (!ge("recvid-trim-on") || !S.recVidEl) return null;
+  const dur = isFinite(S.recVidEl.duration) ? S.recVidEl.duration : 0;
+  if (!(dur > 0)) return null;
+  let start = parseFloat(gv("recvid-trim-start"));
+  let end   = parseFloat(gv("recvid-trim-end"));
+  if (!isFinite(start) || start < 0) start = 0;
+  if (!isFinite(end) || end <= 0) end = dur;
+  start = Math.max(0, Math.min(start, dur));
+  end   = Math.max(0, Math.min(end, dur));
+  if (end - start < 0.3) return null;      // اقتِطاعٌ أَقصَرُ مِن أَن يُفيد
+  return { start, end, dur: end - start };
+}
+
+// زَمَنُ المَصدَرِ المُقابِلُ لِزَمَنِ المَشروع. بِلا اقتِطاعٍ: هُوَ نَفسُه.
+function recvidSourceTime(t) {
+  const tr = getRecVidTrim();
+  if (!tr) return t;
+  return Math.min(tr.end - 1e-3, tr.start + Math.max(0, t));
+}
+
+function updateRecVidTrimInfo() {
+  const el = document.getElementById("recvid-trim-info");
+  if (!el) return;
+  const v = S.recVidEl;
+  if (!v || !isFinite(v.duration) || v.duration <= 0) { el.textContent = ""; return; }
+  const tr = getRecVidTrim();
+  el.textContent = tr
+    ? `المُدّةُ المُحَدَّدة: ${tr.dur.toFixed(1)} ث  (مِن ${tr.start.toFixed(1)} إلى ${tr.end.toFixed(1)}) · طولُ المَقطَعِ الأَصليّ ${v.duration.toFixed(1)} ث`
+    : `طولُ المَقطَع ${v.duration.toFixed(1)} ث — حَدِّد «مِن» و«إلى» (فَرقُهُما 0.3 ث فَأَكثَر).`;
+}
+
+// يُهَيِّئُ حُدودَ الاقتِطاعِ عِندَ تَحميلِ مَقطَعٍ جَديد
+function initRecVidTrimBounds() {
+  const v = S.recVidEl;
+  if (!v || !isFinite(v.duration) || v.duration <= 0) return;
+  const s = document.getElementById("recvid-trim-start");
+  const e = document.getElementById("recvid-trim-end");
+  if (s) { s.max = String(v.duration.toFixed(2)); if (!(parseFloat(s.value) > 0)) s.value = "0"; }
+  if (e) {
+    e.max = String(v.duration.toFixed(2));
+    const cur = parseFloat(e.value);
+    // القيمةُ الافتِراضيّةُ 10 لا مَعنى لَها لِمَقطَعٍ مُدَّتُهُ أَقَلّ — ولا لِمَقطَعٍ أَطوَل
+    if (!isFinite(cur) || cur <= 0 || cur > v.duration || cur === 10) e.value = v.duration.toFixed(1);
+  }
+  updateRecVidTrimInfo();
+}
+
+function initRecVidTrimUI() {
+  const on = document.getElementById("recvid-trim-on");
+  const row = document.getElementById("recvid-trim-row");
+  const sync = () => {
+    if (row) row.style.display = ge("recvid-trim-on") ? "" : "none";
+    updateRecVidTrimInfo();
+    // المُدّةُ الفَعّالةُ تَغَيَّرَت ⇒ أَعِد تَوزيعَ النَصِّ عَلَيها
+    try { if (typeof syncVersesToActiveAudio === "function") syncVersesToActiveAudio(); } catch (_) {}
+    try { if (typeof updateAyaUI === "function") updateAyaUI(); } catch (_) {}
+    markProjectDirty();
+  };
+  if (on) on.addEventListener("change", sync);
+  ["recvid-trim-start", "recvid-trim-end"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", sync);
+  });
+  document.getElementById("recvid-trim-set-start")?.addEventListener("click", () => {
+    const v = S.recVidEl; if (!v) return;
+    const el = document.getElementById("recvid-trim-start");
+    if (el) { el.value = (v.currentTime || 0).toFixed(1); sync(); }
+  });
+  document.getElementById("recvid-trim-set-end")?.addEventListener("click", () => {
+    const v = S.recVidEl; if (!v) return;
+    const el = document.getElementById("recvid-trim-end");
+    if (el) { el.value = (v.currentTime || 0).toFixed(1); sync(); }
+  });
+  document.getElementById("recvid-trim-all")?.addEventListener("click", () => {
+    const v = S.recVidEl; if (!v || !isFinite(v.duration)) return;
+    const s = document.getElementById("recvid-trim-start");
+    const e = document.getElementById("recvid-trim-end");
+    if (s) s.value = "0";
+    if (e) e.value = v.duration.toFixed(1);
+    sync();
+  });
+  if (row) row.style.display = ge("recvid-trim-on") ? "" : "none";
+}
+
 // v0.8.5 — مصدر صوتيّ نشط مُوحَّد
 function getActiveAudioDuration() {
   // v0.14 — الوَضع الصامت: المدّة من silent-total-dur
@@ -506,7 +601,9 @@ function getActiveAudioDuration() {
     return Math.max(1, dur);
   }
   if (ge("recvid-on") && S.recVidEl && isFinite(S.recVidEl.duration) && S.recVidEl.duration > 0.5) {
-    return S.recVidEl.duration;
+    // v1.4 — الاقتِطاعُ يُقَصِّرُ المُدّةَ الفَعّالة، فَيُوَزَّعُ النَصُّ عَلَيها وَحدَها
+    const _tr = (typeof getRecVidTrim === "function") ? getRecVidTrim() : null;
+    return _tr ? _tr.dur : S.recVidEl.duration;
   }
   if (S.freeAudioTrim && ge("free-audio-trim-on")) {
     return Math.max(0.5, S.freeAudioTrim.end - S.freeAudioTrim.start);
@@ -2277,6 +2374,7 @@ function initEventListeners() {
   if (resEl) resEl.addEventListener("change", onExportResChange);
 
   initExportQualityUI();    // v1.2.22 — مُقتَرَحاتُ الجَودةِ وتَقديرُ الحَجم
+  initRecVidTrimUI();      // v1.4 — اقتِطاعُ فيديو التِلاوة
   initDirectDownloadUI();   // v1.2.6 — حُقولُ التَنزيلِ مِن رابِطٍ مُباشِر
 
   // v1.2.14 — مُشارَكةُ حُزمةِ التَطبيق (تَظهَرُ في الهاتِفِ فَقَط)
@@ -4234,6 +4332,8 @@ function onRecVidFile(input) {
     const sec = isFinite(v.duration) ? v.duration : 0;
     const info = $("recvid-info");
     if (info) info.textContent = `✅ ${file.name} · ${v.videoWidth}×${v.videoHeight} · ${sec.toFixed(1)}s · ${(file.size / 1e6).toFixed(1)}MB`;
+    // v1.4 — طولُ المَقطَعِ صارَ مَعلوماً ⇒ اضبِط حُدودَ الاقتِطاعِ عَلَيه
+    try { initRecVidTrimBounds(); } catch (_) {}
     resumeAudioCtx().then(ctx => {
       try {
         const src = ctx.createMediaElementSource(v);
@@ -7231,7 +7331,14 @@ function startPlayer() {
   if (S.bgVid) { try { S.bgVid.play().catch(() => {}); } catch (_) {} }
   // v1.2 — استَأنِف المَقطع القادِم في الـcrossfade (إن كان مُعَلَّقاً)
   if (S.bgVidNext) { try { S.bgVidNext.play().catch(() => {}); } catch (_) {} }
-  if (recvidActive) { try { S.recVidEl.play().catch(() => {}); } catch (_) {} }
+  if (recvidActive) {
+    // v1.4 — ابدَأ مِن نُقطةِ الاقتِطاعِ لا مِن رَأسِ المَقطَع
+    try {
+      const _tr = (typeof getRecVidTrim === "function") ? getRecVidTrim() : null;
+      if (_tr && S.recVidEl.currentTime < _tr.start - 0.05) S.recVidEl.currentTime = _tr.start;
+    } catch (_) {}
+    try { S.recVidEl.play().catch(() => {}); } catch (_) {}
+  }
   else if (S.verses.length) playRecitationAudio();
 }
 
@@ -7264,7 +7371,9 @@ function syncRecVidToCurrentAya() {
   if (!recvidActive) return;
   try {
     const t = getCumulativeAyaTime(S.currentAya) + (S.elapsed || 0);
-    S.recVidEl.currentTime = Math.max(0, Math.min(t, S.recVidEl.duration || t));
+    // v1.4 — زَمَنُ المَشروعِ يُحَوَّلُ إلى زَمَنِ المَصدَرِ عَبرَ نُقطةِ الاقتِطاع
+    const src = (typeof recvidSourceTime === "function") ? recvidSourceTime(t) : t;
+    S.recVidEl.currentTime = Math.max(0, Math.min(src, S.recVidEl.duration || src));
   } catch (_) {}
 }
 
@@ -7319,7 +7428,7 @@ function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor
 //  «تَحديثٌ الآن» و«لاحِقاً». ولا يُثَبَّتُ شَيءٌ إلّا بَعدَ تَأكيدِ المُستَخدِمِ
 //  في شاشةِ تَثبيتِ النِظامِ نَفسِها.
 // ══════════════════════════════════════════════════════
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 let _updateInfo = null;
 
 // v1.2.16 — قَناةُ التَحديث: مُستَقِرٌّ وَحدَه (الافتِراض) أَو مَعَ الاختِباريّ.
@@ -7387,7 +7496,24 @@ function initBetaUpdateToggle() {
   });
 }
 
+// v1.4 — يُملَأُ مِنَ الجِسرِ الأَصليِّ عِندَ الإقلاع (اُنظُر _syncNativeVersion)
+let _nativeAppVersion = null;
+
+async function _syncNativeVersion() {
+  try {
+    const v = await window.PIO?.nativeAppVersion?.();
+    if (!v) return;
+    _nativeAppVersion = v;
+    // صَحِّح ما تَعرِضُهُ الصَفحةُ إن كانَ مِن كاشٍ قَديم
+    document.querySelectorAll(".info-v").forEach(el => {
+      const cur = el.textContent.trim();
+      if (/^\d+\.\d+/.test(cur) && cur !== v) el.textContent = v;
+    });
+  } catch (_) {}
+}
+
 function _appVersion() {
+  if (_nativeAppVersion) return _nativeAppVersion;
   const el = document.querySelector(".info-v");
   const t = el ? el.textContent.trim() : "";
   return /^\d+\.\d+/.test(t) ? t : APP_VERSION;
@@ -7404,6 +7530,8 @@ async function checkForUpdates(silent) {
     if (info.available) {
       showUpdateModal(info);
     } else if (!silent) {
+      // v1.4 — لا تُبقِ تَأجيلاً مُعَلَّقاً ونَحنُ عَلى الأَحدَث
+      try { localStorage.removeItem("gt_sirm_update_snooze"); } catch (_) {}
       const msg = `✅ أنتَ عَلى أَحدَثِ إصدار (${info.current}) — قَناةُ ${betaUpdatesEnabled() ? "الاختِباريّ" : "المُستَقِرّ"}`;
       toast(msg, "success", 3000);
       _setUpdateNote(msg);
@@ -8689,7 +8817,11 @@ async function startExport(type) {
 
   // v0.7.3 — V1: شغّل فيديو التلاوة الجاهز من البداية
   if (ge("recvid-on") && S.recVidEl) {
-    try { S.recVidEl.currentTime = 0; S.recVidEl.play().catch(() => {}); } catch (_) {}
+    try {
+      const _tr = (typeof getRecVidTrim === "function") ? getRecVidTrim() : null;
+      S.recVidEl.currentTime = _tr ? _tr.start : 0;
+      S.recVidEl.play().catch(() => {});
+    } catch (_) {}
   }
 
   const savedAya = S.currentAya;

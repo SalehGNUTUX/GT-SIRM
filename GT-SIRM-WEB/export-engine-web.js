@@ -1,3 +1,15 @@
+
+// v1.4 — بَعدَ التَصدير: أَعِدِ الفيديو إلى حالِهِ الطَبيعيّ. تَركُ
+//   `playbackRate` مَضبوطاً عَلى سُرعةِ التَصديرِ يَجعَلُ المُعايَنةَ التالِيةَ
+//   تَعمَلُ بِسُرعةٍ غَريبةٍ بِلا سَبَبٍ ظاهِرٍ لِلمُستَخدِم.
+function _restoreRecVidAfterExport() {
+  try {
+    const v = S.recVidEl;
+    if (!v) return;
+    v.pause();
+    v.playbackRate = 1;
+  } catch (_) {}
+}
 "use strict";
 
 // ═══════════════════════════════════════════════════════
@@ -587,7 +599,11 @@ function createBgPlaybackSync() {
   };
 }
 
-async function syncBgByPlayback(st, vid, wantTime, clipIndex, mediaDone, wallSec) {
+// v1.4 — نَفسُ المُزامَنةِ تَخدِمُ فيديو التِلاوةِ أيضاً، بِعَتَبةٍ أَضيَق.
+//   `opts.resyncEps` = أَقصى انحِرافٍ مَسموحٍ قَبلَ نَقلةِ تَصحيح.
+function createVideoPlaybackSync() { return createBgPlaybackSync(); }
+
+async function syncBgByPlayback(st, vid, wantTime, clipIndex, mediaDone, wallSec, opts) {
   if (!vid || !isFinite(vid.duration)) return;
 
   // ⚠️ v1.2.20 — لِمَ 0.25 لا 0.0625؟
@@ -599,9 +615,11 @@ async function syncBgByPlayback(st, vid, wantTime, clipIndex, mediaDone, wallSec
   //   (هذا سَبَبُ «التَكبير ⇒ خَلفيّةٌ مُجَمَّدة» بَينَما «ثابِت ⇒ سَليم».)
   //   دونَ 0.25 لا فائِدةَ مِنَ التَشغيلِ أَصلاً: النَقلُ (seek) أَدَقُّ وأَوثَق،
   //   وكُلفَتُهُ لا تُذكَرُ ما دُمنا بَطيئينَ إلى هذا الحَدّ.
-  const RESYNC_EPS = 0.75;   // ثانِية — فَوقَها نَنقُلُ مَرّةً واحِدة
+  //   فيديو التِلاوةِ يُمَرِّرُ عَتَبةً أَضيَقَ (0.12 ث): الشِفاهُ تُرى، والانحِرافُ
+  //   الذي لا يُلاحَظُ في خَلفيّةٍ يُفسِدُ تَزامُنَ التِلاوةِ مَعَ الصَوت.
+  const RESYNC_EPS = (opts && opts.resyncEps) || 0.75;
   const RATE_MIN = 0.25, RATE_MAX = 4;
-  const SEEK_EPS = 0.05;     // في وَضعِ النَقلِ نُطابِقُ كُلَّ إطارٍ تَقريباً
+  const SEEK_EPS = (opts && opts.seekEps) || 0.05;   // في وَضعِ النَقلِ نُطابِقُ كُلَّ إطارٍ تَقريباً
   const STALL_LIMIT = 6;     // إطاراتٌ مُتَتالِيةٌ بِلا تَقَدُّمٍ ⇒ التَشغيلُ عاجِز
 
   // تَبديلُ مَقطَعٍ أو رُجوعٌ لِلوَراء (لَفُّ القائِمة) ⇒ إعادةُ مُزامَنةٍ صَريحة
@@ -907,7 +925,6 @@ async function startWebExportV2(opts) {
   // v1.2.1 — سَماحُ الـseek = مُدّةُ إطارِ المَصدَر. الطَلَبُ الواقِعُ داخِلَ
   //   الإطارِ نَفسِهِ لا يُغَيِّرُ البِكسِلاتِ فَلا داعِيَ لِإعادةِ فَكِّ التَرميز.
   const bgSeekTol   = visibleBgClips.length ? estimateFrameDurWeb(visibleBgClips[0].vid) * 0.9 : 0.02;
-  const recSeekTol  = S.recVidEl ? estimateFrameDurWeb(S.recVidEl) * 0.9 : 0.02;
   const recVidOn    = !!(S.recVidEl && typeof ge === "function" && ge("recvid-on"));
   const tStartMs    = performance.now();
 
@@ -927,6 +944,7 @@ async function startWebExportV2(opts) {
   const bgFastMode = (typeof ge === "function") ? ge("export-bg-fast") : false;
   const BG_SEEK_GUARD = 400;
   const bgSync = createBgPlaybackSync();
+  const recSync = createVideoPlaybackSync();   // v1.4 — فيديو التِلاوة
   if (bgFastMode && visibleBgClips.length) {
     console.log("[V2] وَضعُ خَلفيّةٍ سَريع: لا انتِظارَ لِنَقلِ الفيديو");
   }
@@ -987,9 +1005,19 @@ async function startWebExportV2(opts) {
         }
       }
     }
-    // v0.7.3 — مزامنة فيديو التلاوة مع زمن الإطار
-    // فيديو التِلاوةِ يَبقى دَقيقاً دائِماً — تَأخُّرُهُ يَعني اختِلالَ المُزامَنةِ مَعَ الصَوت
-    if (recVidOn) seekJobs.push(seekVideoToTimeWeb(S.recVidEl, t, recSeekTol));
+    // ⚠️ v1.4 — فيديو التِلاوةِ كانَ يُنقَلُ (seek) نَقلةً لِكُلِّ إطار. وهذا هُوَ
+    //   سَبَبُ «تَجَمُّدِ المَقطَعِ أَو تَقَطُّعِهِ بَعدَ التَصديرِ بَينَما يَعمَلُ النَصُّ
+    //   والتَأثيراتُ والصَوتُ بِطَبيعَتِها — ولا يَظهَرُ في المُعايَنة»: المُعايَنةُ
+    //   **تُشَغِّلُ** الفيديو (فَكُّ تَرميزٍ تَتابُعيٌّ سَريع)، والتَصديرُ **يَنقُلُه**.
+    //   ومَقاطِعُ التَواصُلِ المُنَزَّلةُ (yt-dlp) مُتَباعِدةُ الإطاراتِ المِفتاحيّة،
+    //   فَكُلُّ نَقلةٍ تَفُكُّ تَرميزَ ما بَينَ مِفتاحَين ⇒ تَنقَضي المُهلةُ فَيُرسَمُ
+    //   الإطارُ القَديمُ نَفسُه مِراراً. الآنَ نُشَغِّلُهُ بِسُرعةٍ تُطابِقُ تَقَدُّمَ
+    //   التَصديرِ ولا نَنقُلُ إلّا لِتَصحيحِ انحِرافٍ يَتَجاوَزُ 0.12 ثانِية.
+    if (recVidOn) {
+      const wallSecRec = (performance.now() - tStartMs) / 1000;
+      await syncBgByPlayback(recSync, S.recVidEl, ((typeof recvidSourceTime === "function") ? recvidSourceTime(t) : t), 0, t, wallSecRec,
+                             { resyncEps: 0.12, seekEps: 0.03 });
+    }
     if (seekJobs.length) {
       const tSeek = performance.now();
       const results = await Promise.all(seekJobs);
@@ -1131,6 +1159,7 @@ async function startWebExportV2(opts) {
   // فَلا يَضيعُ الناتِجُ إن فَشِلَت وَسيلةُ الحَفظِ المُختارة.
   prof.bgResyncs = bgSync.resyncs;
   prof.bgPlayFailed = bgSync.playFailed;
+  _restoreRecVidAfterExport();   // v1.4
   prof.bgMode = bgFastMode
     ? (bgSync.playFailed ? "نَقل (تَعَذَّرَ التَشغيل)"
        : bgSync.slowSeek ? "نَقل (التَشغيلُ لَم يَتَقَدَّم)"

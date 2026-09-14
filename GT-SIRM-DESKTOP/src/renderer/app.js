@@ -194,6 +194,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initMobileLayout();
   initPwaInstall();
   initEventListeners();
+  initRecVidTrimUI();      // v1.4 — اقتِطاعُ فيديو التِلاوة
   initModuleManager();   // v0.3.0 — يجب أن يأتي قبل restoreAllSettings
   initFreeTextEditor();  // v0.4.0 — محرّر النصّ الحرّ
   initHadithModule();    // v0.8.0 — وحدة الحديث الشريف
@@ -698,7 +699,13 @@ function initAutoUpdateToggle() {
 }
 
 // v1.2.17 — فَحصٌ هادِئٌ أُسبوعيٌّ عِندَ الإقلاع (يَحتَرِمُ التوگل)
+// ⚠️ v1.4 — في سَطحِ المَكتَبِ كانَ **نِظاما تَحديثٍ** يَتَقاسَمانِ مِفتاحَ
+//   `gt_sirm_update_lastcheck`: هذا المَنقولُ مِنَ الويب (وهُوَ عاطِلٌ هُنا إذ
+//   لا `window.PIO` في سَطحِ المَكتَب) ونِظامُ `dt*` العامِل. فَكانَ العاطِلُ
+//   يَكتُبُ «فُحِصَ الآن» ثُمَّ لا يَفحَصُ شَيئاً، فَيَظُنُّ العامِلُ أَنَّ الفَحصَ
+//   جَرى فَيَتَخَطّاه. مالِكُ المِفتاحِ الآنَ واحِد.
 async function autoCheckForUpdates() {
+  if (!window.PIO || !window.PIO.checkForUpdate) return;   // سَطحُ المَكتَب: يَتَوَلّاها dt*
   if (!autoUpdateEnabled()) return;
   try {
     const last = parseInt(localStorage.getItem("gt_sirm_update_lastcheck") || "0", 10);
@@ -855,6 +862,99 @@ function calcEffectiveSliceDuration(numSlices, baseDur) {
   return Math.max(0.5, targetTotal / numSlices);
 }
 
+// ══════════════════════════════════════════════════════
+//  v1.4 — اقتِطاعُ مَقطَعٍ مِن فيديو التِلاوة
+//  ───────────────────────────────────────────────────
+//  المُستَخدِمُ يَجلِبُ مَقطَعاً (بِنَصٍّ أَو بِدونِه) وقَد لا يَحتاجُ إلّا جُزءاً مِنه.
+//  المُدّةُ المُحَدَّدةُ تَصيرُ مُدّةَ المَقطَعِ كُلِّه، فَيُوَزَّعُ عَلَيها النَصُّ الحُرُّ
+//  أَو أَيُّ مَصدَرٍ مُعتَمَد — تَماماً كَما يَفعَلُ اقتِطاعُ الصَوت.
+//  التَحويل: زَمَنُ المَشروعِ t ⇒ زَمَنُ المَصدَرِ (start + t)، مَحدوداً بِـend.
+// ══════════════════════════════════════════════════════
+function getRecVidTrim() {
+  if (!ge("recvid-trim-on") || !S.recVidEl) return null;
+  const dur = isFinite(S.recVidEl.duration) ? S.recVidEl.duration : 0;
+  if (!(dur > 0)) return null;
+  let start = parseFloat(gv("recvid-trim-start"));
+  let end   = parseFloat(gv("recvid-trim-end"));
+  if (!isFinite(start) || start < 0) start = 0;
+  if (!isFinite(end) || end <= 0) end = dur;
+  start = Math.max(0, Math.min(start, dur));
+  end   = Math.max(0, Math.min(end, dur));
+  if (end - start < 0.3) return null;      // اقتِطاعٌ أَقصَرُ مِن أَن يُفيد
+  return { start, end, dur: end - start };
+}
+
+// زَمَنُ المَصدَرِ المُقابِلُ لِزَمَنِ المَشروع. بِلا اقتِطاعٍ: هُوَ نَفسُه.
+function recvidSourceTime(t) {
+  const tr = getRecVidTrim();
+  if (!tr) return t;
+  return Math.min(tr.end - 1e-3, tr.start + Math.max(0, t));
+}
+
+function updateRecVidTrimInfo() {
+  const el = document.getElementById("recvid-trim-info");
+  if (!el) return;
+  const v = S.recVidEl;
+  if (!v || !isFinite(v.duration) || v.duration <= 0) { el.textContent = ""; return; }
+  const tr = getRecVidTrim();
+  el.textContent = tr
+    ? `المُدّةُ المُحَدَّدة: ${tr.dur.toFixed(1)} ث  (مِن ${tr.start.toFixed(1)} إلى ${tr.end.toFixed(1)}) · طولُ المَقطَعِ الأَصليّ ${v.duration.toFixed(1)} ث`
+    : `طولُ المَقطَع ${v.duration.toFixed(1)} ث — حَدِّد «مِن» و«إلى» (فَرقُهُما 0.3 ث فَأَكثَر).`;
+}
+
+// يُهَيِّئُ حُدودَ الاقتِطاعِ عِندَ تَحميلِ مَقطَعٍ جَديد
+function initRecVidTrimBounds() {
+  const v = S.recVidEl;
+  if (!v || !isFinite(v.duration) || v.duration <= 0) return;
+  const s = document.getElementById("recvid-trim-start");
+  const e = document.getElementById("recvid-trim-end");
+  if (s) { s.max = String(v.duration.toFixed(2)); if (!(parseFloat(s.value) > 0)) s.value = "0"; }
+  if (e) {
+    e.max = String(v.duration.toFixed(2));
+    const cur = parseFloat(e.value);
+    // القيمةُ الافتِراضيّةُ 10 لا مَعنى لَها لِمَقطَعٍ مُدَّتُهُ أَقَلّ — ولا لِمَقطَعٍ أَطوَل
+    if (!isFinite(cur) || cur <= 0 || cur > v.duration || cur === 10) e.value = v.duration.toFixed(1);
+  }
+  updateRecVidTrimInfo();
+}
+
+function initRecVidTrimUI() {
+  const on = document.getElementById("recvid-trim-on");
+  const row = document.getElementById("recvid-trim-row");
+  const sync = () => {
+    if (row) row.style.display = ge("recvid-trim-on") ? "" : "none";
+    updateRecVidTrimInfo();
+    // المُدّةُ الفَعّالةُ تَغَيَّرَت ⇒ أَعِد تَوزيعَ النَصِّ عَلَيها
+    try { if (typeof syncVersesToActiveAudio === "function") syncVersesToActiveAudio(); } catch (_) {}
+    try { if (typeof updateAyaUI === "function") updateAyaUI(); } catch (_) {}
+    markProjectDirty();
+  };
+  if (on) on.addEventListener("change", sync);
+  ["recvid-trim-start", "recvid-trim-end"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", sync);
+  });
+  document.getElementById("recvid-trim-set-start")?.addEventListener("click", () => {
+    const v = S.recVidEl; if (!v) return;
+    const el = document.getElementById("recvid-trim-start");
+    if (el) { el.value = (v.currentTime || 0).toFixed(1); sync(); }
+  });
+  document.getElementById("recvid-trim-set-end")?.addEventListener("click", () => {
+    const v = S.recVidEl; if (!v) return;
+    const el = document.getElementById("recvid-trim-end");
+    if (el) { el.value = (v.currentTime || 0).toFixed(1); sync(); }
+  });
+  document.getElementById("recvid-trim-all")?.addEventListener("click", () => {
+    const v = S.recVidEl; if (!v || !isFinite(v.duration)) return;
+    const s = document.getElementById("recvid-trim-start");
+    const e = document.getElementById("recvid-trim-end");
+    if (s) s.value = "0";
+    if (e) e.value = v.duration.toFixed(1);
+    sync();
+  });
+  if (row) row.style.display = ge("recvid-trim-on") ? "" : "none";
+}
+
 // v0.8.5 — مصدر صوتيّ نشط مُوحَّد (recvid أو bgAudio أو trim)
 function getActiveAudioDuration() {
   // v0.14 — الوَضع الصامت: المدّة من silent-total-dur (أولويّة عُليا)
@@ -864,7 +964,9 @@ function getActiveAudioDuration() {
   }
   // 1) recvid (الأولويّة العليا)
   if (ge("recvid-on") && S.recVidEl && isFinite(S.recVidEl.duration) && S.recVidEl.duration > 0.5) {
-    return S.recVidEl.duration;
+    // v1.4 — الاقتِطاعُ يُقَصِّرُ المُدّةَ الفَعّالة، فَيُوَزَّعُ النَصُّ عَلَيها وَحدَها
+    const _tr = (typeof getRecVidTrim === "function") ? getRecVidTrim() : null;
+    return _tr ? _tr.dur : S.recVidEl.duration;
   }
   // 2) trim للنصّ الحرّ
   if (S.freeAudioTrim && ge("free-audio-trim-on")) {
@@ -4909,6 +5011,8 @@ function onRecVidFile(input) {
     const sec = isFinite(v.duration) ? v.duration : 0;
     const info = $("recvid-info");
     if (info) info.textContent = `✅ ${file.name} · ${v.videoWidth}×${v.videoHeight} · ${sec.toFixed(1)}s · ${(file.size / 1e6).toFixed(1)}MB`;
+    // v1.4 — طولُ المَقطَعِ صارَ مَعلوماً ⇒ اضبِط حُدودَ الاقتِطاعِ عَلَيه
+    try { initRecVidTrimBounds(); } catch (_) {}
     // اربط صوت الفيديو بمسار التصدير + analyser للذبذبات
     resumeAudioCtx().then(ctx => {
       try {
@@ -8524,6 +8628,11 @@ function startPlayer() {
   // v1.2 — استَأنِف المَقطع القادِم في الـcrossfade (إن كان مُعَلَّقاً)
   if (S.bgVidNext) { try { S.bgVidNext.play().catch(() => {}); } catch (_) {} }
   if (recvidActive) {
+    // v1.4 — ابدَأ مِن نُقطةِ الاقتِطاعِ لا مِن رَأسِ المَقطَع
+    try {
+      const _tr = (typeof getRecVidTrim === "function") ? getRecVidTrim() : null;
+      if (_tr && S.recVidEl.currentTime < _tr.start - 0.05) S.recVidEl.currentTime = _tr.start;
+    } catch (_) {}
     S.recVidEl.play().catch(() => {});
   } else if (S.verses.length) {
     playRecitationAudio();
@@ -8561,7 +8670,9 @@ function syncRecVidToCurrentAya() {
   if (!recvidActive) return;
   try {
     const t = getCumulativeAyaTime(S.currentAya) + (S.elapsed || 0);
-    S.recVidEl.currentTime = Math.max(0, Math.min(t, S.recVidEl.duration || t));
+    // v1.4 — زَمَنُ المَشروعِ يُحَوَّلُ إلى زَمَنِ المَصدَرِ عَبرَ نُقطةِ الاقتِطاع
+    const src = (typeof recvidSourceTime === "function") ? recvidSourceTime(t) : t;
+    S.recVidEl.currentTime = Math.max(0, Math.min(src, S.recVidEl.duration || src));
   } catch (_) {}
 }
 
@@ -9025,7 +9136,8 @@ async function startExport(type) {
   // v0.7.3 — V1: شغّل فيديو التلاوة الجاهز من البداية للتصدير الحيّ
   if (ge("recvid-on") && S.recVidEl) {
     try {
-      S.recVidEl.currentTime = 0;
+      const _tr = (typeof getRecVidTrim === "function") ? getRecVidTrim() : null;
+      S.recVidEl.currentTime = _tr ? _tr.start : 0;
       S.recVidEl.play().catch(() => {});
     } catch (_) {}
   }
@@ -12103,10 +12215,27 @@ function _dtUpdateEls(baseId) {
           document.getElementById(baseId + "-about")].filter(Boolean);
 }
 
+// ⚠️ v1.4 — الإصدارُ يُؤخَذُ مِنَ النِظامِ لا مِنَ الصَفحة.
+//   قِراءَتُهُ مِنَ الـDOM تَجعَلُهُ رَهنَ ما يُقَدِّمُهُ الكاش: صَفحةٌ قَديمةٌ
+//   مَخزونةٌ تَقولُ «1.2.22» والبَرنامَجُ المُثَبَّتُ 1.3.0 — فَيَرى المُستَخدِمُ
+//   «يَتَوَفَّرُ إصدارٌ جَديد» في كُلِّ إقلاعٍ وهُوَ عَلى الأَحدَثِ فِعلاً.
+//   `app.getVersion()` يَقرَأُ package.json لِلحُزمةِ العامِلة — لا كاشَ بَينَهُما.
+let _dtNativeVersion = null;
+async function _dtLoadNativeVersion() {
+  try {
+    if (window.SIRM && window.SIRM.appVersion) {
+      const v = await window.SIRM.appVersion();
+      if (v && /^\d+\.\d+/.test(String(v))) _dtNativeVersion = String(v).trim();
+    }
+  } catch (_) {}
+  return _dtNativeVersion;
+}
+
 function _dtAppVersion() {
+  if (_dtNativeVersion) return _dtNativeVersion;
   const el = document.querySelector(".info-v");
   const t = el ? el.textContent.trim() : "";
-  return /^\d+\.\d+/.test(t) ? t : "1.3.0";
+  return /^\d+\.\d+/.test(t) ? t : "1.4.0";
 }
 
 function dtBetaUpdatesEnabled() {
@@ -12139,6 +12268,39 @@ function _dtInitUpdateToggle(baseId, storeKey, dflt, msgOn, msgOff, alsoClearSno
   });
 }
 
+// ══════════════════════════════════════════════════════
+//  v1.4 — الحُزمةُ المُوافِقةُ لِما هُوَ مُرَكَّب
+//  ───────────────────────────────────────────────────
+//  المُستَخدِمُ لا يَعنيهِ أَيُّ صيغةٍ يُنَزِّل: إن كانَ رَكَّبَ deb فَلْيَأتِهِ deb.
+//  نَكتَشِفُ ذلكَ مِنَ النِظام (APPIMAGE / dpkg -S / rpm -qf) ثُمَّ نَنتَقي
+//  الأَصلَ المُطابِقَ مِن أُصولِ الإصدار.
+// ══════════════════════════════════════════════════════
+let _dtPkgKindCache = null;
+async function _dtPackageKind() {
+  if (_dtPkgKindCache) return _dtPkgKindCache;
+  try {
+    if (window.SIRM && window.SIRM.detectPackageKind) {
+      _dtPkgKindCache = await window.SIRM.detectPackageKind();
+    }
+  } catch (_) {}
+  if (!_dtPkgKindCache) _dtPkgKindCache = { kind: "unknown" };
+  return _dtPkgKindCache;
+}
+
+function _dtPickAsset(assets, kind) {
+  const by = (re) => assets.find(a => re.test(a.name || ""));
+  if (kind === "appimage") return by(/\.AppImage$/i) || null;
+  if (kind === "deb")      return by(/\.deb$/i) || null;
+  if (kind === "rpm")      return by(/\.rpm$/i) || null;
+  return null;   // نَوعٌ مَجهول ⇒ نَفتَحُ صَفحةَ الإصدارِ ولا نَدَّعي مَعرِفة
+}
+
+function _dtPkgLabel(kind) {
+  return kind === "appimage" ? "AppImage"
+       : kind === "deb" ? "حُزمةُ deb"
+       : kind === "rpm" ? "حُزمةُ rpm" : "غَيرُ مَعروف";
+}
+
 async function dtCheckForUpdates(silent) {
   const btns = _dtUpdateEls("check-update-btn");
   const notes = _dtUpdateEls("update-status-note");
@@ -12156,14 +12318,27 @@ async function dtCheckForUpdates(silent) {
     const rel = Array.isArray(data) ? data.find(r => !r.draft) : data;
     if (!rel) throw new Error("لا إصداراتٍ مَنشورة");
     const latest = String(rel.tag_name || "").replace(/^v/i, "").replace(/-beta$/i, "");
+    await _dtLoadNativeVersion();
     const current = _dtAppVersion();
     try { localStorage.setItem("gt_sirm_update_lastcheck", String(Date.now())); } catch (_) {}
 
     if (_dtCmpVersions(latest, current) > 0) {
-      _dtUpdateInfo = { latest, current, url: rel.html_url, notes: rel.body || "" };
+      // v1.4 — اجلِب الحُزمةَ المُوافِقةَ لِما هُوَ مُرَكَّبٌ فِعلاً
+      const pkg = await _dtPackageKind();
+      const asset = _dtPickAsset(rel.assets || [], pkg.kind);
+      _dtUpdateInfo = {
+        latest, current, url: rel.html_url, notes: rel.body || "",
+        prerelease: !!rel.prerelease,
+        pkgKind: pkg.kind,
+        assetUrl: asset ? asset.browser_download_url : null,
+        assetName: asset ? asset.name : null,
+        assetSize: asset ? asset.size : 0,
+      };
       dtShowUpdateModal(_dtUpdateInfo);
       setNote(`🎉 يَتَوَفَّرُ ${latest}`);
     } else {
+      // v1.4 — نَحنُ عَلى الأَحدَث: امسَح تَأجيلاً قَديماً حَتّى لا يَبقى مُعَلَّقاً
+      try { localStorage.removeItem("gt_sirm_update_snooze"); } catch (_) {}
       const msg = `✅ أنتَ عَلى أَحدَثِ إصدار (${current}) — قَناةُ ${beta ? "الاختِباريّ" : "المُستَقِرّ"}`;
       setNote(msg);
       if (!silent) toast?.(msg, "success", 3000);
@@ -12182,9 +12357,14 @@ function dtShowUpdateModal(info) {
   if (!modal) { toast?.(`🎉 يَتَوَفَّرُ الإصدار ${info.latest}`, "info", 6000); return; }
   const body = document.getElementById("update-body");
   if (body) {
+    const size = info.assetSize ? ` · ${(info.assetSize / 1048576).toFixed(1)} م.ب` : "";
     body.innerHTML = `يَتَوَفَّرُ الإصدارُ <b>${info.latest}</b> — وأنتَ عَلى <b>${info.current}</b>.` +
-      `<br><span style="color:var(--t3)">حُزَمُ لينُكس (AppImage · DEB · RPM) في صَفحةِ الإصدار؛ ثَبِّتها بِمُديرِ حُزَمِك.</span>`;
+      (info.assetUrl
+        ? `<br><span style="color:var(--t3)">حُزمَتُكَ المُرَكَّبة: <b>${_dtPkgLabel(info.pkgKind)}</b>${size} — ستُجلَبُ وتُرَكَّبُ مُباشَرةً.</span>`
+        : `<br><span style="color:var(--t3)">لَم نَتَعَرَّف عَلى صيغةِ التَركيب، فَستُفتَحُ صَفحةُ الإصدارِ لِتَختارَ بِنَفسِك.</span>`);
   }
+  const nowBtn = document.getElementById("update-now-btn");
+  if (nowBtn) nowBtn.textContent = info.assetUrl ? "⬇️ تَحديثٌ الآن" : "⬇️ افتَح صَفحةَ الإصدار";
   const nt = document.getElementById("update-notes");
   if (nt) {
     if (info.notes) { nt.textContent = info.notes.slice(0, 4000); nt.style.display = ""; }
@@ -12193,7 +12373,100 @@ function dtShowUpdateModal(info) {
   modal.style.display = "flex";
 }
 
+// v1.4 — تَنزيلٌ يُستَأنَفُ ثُمَّ تَركيبٌ مُباشِر. لا نَدَّعي نَجاحاً لَم يَقَع:
+//   إن رَفَضَ مُديرُ الحُزَمِ سَلَّمنا المَلَفَّ لِلمُستَخدِمِ وأَرَيناهُ مَوضِعَه.
+async function dtUpdateNow() {
+  const info = _dtUpdateInfo;
+  if (!info) return;
+  const modal = document.getElementById("update-modal");
+  const btns  = document.querySelector("#update-modal .modal-btns");
+  const body  = document.getElementById("update-body");
+
+  // صيغةٌ مَجهولة ⇒ افتَح صَفحةَ الإصدارِ ولا تَتَظاهَر
+  if (!info.assetUrl || !window.SIRM || !window.SIRM.downloadUpdate) {
+    const u = info.url || `https://github.com/${GT_SIRM_REPO}/releases`;
+    try { window.SIRM?.openExternal ? window.SIRM.openExternal(u) : window.open(u, "_blank"); }
+    catch (_) { window.open(u, "_blank"); }
+    if (modal) modal.style.display = "none";
+    return;
+  }
+
+  if (btns) btns.style.display = "none";
+  const say = (html) => { if (body) body.innerHTML = html; };
+  say(`⏳ جارٍ تَنزيلُ <b>${info.assetName}</b>…`);
+
+  try {
+    window.SIRM.onUpdateProgress?.(d => {
+      const pct = (d && d.percent >= 0) ? d.percent : -1;
+      const mb  = d ? (d.received / 1048576).toFixed(1) : "0";
+      const tot = (d && d.total > 0) ? (d.total / 1048576).toFixed(1) : "?";
+      say(`⏳ جارٍ التَنزيل: ${mb} / ${tot} م.ب${pct >= 0 ? ` · ${pct}٪` : ""}` +
+          (d && d.resumed ? `<br><span style="color:var(--t3)">استُؤنِفَ مِن حَيثُ تَوَقَّف</span>` : ""));
+    });
+
+    let res = null, lastErr = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try { res = await window.SIRM.downloadUpdate({ url: info.assetUrl, name: info.assetName }); break; }
+      catch (e) {
+        lastErr = e;
+        if (attempt < 3) {
+          say(`⏸️ اِنقَطَعَ التَنزيل — يُستَأنَفُ مِن حَيثُ تَوَقَّف…`);
+          await new Promise(r => setTimeout(r, 1500 * attempt));
+          continue;
+        }
+        throw e;
+      }
+    }
+    if (!res) throw (lastErr || new Error("تَعَذَّرَ التَنزيل"));
+
+    say(`📦 جارٍ التَركيب… قَد يَطلُبُ النِظامُ كَلِمةَ السِرّ.`);
+    const out = await window.SIRM.installUpdate({ filePath: res.path, kind: info.pkgKind });
+
+    if (out && out.ok) {
+      say(`✅ رُكِّبَ الإصدارُ <b>${info.latest}</b>. أَعِد تَشغيلَ البَرنامَجِ لِيَعمَلَ الجَديد.`);
+      if (btns) {
+        btns.style.display = "";
+        const later = document.getElementById("update-later-btn");
+        if (later) later.textContent = "لاحِقاً";
+        const nowB = document.getElementById("update-now-btn");
+        if (nowB) {
+          nowB.textContent = "🔄 أَعِد التَشغيلَ الآن";
+          nowB.onclick = () => { try { window.SIRM.restartApp(); } catch (_) {} };
+        }
+      }
+      try { localStorage.removeItem("gt_sirm_update_snooze"); localStorage.removeItem("gt_sirm_update_lastcheck"); } catch (_) {}
+    } else {
+      say(`⚠️ تَعَذَّرَ التَركيبُ آليّاً. الحُزمةُ مَحفوظةٌ هُنا:<br>` +
+          `<b dir="ltr" style="font-size:10px">${(out && out.filePath) || res.path}</b><br>` +
+          `<span style="color:var(--t3)">رَكِّبها بِمُديرِ حُزَمِك.</span>`);
+      try { window.SIRM.revealFile((out && out.filePath) || res.path); } catch (_) {}
+      if (btns) btns.style.display = "";
+    }
+  } catch (e) {
+    say(`❌ ${String(e.message || e).slice(0, 160)}<br>` +
+        `<span style="color:var(--t3)">ما نُزِّلَ مَحفوظ؛ «تَحديثٌ الآن» يُكمِلُ مِن حَيثُ تَوَقَّف.</span>`);
+    if (btns) btns.style.display = "";
+  } finally {
+    try { window.SIRM.offUpdateProgress?.(); } catch (_) {}
+  }
+}
+
+// v1.4 — يُصَحِّحُ ما تَعرِضُهُ صَفحةُ «حَول» إن خالَفَ الإصدارَ المُرَكَّبَ فِعلاً
+async function _dtSyncShownVersion() {
+  const v = await _dtLoadNativeVersion();
+  if (!v) return;
+  document.querySelectorAll(".info-v").forEach(el => {
+    if (/^\d+\.\d+/.test(el.textContent.trim()) && el.textContent.trim() !== v) {
+      el.textContent = v;
+    }
+  });
+  document.querySelectorAll("#app-subtitle").forEach(el => {
+    el.textContent = "GnuTux Short Islamic Reels Maker v" + v;
+  });
+}
+
 function dtInitUpdateSystem() {
+  _dtSyncShownVersion();
   _dtInitUpdateToggle("update-auto-on", "gt_sirm_update_auto", true,
     "⏱️ سيُفحَصُ عَنِ التَحديثاتِ تِلقائيّاً مَرّةً كُلَّ أُسبوع",
     "⏸️ أُوقِفَ الفَحصُ التِلقائيّ — استَعمِل زِرَّ الفَحصِ عِندَ الحاجة", false);
@@ -12211,13 +12484,7 @@ function dtInitUpdateSystem() {
     try { localStorage.setItem("gt_sirm_update_snooze", String(Date.now())); } catch (_) {}
   });
   const now = document.getElementById("update-now-btn");
-  if (now) now.addEventListener("click", () => {
-    const u = _dtUpdateInfo?.url || `https://github.com/${GT_SIRM_REPO}/releases`;
-    try { window.SIRM?.openExternal ? window.SIRM.openExternal(u) : window.open(u, "_blank"); }
-    catch (_) { window.open(u, "_blank"); }
-    const m = document.getElementById("update-modal");
-    if (m) m.style.display = "none";
-  });
+  if (now) now.addEventListener("click", () => { dtUpdateNow(); });
 
   // فَحصٌ تِلقائيٌّ صامِتٌ مَرّةً كُلَّ أُسبوع
   let auto = true;

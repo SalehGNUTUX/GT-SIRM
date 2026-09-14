@@ -235,6 +235,21 @@ function createWindow() {
 
 // v1.2.20 — فَتحُ رابِطٍ خارِجيّ. مَقصورٌ عَلى http/https عَمداً: تَمريرُ أَيِّ
 //   عُنوانٍ إلى shell يَفتَحُ مِلَفّاتٍ وبَرامِجَ مَحَلّيّةً أيضاً.
+// v1.4 — نِظامُ التَحديثِ في وَحدةٍ مُستَقِلّة (`updater.js`) لِيُختَبَرَ وَحدَه
+//   بِـnode بِلا Electron: مَنطِقُ الاستِئنافِ واكتِشافِ الحُزمةِ لا يَحتاجُ نافِذة.
+const updater = require("./updater");
+
+ipcMain.handle("app-version", () => app.getVersion());
+ipcMain.handle("detect-package-kind", () => updater.detectPackageKind());
+ipcMain.handle("download-update", (event, opts) =>
+  updater.downloadUpdate(opts, p => { try { event.sender.send("update-progress", p); } catch (_) {} }));
+ipcMain.handle("install-update", (_e, opts) => updater.installUpdate(opts));
+ipcMain.handle("reveal-file", (_e, f) => {
+  try { shell.showItemInFolder(f); return true; } catch (_) { return false; }
+});
+ipcMain.handle("restart-app", () => { app.relaunch(); app.exit(0); });
+
+
 ipcMain.handle("open-external", async (_e, url) => {
   try {
     const u = new URL(String(url));

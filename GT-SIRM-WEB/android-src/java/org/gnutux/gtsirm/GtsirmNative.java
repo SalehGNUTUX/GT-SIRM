@@ -211,6 +211,27 @@ public class GtsirmNative extends Plugin {
         }
     }
 
+    /**
+     * إصدارُ الحُزمةِ المُثَبَّتةِ فِعلاً.
+     * ⚠️ v1.4 — كانَ الإصدارُ يُقرَأُ مِنَ الصَفحة (`.info-v`)، وهذا يَجعَلُهُ رَهنَ
+     *   ما يُقَدِّمُهُ Service Worker: صَفحةٌ قَديمةٌ مَخزونةٌ تَقولُ إصداراً سابِقاً
+     *   والحُزمةُ المُثَبَّتةُ أَحدَث — فَيَرى المُستَخدِمُ «يَتَوَفَّرُ إصدارٌ جَديد»
+     *   في كُلِّ إقلاعٍ وهُوَ عَلى الأَحدَثِ أَصلاً. هذا هُوَ المَصدَرُ الذي لا يَكذِب.
+     */
+    @PluginMethod
+    public void appVersion(PluginCall call) {
+        try {
+            android.content.pm.PackageInfo pi = getContext().getPackageManager()
+                    .getPackageInfo(getContext().getPackageName(), 0);
+            JSObject ret = new JSObject();
+            ret.put("version", pi.versionName != null ? pi.versionName : "");
+            ret.put("code", pi.versionCode);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("تَعَذَّرَت قِراءةُ إصدارِ الحُزمة: " + e.getMessage(), e);
+        }
+    }
+
     /** يُلحِقُ قِطعةَ base64 بِمَلَفٍّ مَفتوح. */
     @PluginMethod
     public void appendChunk(PluginCall call) {

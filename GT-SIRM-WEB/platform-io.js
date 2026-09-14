@@ -515,6 +515,24 @@
     return 0;
   }
 
+  // ⚠️ v1.4 — إصدارُ الحُزمةِ المُثَبَّتةِ مِنَ النِظامِ لا مِنَ الصَفحة.
+  //   قِراءَتُهُ مِنَ الـDOM تَجعَلُهُ رَهنَ Service Worker: بَعدَ تَحديثِ الحُزمةِ
+  //   قَد تُقَدَّمُ صَفحةٌ قَديمةٌ مَخزونةٌ تَحمِلُ الإصدارَ السابِق، فَيُقارَنُ بِهِ
+  //   ويَظهَرُ «يَتَوَفَّرُ إصدارٌ جَديد» بَعدَ كُلِّ إقلاعٍ والمُستَخدِمُ عَلى الأَحدَث.
+  let _nativeVer = null;
+  async function nativeAppVersion() {
+    if (_nativeVer) return _nativeVer;
+    const P = nativePlugin();
+    if (!P || !P.appVersion) return null;
+    try {
+      const r = await P.appVersion();
+      if (r && r.version && /^\d+\.\d+/.test(String(r.version))) {
+        _nativeVer = String(r.version).trim();
+      }
+    } catch (_) {}
+    return _nativeVer;
+  }
+
   /**
    * يَسأَلُ GitHub عَن آخِرِ إصدار.
    * يُعيد: { available, latest, current, notes, url, apkUrl, apkName, size }
@@ -780,6 +798,7 @@
     compareVersions,
     GITHUB_REPO,
     isNativeAndroid,
+    nativeAppVersion,
     saveTrace,
     beginSaveTrace,
     noteSaveTrace,

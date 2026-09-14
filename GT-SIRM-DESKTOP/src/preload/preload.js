@@ -16,6 +16,16 @@ contextBridge.exposeInMainWorld("SIRM", {
   // v1.2.20 — فَتحُ رابِطٍ في المُتَصَفِّحِ الخارِجيّ (صَفحةُ الإصدار)
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
 
+  // v1.4 — تَحديثٌ مُباشِرٌ بِحَسَبِ نَوعِ الحُزمةِ المُثَبَّتة
+  appVersion:        ()      => ipcRenderer.invoke("app-version"),
+  detectPackageKind: ()      => ipcRenderer.invoke("detect-package-kind"),
+  downloadUpdate:    (o)     => ipcRenderer.invoke("download-update", o),
+  installUpdate:     (o)     => ipcRenderer.invoke("install-update", o),
+  revealFile:        (f)     => ipcRenderer.invoke("reveal-file", f),
+  restartApp:        ()      => ipcRenderer.invoke("restart-app"),
+  onUpdateProgress:  (cb)    => ipcRenderer.on("update-progress", (_e, d) => cb(d)),
+  offUpdateProgress: ()      => ipcRenderer.removeAllListeners("update-progress"),
+
   // ── التصدير عبر ffmpeg (الطريقة القديمة: transcode من ملف) ─
   ffmpegEncode:      (opts)  => ipcRenderer.invoke("ffmpeg-encode", opts),
   ffmpegCancel:      ()      => ipcRenderer.send("ffmpeg-cancel"),

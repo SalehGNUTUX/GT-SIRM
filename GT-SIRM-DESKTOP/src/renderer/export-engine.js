@@ -1,3 +1,15 @@
+
+// v1.4 — بَعدَ التَصدير: أَعِدِ الفيديو إلى حالِهِ الطَبيعيّ. تَركُ
+//   `playbackRate` مَضبوطاً عَلى سُرعةِ التَصديرِ يَجعَلُ المُعايَنةَ التالِيةَ
+//   تَعمَلُ بِسُرعةٍ غَريبةٍ بِلا سَبَبٍ ظاهِرٍ لِلمُستَخدِم.
+function _restoreRecVidAfterExport() {
+  try {
+    const v = S.recVidEl;
+    if (!v) return;
+    v.pause();
+    v.playbackRate = 1;
+  } catch (_) {}
+}
 "use strict";
 
 // ═══════════════════════════════════════════════════════
@@ -418,6 +430,79 @@ async function loadBitmapFromPath(filePath) {
 }
 
 // v0.7.3 — seek HTMLVideoElement مع انتظار اكتمال الإطار
+// ══════════════════════════════════════════════════════
+//  v1.4 — مُزامَنةُ فيديو التِلاوةِ بِالتَشغيلِ لا بِالنَقل
+//  ───────────────────────────────────────────────────
+//  كانَ التَصديرُ يَنقُلُ (seek) الفيديو نَقلةً لِكُلِّ إطار، و`seekVideoToTime`
+//  تَستَسلِمُ بَعدَ 800ms **وتَمضي بِلا إبلاغ** — فَيُرسَمُ الإطارُ القَديمُ نَفسُه
+//  مِراراً: يَخرُجُ المَقطَعُ المُصَدَّرُ والفيديو فيهِ مُتَجَمِّدٌ أَو مُتَقَطِّعٌ بَينَما
+//  يَعمَلُ النَصُّ والتَأثيراتُ والصَوتُ بِطَبيعَتِها. ولا يَظهَرُ في المُعايَنةِ
+//  لِأَنَّها **تُشَغِّلُ** الفيديو (فَكُّ تَرميزٍ تَتابُعيٌّ سَريع).
+//  والمَقاطِعُ المُنَزَّلةُ مِن مَواقِعِ التَواصُلِ مُتَباعِدةُ الإطاراتِ المِفتاحيّة،
+//  فَكُلُّ نَقلةٍ تَفُكُّ تَرميزَ ما بَينَ مِفتاحَين — ولِذا تَنقَضي المُهلة.
+//
+//  الآنَ نُشَغِّلُهُ بِسُرعةٍ تُطابِقُ تَقَدُّمَ التَصدير، ولا نَنقُلُ إلّا لِتَصحيحِ
+//  انحِرافٍ يَتَجاوَزَ 0.12 ثانِية (حَدُّ ما تُلاحِظُهُ العَينُ في تَزامُنِ الشِفاه).
+// ══════════════════════════════════════════════════════
+function createRecVidSync() {
+  return { lastWant: -1, resyncs: 0, playFailed: false, playAborts: 0,
+           lastCurTime: -1, stalled: 0, slowSeek: false };
+}
+
+async function syncRecVidByPlayback(st, vid, wantTime, mediaDone, wallSec) {
+  if (!vid || !isFinite(vid.duration)) return;
+  const RESYNC_EPS = 0.12, SEEK_EPS = 0.03;
+  const RATE_MIN = 0.25, RATE_MAX = 4, STALL_LIMIT = 6;
+
+  const jumped = (wantTime + 0.05 < st.lastWant);
+  st.lastWant = wantTime;
+  const drift = vid.currentTime - wantTime;
+
+  // هَل يَتَقَدَّمُ الفيديو فِعلاً؟ لا نَثِقُ بِأَنَّ play() نَجَحَ لِأَنَّهُ لَم يَرمِ خَطَأً
+  if (!st.slowSeek && !jumped && st.lastCurTime >= 0) {
+    if (Math.abs(vid.currentTime - st.lastCurTime) < 1e-4) {
+      if (++st.stalled >= STALL_LIMIT) st.slowSeek = true;
+    } else st.stalled = 0;
+  }
+  st.lastCurTime = vid.currentTime;
+
+  const base = (wallSec > 0.4) ? (mediaDone / wallSec) : 0.5;
+  let rate = base - drift * 1.2;
+  if (!isFinite(rate)) rate = base;
+
+  // أَبطَأُ مِمّا يُطيقُهُ التَشغيل ⇒ اِنقُل بَدَلَ أَن تُشَغِّل
+  if (rate < RATE_MIN || st.slowSeek || st.playFailed) {
+    if (!vid.paused) { try { vid.pause(); } catch (_) {} }
+    if (jumped || Math.abs(drift) > SEEK_EPS) {
+      st.resyncs++;
+      await seekVideoToTime(vid, wantTime);
+      st.lastCurTime = vid.currentTime;
+    }
+    return;
+  }
+
+  if (jumped || Math.abs(drift) > RESYNC_EPS) {
+    st.resyncs++;
+    try { vid.pause(); } catch (_) {}
+    await seekVideoToTime(vid, wantTime);
+    st.lastCurTime = vid.currentTime;
+  }
+
+  rate = Math.max(RATE_MIN, Math.min(RATE_MAX, rate));
+  if (Math.abs(vid.playbackRate - rate) > 0.03) {
+    try { vid.playbackRate = rate; } catch (_) {}
+  }
+  if (vid.paused) {
+    try { vid.muted = true; await vid.play(); st.playAborts = 0; }
+    catch (e) {
+      // AbortError سَبَبُهُ pause() الذي نَستَدعيهِ نَحنُ — لا مَنعٌ مِنَ المُحَرِّك
+      const name = (e && e.name) || "";
+      if (name === "NotAllowedError" || name === "NotSupportedError") st.playFailed = true;
+      else if (++st.playAborts >= 12) st.playFailed = true;
+    }
+  }
+}
+
 function seekVideoToTime(v, t) {
   return new Promise(resolve => {
     if (!v || !isFinite(v.duration)) return resolve();
@@ -624,6 +709,8 @@ async function startDesktopExportV2(opts) {
   };
 
   let lastUiTick = 0;
+  const recSync = createRecVidSync();          // v1.4
+  const recSyncT0 = performance.now();
   try {
     for (let i = 0; i < totalFrames; i++) {
       if (cancelRef?.canceled) throw new Error("cancelled");
@@ -648,9 +735,11 @@ async function startDesktopExportV2(opts) {
       // بيانات الموجة الصوتية للإطار الحالي (V2 يخلط الصوت offline فلا توجد analyser data)
       S._exportWaveData = exportWaveData[i];
       if (setStateForTime) setStateForTime(t);
-      // v0.7.3 — مزامنة فيديو التلاوة مع الزمن الحتميّ للإطار (V2 deterministic)
+      // v1.4 — مُزامَنةُ فيديو التِلاوةِ بِالتَشغيلِ (اُنظُر syncRecVidByPlayback)
       if (S.recVidEl && typeof ge === "function" && ge("recvid-on")) {
-        await seekVideoToTime(S.recVidEl, t);
+        const _src = (typeof recvidSourceTime === "function") ? recvidSourceTime(t) : t;
+        await syncRecVidByPlayback(recSync, S.recVidEl, _src, t,
+                                   (performance.now() - recSyncT0) / 1000);
       }
       drawFrame(t);
 
@@ -678,6 +767,7 @@ async function startDesktopExportV2(opts) {
   try {
     await window.SIRM.ffmpegPipeEnd();
   } finally {
+    _restoreRecVidAfterExport();   // v1.4
     try { await window.SIRM.deleteTempFile(audioPath); } catch (_) {}
     if (bgFramesDir) { try { await window.SIRM.cleanupBgFrames(bgFramesDir); } catch (_) {} }
     if (setBgFrameImage) setBgFrameImage(null);
